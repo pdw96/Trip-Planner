@@ -18,7 +18,11 @@ try {
     },
   );
 } catch (e) {
-  // 자동으로 못 고친 린트 오류는 Claude 에게 알려 줍니다 (차단하지 않음).
+  // 자동으로 못 고친 린트 오류는 Claude 에게 알려 줍니다.
+  // PostToolUse 에서 stderr 는 exit 2 일 때만 Claude 에게 전달됩니다 (편집은 이미 적용됐으므로 되돌려지지 않음).
   const out = `${e.stdout ?? ""}${e.stderr ?? ""}`.trim();
-  if (out) console.error(out.split("\n").slice(-30).join("\n"));
+  if (out) {
+    console.error(out.split("\n").slice(-30).join("\n"));
+    process.exit(2);
+  }
 }
