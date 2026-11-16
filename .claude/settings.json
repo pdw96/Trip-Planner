@@ -8,7 +8,14 @@
       "Bash(npm run db:generate)",
       "Bash(npx biome check:*)"
     ],
-    "deny": ["Read(./.env)", "Read(./.env.local)", "Read(./.env.production*)"]
+    "ask": ["Bash(npm run db:migrate:*)", "Bash(npx drizzle-kit migrate:*)"],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.local)",
+      "Read(./.env.production*)",
+      "Bash(npx drizzle-kit push:*)",
+      "Bash(npx drizzle-kit drop:*)"
+    ]
   },
   "hooks": {
     "PreToolUse": [
