@@ -1,7 +1,9 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   date,
+  index,
   pgTable,
   text,
   timestamp,
@@ -10,10 +12,91 @@ import {
 
 // Drizzle 스키마. 테이블 변경은 `/new-migration` 절차로 진행합니다.
 
+// --- 인증 (Better Auth) ---
+// user · session · account · verification 은 Better Auth 가 요구하는 테이블입니다.
+// 테이블·컬럼 이름과 타입은 Better Auth 의 Drizzle 스키마를 그대로 따르므로 임의로 바꾸지 않습니다.
+
+export const user = pgTable("user", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  emailVerified: boolean("email_verified").default(false).notNull(),
+  image: text("image"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
+
+export const session = pgTable(
+  "session",
+  {
+    id: text("id").primaryKey(),
+    expiresAt: timestamp("expires_at").notNull(),
+    token: text("token").notNull().unique(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .$onUpdate(() => new Date())
+      .notNull(),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (t) => [index("session_user_id_idx").on(t.userId)],
+);
+
+export const account = pgTable(
+  "account",
+  {
+    id: text("id").primaryKey(),
+    accountId: text("account_id").notNull(),
+    providerId: text("provider_id").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    accessToken: text("access_token"),
+    refreshToken: text("refresh_token"),
+    idToken: text("id_token"),
+    accessTokenExpiresAt: timestamp("access_token_expires_at"),
+    refreshTokenExpiresAt: timestamp("refresh_token_expires_at"),
+    scope: text("scope"),
+    password: text("password"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (t) => [index("account_user_id_idx").on(t.userId)],
+);
+
+export const verification = pgTable(
+  "verification",
+  {
+    id: text("id").primaryKey(),
+    identifier: text("identifier").notNull(),
+    value: text("value").notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (t) => [index("verification_identifier_idx").on(t.identifier)],
+);
+
+// --- 여행 ---
+
 export const trips = pgTable(
   "trips",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     destination: text("destination").notNull(),
     startDate: date("start_date").notNull(),
@@ -27,7 +110,10 @@ export const trips = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
-  (t) => [check("trips_dates_check", sql`${t.endDate} >= ${t.startDate}`)],
+  (t) => [
+    index("trips_user_id_idx").on(t.userId),
+    check("trips_dates_check", sql`${t.endDate} >= ${t.startDate}`),
+  ],
 );
 
 export type Trip = typeof trips.$inferSelect;
