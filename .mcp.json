@@ -7,6 +7,14 @@
     "playwright": {
       "command": "npx",
       "args": ["-y", "@playwright/mcp@latest", "--headless"]
+    },
+    "neon": {
+      "type": "http",
+      "url": "https://mcp.neon.tech/mcp?readonly=true"
+    },
+    "vercel": {
+      "type": "http",
+      "url": "https://mcp.vercel.com"
     }
   }
 }
