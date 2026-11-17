@@ -21,13 +21,14 @@ const REMOVE = /\b(rm|unlink|git\s+(rm|clean|checkout|restore))\b/;
 // rg 는 --pre 로 임의 프로그램을 실행할 수 있어 목록에서 뺐습니다.
 const READ_ONLY = /^(ls|cat|head|tail|wc|grep|diff|stat|file|echo)$/;
 const GIT_SAFE = /^(status|diff|log|show|ls-files|blame|add|commit)$/;
-// 읽기 명령도 출력 파일 옵션(git diff --output=…)이 있으면 쓰기가 됩니다.
-const OUTPUT_OPTION = /(^|\s)--output\b/;
+// 읽기 명령도 출력 파일 옵션(--output)이나 외부 프로그램을 실행하는 옵션이 있으면 읽기 전용이 아닙니다.
+const RISKY_OPTION = /(^|\s)--(output|ext-diff|textconv|exec|pre)\b/;
 const isReadOnly = (segment) => {
   // 남아 있는 > 는 파일로 가는 리다이렉션입니다. 따옴표로 경로를 감춰도 여기서 걸립니다.
-  if (OUTPUT_OPTION.test(segment) || segment.includes(">")) return false;
+  if (RISKY_OPTION.test(segment) || segment.includes(">")) return false;
   const words = segment.trim().split(/\s+/);
-  while (/^\w+=/.test(words[0] ?? "")) words.shift();
+  // 환경 변수(GIT_EXTERNAL_DIFF, PAGER 등)로 실행할 프로그램을 바꿀 수 있으므로 접두 대입도 묻습니다.
+  if (/^\w+=/.test(words[0] ?? "")) return false;
   const [bin, sub] = words;
   if (bin === "git") return GIT_SAFE.test(sub ?? "");
   return READ_ONLY.test(bin ?? "");
