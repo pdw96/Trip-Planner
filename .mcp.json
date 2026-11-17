@@ -8,14 +8,6 @@
       "command": "npx",
       "args": ["-y", "@playwright/mcp@latest", "--headless"]
     },
-    "neon": {
-      "type": "http",
-      "url": "https://mcp.neon.tech/mcp?readonly=true"
-    },
-    "vercel": {
-      "type": "http",
-      "url": "https://mcp.vercel.com"
-    },
     "context7": {
       "command": "npx",
       "args": ["-y", "@upstash/context7-mcp"]
