@@ -11,6 +11,7 @@ import {
   isRisky,
   riskyFiles,
   riskyPatchHash,
+  waitForApprovalHash,
 } from "./human-gate.mjs";
 
 const pick = ({ pass, removeLabel, recordApproval }) => ({
@@ -300,4 +301,32 @@ test("riskyPatchHash: 브랜치가 안전한 파일만 고치면 바뀌지 않�
     riskyPatchHash("main", "HEAD", dir),
     riskyPatchHash("main", approved, dir),
   );
+});
+
+test("waitForApprovalHash: 기록이 늦게 생기면 다시 읽어 찾는다", async () => {
+  const bot = { login: "github-actions[bot]" };
+  let calls = 0;
+  const fetchComments = async () => {
+    calls++;
+    return calls < 3 ? [] : [{ user: bot, body: approvalMarker("ab12") }];
+  };
+  const hash = await waitForApprovalHash(fetchComments, {
+    tries: 5,
+    delayMs: 0,
+  });
+  assert.equal(hash, "ab12");
+  assert.equal(calls, 3);
+});
+
+test("waitForApprovalHash: 끝내 없으면 정해진 횟수만 읽고 null", async () => {
+  let calls = 0;
+  const hash = await waitForApprovalHash(
+    async () => {
+      calls++;
+      return [];
+    },
+    { tries: 4, delayMs: 0 },
+  );
+  assert.equal(hash, null);
+  assert.equal(calls, 4);
 });

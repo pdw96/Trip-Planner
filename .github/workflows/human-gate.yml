@@ -15,9 +15,8 @@ permissions:
   pull-requests: write
   issues: write
 
-concurrency:
-  group: human-gate-${{ github.event.pull_request.number }}
-  cancel-in-progress: false
+# concurrency 그룹을 두지 않는다. 그룹이 있으면 대기 중인 실행이 새 실행으로 교체되어
+# labeled 실행(승인 기록)이 버려질 수 있다. 병렬 실행 간 경합은 스크립트가 승인 기록을 잠시 기다려 흡수한다.
 
 jobs:
   human-gate:

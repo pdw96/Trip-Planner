@@ -106,6 +106,19 @@ export function findApprovalHash(comments) {
   return null;
 }
 
+// 라벨은 있는데 기록이 없을 때, 동시에 돌고 있는 labeled 실행이 기록을 남길 때까지 잠시 기다리며 다시 읽는다.
+export async function waitForApprovalHash(
+  fetchComments,
+  { tries = 6, delayMs = 10_000 } = {},
+) {
+  for (let i = 0; i < tries; i++) {
+    const hash = findApprovalHash(await fetchComments());
+    if (hash !== null || i === tries - 1) return hash;
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+  return null;
+}
+
 export function decide({
   risky,
   hasLabel,
@@ -200,7 +213,7 @@ async function main() {
   const currentHash = riskyPatchHash(baseRef, sha);
   const approvedHash =
     hasLabel && !labeledNow && risky.length > 0
-      ? findApprovalHash(await githubAll(`issues/${n}/comments`))
+      ? await waitForApprovalHash(() => githubAll(`issues/${n}/comments`))
       : null;
   const result = decide({
     risky,
