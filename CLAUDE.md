@@ -9,6 +9,12 @@
 - 배포: Vercel
 - 포맷/린트: Biome (`npm run lint`, `npm run format`)
 
+## 환경
+- Neon 프로젝트: `Trip-Planner` (`round-haze-44237754`, ap-southeast-1). 개인 조직이 아니라 Vercel 이 관리하는 조직 "Vercel: pdw96's projects"(`org-calm-heart-03203548`)에 있다. Neon MCP 에서는 `project_id` 를 이 값으로 넘긴다.
+  - `main` 브랜치(기본 브랜치, Vercel 프로덕션)가 앱이 쓰는 DB 다. `preview/*` 브랜치는 Vercel 프리뷰 배포용이다.
+- 클라우드 세션에는 `.env.local` 이 없다. `DATABASE_URL` 등은 클라우드 환경 변수로 주입되므로 `process.env` 에서 바로 쓸 수 있다. 연결 대상을 확인할 때는 비밀번호를 빼고 호스트만 출력한다:
+  `node -e 'const u=new URL(process.env.DATABASE_URL);console.log(u.hostname,u.pathname)'`
+
 ## 명령
 - `npm run dev` / `npm run build`
 - `npm run lint` · `npm run typecheck` — 커밋 전 둘 다 통과

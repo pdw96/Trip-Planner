@@ -53,7 +53,7 @@ const ask = (reason) => {
 
 if (SECRET.test(cmd))
   block(
-    "셸에서 시크릿 파일(.env*)을 읽거나 쓰지 않습니다. 키 이름은 .env.example 을 보세요.",
+    "셸에서 시크릿 파일(.env*)을 읽거나 쓰지 않습니다. 키 이름은 .env.example 을 보세요. 클라우드 세션에서는 값이 환경 변수(예: $DATABASE_URL)로 주입됩니다 — CLAUDE.md '환경' 참고.",
   );
 
 if (/\bdrizzle-kit(@\S+)?\s+(push|drop)\b/.test(cmd))
