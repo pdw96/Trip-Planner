@@ -28,7 +28,7 @@
 - 서버에서 현재 사용자는 `src/lib/session.ts` 의 `getCurrentUser()` 로만 읽는다. Server Action 과 Route Handler 는 DB 를 건드리기 전에 이를 확인하고, 사용자 소유 데이터 쿼리는 항상 `userId` 로 범위를 좁힌다.
 - Better Auth 테이블(`user` · `session` · `account` · `verification`)은 이름과 타입을 바꾸지 않는다.
 - 스키마는 `src/db/schema.ts` 만 고치고, `drizzle/` 아래 생성된 마이그레이션은 손으로 고치지 않는다 (권한 규칙이 막음).
-- 시크릿은 `.env.local` 에만. `.env.example` 에 키 이름만 적는다.
+- 시크릿은 `.env.local` 에만. `.env.example` 에 키 이름만 적는다. 셸(`cat` 등)로도 시크릿 파일을 읽지 않는다.
 - 파괴적 마이그레이션(DROP, 타입 변경, NOT NULL 추가)은 PR 을 열기 전에 멈추고 보고한다.
 
 ## 구현 규칙

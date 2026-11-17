@@ -2,11 +2,18 @@
 // human-gate: 위험 경로를 건드린 PR 은 사람이 `human-approved` 라벨을 붙여야 통과한다.
 // 설계: docs/superpowers/specs/2026-11-17-ai-native-workflow-design.md (6.4)
 // 이 파일의 목록이 위험 경로의 기준이다. CLAUDE.md 의 목록은 이것을 옮긴 것이다.
+//
+// 승인은 "라벨이 붙은 순간의 위험 변경"에 묶인다. 라벨이 붙을 때 그 변경의 해시를
+// github-actions[bot] 코멘트로 남기고, 이후 모든 실행은 지금의 위험 변경을 그 해시와 비교한다.
+// 다르거나 기록이 없으면 라벨을 떼고 실패한다. 중간 실행이 취소·생략돼도 결과는 같다.
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { appendFileSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 export const LABEL = "human-approved";
+const BOT = "github-actions[bot]";
+const MARKER = /<!-- human-gate-approval sha256=([0-9a-f]+) -->/;
 
 export const RISKY_FILES = Object.freeze([
   "src/db/schema.ts",
@@ -50,94 +57,155 @@ const mergeBase = (baseRef, sha, cwd) =>
   git(["merge-base", baseRef, sha], cwd).trim();
 
 // PR 쪽에서 바뀐 위험 파일. rename 은 옛 경로와 새 경로를 모두 센다(--no-renames).
-export function riskyFiles(baseRef, headSha, cwd) {
-  const base = mergeBase(baseRef, headSha, cwd);
-  return git(["diff", "--name-only", "--no-renames", base, headSha], cwd)
+export function riskyFiles(baseRef, sha, cwd) {
+  const base = mergeBase(baseRef, sha, cwd);
+  return git(["diff", "--name-only", "--no-renames", base, sha], cwd)
     .split("\n")
     .filter(Boolean)
     .filter(isRisky);
 }
 
-// PR 쪽 위험 변경의 내용. main 을 병합해도 merge-base 기준이라 PR 쪽 변경만 남는다.
-export function riskyPatch(baseRef, sha, cwd) {
+// PR 쪽 위험 변경 내용의 해시. merge-base 기준이라 main 병합으로 들어온 변경은 빠진다.
+// main 이 같은 파일의 다른 줄을 고쳐도 같게 나오도록, 문맥 없는 diff 에서 blob 해시(index 줄)와
+// 줄 번호(@@ … @@)를 지운다.
+export function riskyPatchHash(baseRef, sha, cwd) {
   const files = riskyFiles(baseRef, sha, cwd);
-  if (files.length === 0) return "";
-  const base = mergeBase(baseRef, sha, cwd);
-  return git(["diff", "--no-renames", base, sha, "--", ...files], cwd);
+  const patch =
+    files.length === 0
+      ? ""
+      : git(
+          [
+            "diff",
+            "-U0",
+            "--no-renames",
+            mergeBase(baseRef, sha, cwd),
+            sha,
+            "--",
+            ...files,
+          ],
+          cwd,
+        )
+          .split("\n")
+          .filter((line) => !line.startsWith("index "))
+          .map((line) => (line.startsWith("@@") ? "@@" : line))
+          .join("\n");
+  return createHash("sha256").update(patch).digest("hex");
 }
 
-// 비교할 수 없으면(force-push 로 before 가 사라짐 등) 바뀐 것으로 본다.
-export function riskyChangedSince(baseRef, beforeSha, afterSha, cwd) {
-  try {
-    return (
-      riskyPatch(baseRef, beforeSha, cwd) !== riskyPatch(baseRef, afterSha, cwd)
-    );
-  } catch {
-    return true;
+export const approvalMarker = (hash) =>
+  `<!-- human-gate-approval sha256=${hash} -->`;
+
+// 승인 기록은 github-actions[bot] 이 남긴 코멘트만 믿는다. 사람이나 Claude(사용자 계정)가 쓴 것은 무시한다.
+export function findApprovalHash(comments) {
+  for (const comment of [...comments].reverse()) {
+    if (comment.user?.login !== BOT) continue;
+    const match = comment.body?.match(MARKER);
+    if (match) return match[1];
   }
+  return null;
 }
 
-export function decide({ risky, hasLabel, changedSinceApproval }) {
-  if (risky.length === 0)
-    return {
-      pass: true,
-      removeLabel: false,
-      message: "위험 경로를 건드리지 않았습니다. 사람 승인이 필요 없습니다.",
-    };
-  const list = risky.map((f) => `- ${f}`).join("\n");
-  if (hasLabel && changedSinceApproval)
-    return {
-      pass: false,
-      removeLabel: true,
-      message: `승인 이후 위험 경로가 다시 바뀌어 승인을 해제했습니다. 다시 확인한 뒤 \`${LABEL}\` 라벨을 붙이세요.\n\n${list}`,
-    };
-  if (hasLabel)
-    return {
-      pass: true,
-      removeLabel: false,
-      message: `\`${LABEL}\` 라벨로 승인된 위험 경로 변경입니다.\n\n${list}`,
-    };
-  return {
-    pass: false,
+export function decide({
+  risky,
+  hasLabel,
+  labeledNow,
+  approvedHash,
+  currentHash,
+}) {
+  const result = (pass, message, extra = {}) => ({
+    pass,
     removeLabel: false,
-    message: `위험 경로를 건드렸습니다. 사람이 확인한 뒤 \`${LABEL}\` 라벨을 붙이세요.\n\n${list}`,
-  };
+    recordApproval: false,
+    message,
+    ...extra,
+  });
+  if (risky.length === 0)
+    return result(
+      true,
+      "위험 경로를 건드리지 않았습니다. 사람 승인이 필요 없습니다.",
+    );
+  const list = risky.map((f) => `- ${f}`).join("\n");
+  if (!hasLabel)
+    return result(
+      false,
+      `위험 경로를 건드렸습니다. 사람이 확인한 뒤 \`${LABEL}\` 라벨을 붙이세요.\n\n${list}`,
+    );
+  if (labeledNow)
+    return result(
+      true,
+      `\`${LABEL}\` 라벨로 지금의 위험 경로 변경을 승인으로 기록했습니다.\n\n${list}`,
+      { recordApproval: true },
+    );
+  if (approvedHash === currentHash)
+    return result(
+      true,
+      `\`${LABEL}\` 라벨로 승인된 위험 경로 변경입니다.\n\n${list}`,
+    );
+  return result(
+    false,
+    `승인 이후 위험 경로가 바뀌었거나 승인 기록이 없어 승인을 해제했습니다. 다시 확인한 뒤 \`${LABEL}\` 라벨을 붙이세요.\n\n${list}`,
+    { removeLabel: true },
+  );
 }
 
-async function removeLabel(number) {
+async function github(method, url, body) {
   const { GITHUB_API_URL, GITHUB_REPOSITORY, GITHUB_TOKEN } = process.env;
   const res = await fetch(
-    `${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/${number}/labels/${LABEL}`,
+    `${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/${url}`,
     {
-      method: "DELETE",
+      method,
       headers: {
         Authorization: `Bearer ${GITHUB_TOKEN}`,
         Accept: "application/vnd.github+json",
+        ...(body ? { "Content-Type": "application/json" } : {}),
       },
+      body: body ? JSON.stringify(body) : undefined,
     },
   );
-  if (!res.ok && res.status !== 404)
-    throw new Error(`라벨 제거 실패: HTTP ${res.status}`);
+  if (method === "DELETE" && res.status === 404) return null;
+  if (!res.ok) throw new Error(`${method} ${url}: HTTP ${res.status}`);
+  return res.status === 204 ? null : res.json();
 }
 
 async function main() {
   const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8"));
   const pr = event.pull_request;
+  const n = pr.number;
   const baseRef = `origin/${pr.base.ref}`;
-  const hasLabel = pr.labels.some((l) => l.name === LABEL);
-  const risky = riskyFiles(baseRef, pr.head.sha);
-  const changedSinceApproval =
-    event.action === "synchronize" && hasLabel
-      ? riskyChangedSince(baseRef, event.before, pr.head.sha)
-      : false;
-  const result = decide({ risky, hasLabel, changedSinceApproval });
-  if (result.removeLabel) await removeLabel(pr.number);
+  // 워크플로가 refs/remotes/pr/head 로 PR head 를 가져온다. 이벤트의 head.sha 와 같아야 한다.
+  const sha = pr.head.sha;
+
+  // 이벤트 payload 의 라벨은 오래됐을 수 있어 지금 라벨을 API 로 읽는다.
+  const labels = await github("GET", `issues/${n}/labels?per_page=100`);
+  const hasLabel = labels.some((l) => l.name === LABEL);
+  const labeledNow = event.action === "labeled" && event.label?.name === LABEL;
+  const risky = riskyFiles(baseRef, sha);
+  const currentHash = riskyPatchHash(baseRef, sha);
+  const approvedHash =
+    hasLabel && !labeledNow && risky.length > 0
+      ? findApprovalHash(
+          await github("GET", `issues/${n}/comments?per_page=100`),
+        )
+      : null;
+  const result = decide({
+    risky,
+    hasLabel,
+    labeledNow,
+    approvedHash,
+    currentHash,
+  });
+
   console.log(result.message);
   if (process.env.GITHUB_STEP_SUMMARY)
     appendFileSync(
       process.env.GITHUB_STEP_SUMMARY,
       `## human-gate\n\n${result.message}\n`,
     );
+  if (result.recordApproval)
+    await github("POST", `issues/${n}/comments`, {
+      body: `human-gate: \`${sha.slice(0, 7)}\` 시점의 위험 경로 변경을 사람 승인으로 기록했습니다. 이후 위험 경로가 바뀌면 승인이 해제됩니다.\n\n${approvalMarker(currentHash)}`,
+    });
+  if (result.removeLabel) await github("DELETE", `issues/${n}/labels/${LABEL}`);
   if (!result.pass) process.exitCode = 1;
 }
 

@@ -5,13 +5,19 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import {
+  approvalMarker,
   decide,
+  findApprovalHash,
   isRisky,
-  riskyChangedSince,
   riskyFiles,
+  riskyPatchHash,
 } from "./human-gate.mjs";
 
-const pick = ({ pass, removeLabel }) => ({ pass, removeLabel });
+const pick = ({ pass, removeLabel, recordApproval }) => ({
+  pass,
+  removeLabel,
+  recordApproval,
+});
 
 // 임시 git 저장소를 만들고, 그 안에서 git 명령과 파일 쓰기를 하는 도우미.
 function makeRepo() {
@@ -27,19 +33,28 @@ function makeRepo() {
     git("commit", "-q", "-m", message);
     return git("rev-parse", "HEAD");
   };
+  const lines = (prefix) =>
+    `${Array.from({ length: 40 }, (_, i) => `${prefix} ${i}`).join("\n")}\n`;
   git("init", "-q", "-b", "main");
   git("config", "user.name", "test");
   git("config", "user.email", "test@example.com");
   git("config", "commit.gpgsign", "false");
-  write("CLAUDE.md", "rules\n");
+  write("CLAUDE.md", lines("rule"));
   write("README.md", "readme\n");
   write("src/app/page.tsx", "page\n");
   write("src/lib/session.ts", "session\n");
   write("src/db/index.ts", "db\n");
   commit("base");
   git("checkout", "-q", "-b", "feature");
-  return { dir, git, write, commit };
+  return { dir, git, write, commit, lines };
 }
+
+// CLAUDE.md 의 n 번째 줄만 바꾼 내용.
+const editLine = (lines, n, text) =>
+  lines
+    .split("\n")
+    .map((l, i) => (i === n ? text : l))
+    .join("\n");
 
 test("isRisky: 목록의 파일과 접두어는 위험", () => {
   for (const f of [
@@ -68,11 +83,19 @@ test("isRisky: 비슷한 이름은 위험이 아니다", () => {
     assert.equal(isRisky(f), false, f);
 });
 
-test("decide: 위험 파일이 없으면 라벨과 무관하게 통과", () => {
+test("decide: 위험 파일이 없으면 라벨과 무관하게 통과, 아무것도 하지 않는다", () => {
   for (const hasLabel of [true, false])
     assert.deepEqual(
-      pick(decide({ risky: [], hasLabel, changedSinceApproval: true })),
-      { pass: true, removeLabel: false },
+      pick(
+        decide({
+          risky: [],
+          hasLabel,
+          labeledNow: hasLabel,
+          approvedHash: null,
+          currentHash: "h1",
+        }),
+      ),
+      { pass: true, removeLabel: false, recordApproval: false },
     );
 });
 
@@ -80,35 +103,90 @@ test("decide: 위험 파일이 있고 라벨이 없으면 실패, 메시지에 �
   const r = decide({
     risky: ["CLAUDE.md"],
     hasLabel: false,
-    changedSinceApproval: false,
+    labeledNow: false,
+    approvedHash: null,
+    currentHash: "h1",
   });
-  assert.equal(r.pass, false);
-  assert.equal(r.removeLabel, false);
+  assert.deepEqual(pick(r), {
+    pass: false,
+    removeLabel: false,
+    recordApproval: false,
+  });
   assert.match(r.message, /CLAUDE\.md/);
   assert.match(r.message, /human-approved/);
 });
 
-test("decide: 라벨 있고 승인 뒤 위험 변경 없음 → 통과", () => {
+test("decide: 방금 라벨이 붙었으면 지금 상태를 승인으로 기록하고 통과", () => {
   assert.deepEqual(
     pick(
       decide({
         risky: ["CLAUDE.md"],
         hasLabel: true,
-        changedSinceApproval: false,
+        labeledNow: true,
+        approvedHash: "old",
+        currentHash: "h1",
       }),
     ),
-    { pass: true, removeLabel: false },
+    { pass: true, removeLabel: false, recordApproval: true },
   );
 });
 
-test("decide: 라벨 있지만 승인 뒤 위험 변경 → 실패 + 라벨 제거", () => {
+test("decide: 라벨이 있고 승인 기록과 지금이 같으면 통과", () => {
+  assert.deepEqual(
+    pick(
+      decide({
+        risky: ["CLAUDE.md"],
+        hasLabel: true,
+        labeledNow: false,
+        approvedHash: "h1",
+        currentHash: "h1",
+      }),
+    ),
+    { pass: true, removeLabel: false, recordApproval: false },
+  );
+});
+
+test("decide: 라벨이 있지만 승인 기록과 다르면 실패 + 라벨 제거", () => {
   const r = decide({
     risky: ["CLAUDE.md"],
     hasLabel: true,
-    changedSinceApproval: true,
+    labeledNow: false,
+    approvedHash: "h0",
+    currentHash: "h1",
   });
-  assert.deepEqual(pick(r), { pass: false, removeLabel: true });
+  assert.deepEqual(pick(r), {
+    pass: false,
+    removeLabel: true,
+    recordApproval: false,
+  });
   assert.match(r.message, /승인을 해제/);
+});
+
+test("decide: 라벨이 있지만 승인 기록이 없으면 실패 + 라벨 제거", () => {
+  assert.deepEqual(
+    pick(
+      decide({
+        risky: ["CLAUDE.md"],
+        hasLabel: true,
+        labeledNow: false,
+        approvedHash: null,
+        currentHash: "h1",
+      }),
+    ),
+    { pass: false, removeLabel: true, recordApproval: false },
+  );
+});
+
+test("findApprovalHash: github-actions[bot] 의 마지막 기록만 읽는다", () => {
+  const bot = { login: "github-actions[bot]" };
+  const comments = [
+    { user: bot, body: approvalMarker("a0") },
+    { user: { login: "pdw96" }, body: "평범한 코멘트" },
+    { user: bot, body: `승인 기록\n${approvalMarker("b1")}` },
+    { user: { login: "pdw96" }, body: approvalMarker("cc") },
+  ];
+  assert.equal(findApprovalHash(comments), "b1");
+  assert.equal(findApprovalHash([]), null);
 });
 
 test("riskyFiles: rename 의 옛 경로와 삭제도 센다", () => {
@@ -122,40 +200,58 @@ test("riskyFiles: rename 의 옛 경로와 삭제도 센다", () => {
   ]);
 });
 
-test("riskyPatch: main 병합만으로는 바뀌지 않는다", () => {
-  const { dir, git, write, commit } = makeRepo();
-  write("CLAUDE.md", "rules v2\n");
-  const before = commit("branch edits CLAUDE.md");
+test("riskyPatchHash: main 병합만으로는 바뀌지 않는다", () => {
+  const { dir, git, write, commit, lines } = makeRepo();
+  write("CLAUDE.md", editLine(lines("rule"), 30, "branch edit"));
+  const approved = commit("branch edits CLAUDE.md");
   git("checkout", "-q", "main");
   write("README.md", "readme v2\n");
   commit("main edits README");
   git("checkout", "-q", "feature");
   git("merge", "-q", "--no-edit", "main");
-  const after = git("rev-parse", "HEAD");
-  assert.equal(riskyChangedSince("main", before, after, dir), false);
+  assert.equal(
+    riskyPatchHash("main", "HEAD", dir),
+    riskyPatchHash("main", approved, dir),
+  );
 });
 
-test("riskyChangedSince: 브랜치가 위험 파일을 다시 고치면 true", () => {
-  const { dir, write, commit } = makeRepo();
-  write("CLAUDE.md", "rules v2\n");
-  const before = commit("approved state");
-  write("CLAUDE.md", "rules v3\n");
-  const after = commit("edit again");
-  assert.equal(riskyChangedSince("main", before, after, dir), true);
+test("riskyPatchHash: main 이 같은 위험 파일의 다른 줄을 고친 뒤 병합해도 바뀌지 않는다", () => {
+  const { dir, git, write, commit, lines } = makeRepo();
+  write("CLAUDE.md", editLine(lines("rule"), 30, "branch edit"));
+  const approved = commit("branch edits line 30");
+  git("checkout", "-q", "main");
+  write("CLAUDE.md", editLine(lines("rule"), 2, "main edit"));
+  commit("main edits line 2");
+  git("checkout", "-q", "feature");
+  git("merge", "-q", "--no-edit", "main");
+  assert.equal(
+    riskyPatchHash("main", "HEAD", dir),
+    riskyPatchHash("main", approved, dir),
+  );
 });
 
-test("riskyChangedSince: 브랜치가 안전한 파일만 고치면 false", () => {
-  const { dir, write, commit } = makeRepo();
-  write("CLAUDE.md", "rules v2\n");
-  const before = commit("approved state");
+test("riskyPatchHash: 승인 뒤 위험 변경 → 안전한 변경 순서여도 승인 때와 다르다", () => {
+  const { dir, write, commit, lines } = makeRepo();
+  write("CLAUDE.md", editLine(lines("rule"), 30, "approved edit"));
+  const approved = commit("approved state");
+  write("src/lib/session.ts", "session v2\n");
+  commit("risky change after approval");
   write("src/app/page.tsx", "page v2\n");
-  const after = commit("safe edit");
-  assert.equal(riskyChangedSince("main", before, after, dir), false);
+  commit("safe change on top");
+  assert.notEqual(
+    riskyPatchHash("main", "HEAD", dir),
+    riskyPatchHash("main", approved, dir),
+  );
 });
 
-test("riskyChangedSince: before 커밋이 없으면 바뀐 것으로 본다", () => {
-  const { dir, write, commit } = makeRepo();
-  write("CLAUDE.md", "rules v2\n");
-  commit("approved state");
-  assert.equal(riskyChangedSince("main", "0".repeat(40), "HEAD", dir), true);
+test("riskyPatchHash: 브랜치가 안전한 파일만 고치면 바뀌지 않는다", () => {
+  const { dir, write, commit, lines } = makeRepo();
+  write("CLAUDE.md", editLine(lines("rule"), 30, "approved edit"));
+  const approved = commit("approved state");
+  write("src/app/page.tsx", "page v2\n");
+  commit("safe edit");
+  assert.equal(
+    riskyPatchHash("main", "HEAD", dir),
+    riskyPatchHash("main", approved, dir),
+  );
 });
