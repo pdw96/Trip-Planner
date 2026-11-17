@@ -13,8 +13,20 @@ const SECRET =
 const MIGRATION =
   /(^|[\s"'=/<>|;&(])drizzle(\/[^\s"';|&<>)]*)?(?=$|[\s"';|&<>)])/;
 const WRITE =
-  /\b(sed\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*i|perl\s+-[a-zA-Z]*i|tee|truncate|mv|cp|dd|install)\b|>>?\s*["']?[^\s"';|&<>]*drizzle\//;
+  /\bsed\b[^|;&]*\s(-[a-zA-Z]*i|--in-place)|\bperl\s+-[a-zA-Z]*i|\b(tee|truncate|mv|cp|dd|install)\b|>>?\s*["']?[^\s"';|&<>]*drizzle\//;
 const REMOVE = /\b(rm|unlink|git\s+(rm|clean|checkout|restore))\b/;
+
+// 패턴으로 쓰기를 전부 나열할 수는 없으므로, drizzle/ 을 건드리는 명령은
+// 아래 읽기 전용 목록에 있을 때만 그냥 통과시키고 나머지는 사용자에게 묻습니다.
+const READ_ONLY = /^(ls|cat|head|tail|wc|grep|rg|diff|stat|file|echo)$/;
+const GIT_SAFE = /^(status|diff|log|show|ls-files|blame|add|commit)$/;
+const isReadOnly = (segment) => {
+  const words = segment.trim().split(/\s+/);
+  while (/^\w+=/.test(words[0] ?? "")) words.shift();
+  const [bin, sub] = words;
+  if (bin === "git") return GIT_SAFE.test(sub ?? "");
+  return READ_ONLY.test(bin ?? "");
+};
 
 const block = (reason) => {
   console.error(`차단됨: ${reason}`);
@@ -51,5 +63,12 @@ if (MIGRATION.test(cmd)) {
   if (REMOVE.test(cmd))
     ask(
       "drizzle/ 아래 마이그레이션을 지우거나 되돌리려 합니다. 아직 적용되지 않은 마이그레이션인지 확인하세요.",
+    );
+  const touching = cmd
+    .split(/&&|\|\||[;|\n]/)
+    .filter((segment) => MIGRATION.test(segment));
+  if (!touching.every(isReadOnly))
+    ask(
+      "drizzle/ 를 읽기 전용 목록에 없는 명령으로 건드립니다. 마이그레이션을 바꾸는 명령이 아닌지 확인하세요.",
     );
 }
