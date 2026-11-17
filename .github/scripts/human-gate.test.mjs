@@ -9,6 +9,7 @@ import {
   decide,
   findApprovalHash,
   isRisky,
+  lastLabeledAt,
   riskyFiles,
   riskyPatchHash,
   waitForApprovalHash,
@@ -329,4 +330,63 @@ test("waitForApprovalHash: 끝내 없으면 정해진 횟수만 읽고 null", as
   );
   assert.equal(hash, null);
   assert.equal(calls, 4);
+});
+
+test("findApprovalHash: notBefore 보다 이전 기록은 무시한다 (재승인 대기)", () => {
+  const bot = { login: "github-actions[bot]" };
+  const comments = [
+    {
+      user: bot,
+      created_at: "2026-11-17T10:00:00Z",
+      body: approvalMarker("aa"),
+    },
+  ];
+  assert.equal(findApprovalHash(comments, "2026-11-17T11:00:00Z"), null);
+  assert.equal(findApprovalHash(comments, "2026-11-17T09:00:00Z"), "aa");
+  assert.equal(findApprovalHash(comments), "aa");
+});
+
+test("waitForApprovalHash: 라벨이 다시 붙은 뒤의 새 기록이 생길 때까지 기다린다", async () => {
+  const bot = { login: "github-actions[bot]" };
+  const old = {
+    user: bot,
+    created_at: "2026-11-17T10:00:00Z",
+    body: approvalMarker("aa"),
+  };
+  const fresh = {
+    user: bot,
+    created_at: "2026-11-17T11:00:05Z",
+    body: approvalMarker("bb"),
+  };
+  let calls = 0;
+  const hash = await waitForApprovalHash(
+    async () => (++calls < 2 ? [old] : [old, fresh]),
+    { tries: 5, delayMs: 0, notBefore: "2026-11-17T11:00:00Z" },
+  );
+  assert.equal(hash, "bb");
+  assert.equal(calls, 2);
+});
+
+test("riskyPatchHash: NUL 바이트가 있는 위험 파일도 내용 변경을 구분한다", () => {
+  const { dir, write, commit } = makeRepo();
+  write("src/lib/auth.ts", "// \0 marker\nexport const ok = () => false;\n");
+  const approved = commit("approved binary-ish auth");
+  write("src/lib/auth.ts", "// \0 marker\nexport const ok = () => true;\n");
+  commit("flip auth");
+  assert.notEqual(
+    riskyPatchHash("main", "HEAD", dir),
+    riskyPatchHash("main", approved, dir),
+  );
+});
+
+test("lastLabeledAt: human-approved 가 마지막으로 붙은 시각만 고른다", () => {
+  const events = [
+    { event: "labeled", label: { name: "human-approved" }, created_at: "T1" },
+    { event: "unlabeled", label: { name: "human-approved" }, created_at: "T2" },
+    { event: "labeled", label: { name: "bug" }, created_at: "T3" },
+    { event: "labeled", label: { name: "human-approved" }, created_at: "T4" },
+    { event: "committed", created_at: "T5" },
+  ];
+  assert.equal(lastLabeledAt(events), "T4");
+  assert.equal(lastLabeledAt([]), null);
 });

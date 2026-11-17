@@ -68,6 +68,7 @@ export function riskyFiles(baseRef, sha, cwd) {
 
 // PR 쪽 위험 변경 내용의 해시. merge-base 기준이라 main 병합으로 들어온 변경은 빠진다.
 // main 이 같은 파일의 떨어진 줄을 고쳐도 같게 나오도록 blob 해시(index 줄)와 줄 번호(@@ … @@)를 지운다.
+// --text: NUL 바이트가 있어 바이너리로 판정되는 파일도 내용이 해시에 들어가게 한다.
 // 문맥 3줄과 @@ 뒤 함수 이름은 남겨, 같은 문장이라도 다른 위치의 변경이면 다르게 나온다.
 // (main 이 PR 변경 바로 근처를 고치면 승인이 풀린다. 안전한 쪽으로 틀리는 것이다.)
 export function riskyPatchHash(baseRef, sha, cwd) {
@@ -78,6 +79,7 @@ export function riskyPatchHash(baseRef, sha, cwd) {
       : git(
           [
             "diff",
+            "--text",
             "--no-renames",
             mergeBase(baseRef, sha, cwd),
             sha,
@@ -97,22 +99,32 @@ export const approvalMarker = (hash) =>
   `<!-- human-gate-approval sha256=${hash} -->`;
 
 // 승인 기록은 github-actions[bot] 이 남긴 코멘트만 믿는다. 사람이나 Claude(사용자 계정)가 쓴 것은 무시한다.
-export function findApprovalHash(comments) {
+// notBefore(라벨이 마지막으로 붙은 시각)보다 이전 기록은 무시한다. 라벨을 다시 붙였다면 그 뒤의 기록만 유효하다.
+export function findApprovalHash(comments, notBefore = null) {
   for (const comment of [...comments].reverse()) {
     if (comment.user?.login !== BOT) continue;
+    if (notBefore && (comment.created_at ?? "") < notBefore) continue;
     const match = comment.body?.match(MARKER);
     if (match) return match[1];
   }
   return null;
 }
 
+// 이슈 이벤트에서 `human-approved` 가 마지막으로 붙은 시각. 없으면 null.
+export function lastLabeledAt(events) {
+  const labeled = events.filter(
+    (e) => e.event === "labeled" && e.label?.name === LABEL,
+  );
+  return labeled.at(-1)?.created_at ?? null;
+}
+
 // 라벨은 있는데 기록이 없을 때, 동시에 돌고 있는 labeled 실행이 기록을 남길 때까지 잠시 기다리며 다시 읽는다.
 export async function waitForApprovalHash(
   fetchComments,
-  { tries = 6, delayMs = 10_000 } = {},
+  { tries = 6, delayMs = 10_000, notBefore = null } = {},
 ) {
   for (let i = 0; i < tries; i++) {
-    const hash = findApprovalHash(await fetchComments());
+    const hash = findApprovalHash(await fetchComments(), notBefore);
     if (hash !== null || i === tries - 1) return hash;
     await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
@@ -213,7 +225,9 @@ async function main() {
   const currentHash = riskyPatchHash(baseRef, sha);
   const approvedHash =
     hasLabel && !labeledNow && risky.length > 0
-      ? await waitForApprovalHash(() => githubAll(`issues/${n}/comments`))
+      ? await waitForApprovalHash(() => githubAll(`issues/${n}/comments`), {
+          notBefore: lastLabeledAt(await githubAll(`issues/${n}/events`)),
+        })
       : null;
   const result = decide({
     risky,
