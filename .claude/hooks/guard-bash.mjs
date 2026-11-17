@@ -10,7 +10,8 @@ if (!cmd) process.exit(0);
 // .env, .env.local, .env.production 과 .env* 같은 glob. 정확히 .env.example 만 허용합니다.
 const SECRET =
   /(^|[\s"'=/<>|;&(])\.env(?!\.example(?=$|[\s"';|&<>)]))(?=$|[\s"';|&<>).*?[{])/;
-const MIGRATION = /(^|[\s"'=/<>|;&(])drizzle\/[^\s"';|&<>)]*/;
+const MIGRATION =
+  /(^|[\s"'=/<>|;&(])drizzle(\/[^\s"';|&<>)]*)?(?=$|[\s"';|&<>)])/;
 const WRITE =
   /\b(sed\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*i|perl\s+-[a-zA-Z]*i|tee|truncate|mv|cp|dd|install)\b|>>?\s*["']?[^\s"';|&<>]*drizzle\//;
 const REMOVE = /\b(rm|unlink|git\s+(rm|clean|checkout|restore))\b/;
