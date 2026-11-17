@@ -68,7 +68,7 @@ if (MIGRATION.test(cmd)) {
       "drizzle/ 아래 마이그레이션을 지우거나 되돌리려 합니다. 아직 적용되지 않은 마이그레이션인지 확인하세요.",
     );
   const touching = cmd
-    .split(/&&|\|\||[;|\n]/)
+    .split(/&&|\|\||[;|&\n]/)
     .filter((segment) => MIGRATION.test(segment));
   // 명령 치환·프로세스 치환 안의 명령은 분류하지 않고 보수적으로 묻습니다.
   const nested = /\$\(|`|[<>]\(/.test(cmd);
