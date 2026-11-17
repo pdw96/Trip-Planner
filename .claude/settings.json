@@ -27,6 +27,15 @@
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/protect-files.mjs\""
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-bash.mjs\""
+          }
+        ]
       }
     ],
     "Stop": [
