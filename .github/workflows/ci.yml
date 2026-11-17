@@ -1,0 +1,29 @@
+# PR 마다 lint 와 typecheck 를 돌립니다. Claude Code 훅은 Claude 세션 안에서만 동작하므로 그 바깥의 안전망입니다.
+# build 는 Vercel 프리뷰 배포가 실제 환경 변수로 PR 마다 돌리므로 여기서는 하지 않습니다.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
