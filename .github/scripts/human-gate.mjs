@@ -57,17 +57,19 @@ const mergeBase = (baseRef, sha, cwd) =>
   git(["merge-base", baseRef, sha], cwd).trim();
 
 // PR 쪽에서 바뀐 위험 파일. rename 은 옛 경로와 새 경로를 모두 센다(--no-renames).
+// -z: 한글 등 non-ASCII 파일명을 git 이 따옴표로 감싸 바꾸지 않도록 NUL 로 구분해 받는다.
 export function riskyFiles(baseRef, sha, cwd) {
   const base = mergeBase(baseRef, sha, cwd);
-  return git(["diff", "--name-only", "--no-renames", base, sha], cwd)
-    .split("\n")
+  return git(["diff", "--name-only", "-z", "--no-renames", base, sha], cwd)
+    .split("\0")
     .filter(Boolean)
     .filter(isRisky);
 }
 
 // PR 쪽 위험 변경 내용의 해시. merge-base 기준이라 main 병합으로 들어온 변경은 빠진다.
-// main 이 같은 파일의 다른 줄을 고쳐도 같게 나오도록, 문맥 없는 diff 에서 blob 해시(index 줄)와
-// 줄 번호(@@ … @@)를 지운다.
+// main 이 같은 파일의 떨어진 줄을 고쳐도 같게 나오도록 blob 해시(index 줄)와 줄 번호(@@ … @@)를 지운다.
+// 문맥 3줄과 @@ 뒤 함수 이름은 남겨, 같은 문장이라도 다른 위치의 변경이면 다르게 나온다.
+// (main 이 PR 변경 바로 근처를 고치면 승인이 풀린다. 안전한 쪽으로 틀리는 것이다.)
 export function riskyPatchHash(baseRef, sha, cwd) {
   const files = riskyFiles(baseRef, sha, cwd);
   const patch =
@@ -76,7 +78,6 @@ export function riskyPatchHash(baseRef, sha, cwd) {
       : git(
           [
             "diff",
-            "-U0",
             "--no-renames",
             mergeBase(baseRef, sha, cwd),
             sha,
@@ -87,7 +88,7 @@ export function riskyPatchHash(baseRef, sha, cwd) {
         )
           .split("\n")
           .filter((line) => !line.startsWith("index "))
-          .map((line) => (line.startsWith("@@") ? "@@" : line))
+          .map((line) => line.replace(/^@@ [^@]* @@/, "@@ @@"))
           .join("\n");
   return createHash("sha256").update(patch).digest("hex");
 }
@@ -141,9 +142,15 @@ export function decide({
       true,
       `\`${LABEL}\` 라벨로 승인된 위험 경로 변경입니다.\n\n${list}`,
     );
+  // 기록이 없으면 라벨은 그대로 둔다. 방금 붙은 라벨의 labeled 실행이 아직 기록하지 못했을 수 있다.
+  if (approvedHash === null)
+    return result(
+      false,
+      `\`${LABEL}\` 라벨은 있지만 승인 기록이 아직 없습니다. 라벨이 방금 붙었다면 곧 다시 실행됩니다. 계속 실패하면 라벨을 떼었다가 다시 붙이세요.\n\n${list}`,
+    );
   return result(
     false,
-    `승인 이후 위험 경로가 바뀌었거나 승인 기록이 없어 승인을 해제했습니다. 다시 확인한 뒤 \`${LABEL}\` 라벨을 붙이세요.\n\n${list}`,
+    `승인 이후 위험 경로가 바뀌어 승인을 해제했습니다. 다시 확인한 뒤 \`${LABEL}\` 라벨을 붙이세요.\n\n${list}`,
     { removeLabel: true },
   );
 }
@@ -167,6 +174,16 @@ async function github(method, url, body) {
   return res.status === 204 ? null : res.json();
 }
 
+// 목록 API 를 마지막 페이지까지 읽는다(코멘트가 100개를 넘어도 최신 승인 기록을 찾도록).
+async function githubAll(url) {
+  const all = [];
+  for (let page = 1; ; page++) {
+    const items = await github("GET", `${url}?per_page=100&page=${page}`);
+    all.push(...items);
+    if (items.length < 100) return all;
+  }
+}
+
 async function main() {
   const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8"));
   const pr = event.pull_request;
@@ -176,16 +193,14 @@ async function main() {
   const sha = pr.head.sha;
 
   // 이벤트 payload 의 라벨은 오래됐을 수 있어 지금 라벨을 API 로 읽는다.
-  const labels = await github("GET", `issues/${n}/labels?per_page=100`);
+  const labels = await githubAll(`issues/${n}/labels`);
   const hasLabel = labels.some((l) => l.name === LABEL);
   const labeledNow = event.action === "labeled" && event.label?.name === LABEL;
   const risky = riskyFiles(baseRef, sha);
   const currentHash = riskyPatchHash(baseRef, sha);
   const approvedHash =
     hasLabel && !labeledNow && risky.length > 0
-      ? findApprovalHash(
-          await github("GET", `issues/${n}/comments?per_page=100`),
-        )
+      ? findApprovalHash(await githubAll(`issues/${n}/comments`))
       : null;
   const result = decide({
     risky,

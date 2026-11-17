@@ -162,18 +162,64 @@ test("decide: 라벨이 있지만 승인 기록과 다르면 실패 + 라벨 제
   assert.match(r.message, /승인을 해제/);
 });
 
-test("decide: 라벨이 있지만 승인 기록이 없으면 실패 + 라벨 제거", () => {
-  assert.deepEqual(
-    pick(
-      decide({
-        risky: ["CLAUDE.md"],
-        hasLabel: true,
-        labeledNow: false,
-        approvedHash: null,
-        currentHash: "h1",
-      }),
-    ),
-    { pass: false, removeLabel: true, recordApproval: false },
+test("decide: 라벨이 있지만 승인 기록이 아직 없으면 실패하되 라벨은 남긴다 (labeled 실행이 기록할 수 있게)", () => {
+  const r = decide({
+    risky: ["CLAUDE.md"],
+    hasLabel: true,
+    labeledNow: false,
+    approvedHash: null,
+    currentHash: "h1",
+  });
+  assert.deepEqual(pick(r), {
+    pass: false,
+    removeLabel: false,
+    recordApproval: false,
+  });
+  assert.match(r.message, /다시 붙이세요/);
+});
+
+test("riskyFiles: 한글 등 non-ASCII 위험 파일명도 센다", () => {
+  const { dir, write, commit } = makeRepo();
+  write(".github/workflows/승인.yml", "on: push\n");
+  write("drizzle/0003_한글.sql", "select 1;\n");
+  commit("non-ascii risky files");
+  assert.deepEqual(riskyFiles("main", "HEAD", dir).sort(), [
+    ".github/workflows/승인.yml",
+    "drizzle/0003_한글.sql",
+  ]);
+});
+
+test("riskyPatchHash: 같은 줄 변경이라도 위치(주변 코드)가 다르면 다르다", () => {
+  const { dir, git, write, commit } = makeRepo();
+  const src = (displayRet, authRet) =>
+    [
+      "export function display() {",
+      "  const label = 'x';",
+      `  return ${displayRet};`,
+      "}",
+      "",
+      "// spacer 1",
+      "// spacer 2",
+      "// spacer 3",
+      "// spacer 4",
+      "",
+      "export function authorize() {",
+      "  const role = 'y';",
+      `  return ${authRet};`,
+      "}",
+      "",
+    ].join("\n");
+  git("checkout", "-q", "main");
+  write("src/lib/auth.ts", src("false", "false"));
+  commit("base auth");
+  git("checkout", "-q", "-B", "feature");
+  write("src/lib/auth.ts", src("true", "false"));
+  const approved = commit("display returns true");
+  write("src/lib/auth.ts", src("false", "true"));
+  commit("move the change into authorize");
+  assert.notEqual(
+    riskyPatchHash("main", "HEAD", dir),
+    riskyPatchHash("main", approved, dir),
   );
 });
 
