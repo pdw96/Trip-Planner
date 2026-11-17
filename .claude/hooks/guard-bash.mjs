@@ -20,7 +20,10 @@ const REMOVE = /\b(rm|unlink|git\s+(rm|clean|checkout|restore))\b/;
 // 아래 읽기 전용 목록에 있을 때만 그냥 통과시키고 나머지는 사용자에게 묻습니다.
 const READ_ONLY = /^(ls|cat|head|tail|wc|grep|rg|diff|stat|file|echo)$/;
 const GIT_SAFE = /^(status|diff|log|show|ls-files|blame|add|commit)$/;
+// 읽기 명령도 출력 파일 옵션(git diff --output=…)이 있으면 쓰기가 됩니다.
+const OUTPUT_OPTION = /(^|\s)--output\b/;
 const isReadOnly = (segment) => {
+  if (OUTPUT_OPTION.test(segment)) return false;
   const words = segment.trim().split(/\s+/);
   while (/^\w+=/.test(words[0] ?? "")) words.shift();
   const [bin, sub] = words;
