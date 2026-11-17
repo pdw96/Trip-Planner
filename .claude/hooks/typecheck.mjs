@@ -24,7 +24,10 @@ if (!changed.split("\n").some((line) => /\.(m?ts|tsx)$/.test(line.trim())))
 // schema.ts 는 바뀌었는데 새 마이그레이션이 없으면 db:generate 를 빼먹었을 수 있습니다.
 const lines = changed.split("\n");
 const schemaChanged = lines.some((l) => l.trim().endsWith("src/db/schema.ts"));
-const migrationAdded = lines.some((l) => /\sdrizzle\/.+\.sql$/.test(l));
+// 새로 생긴(untracked 또는 staged-added) SQL 만 셉니다. 삭제·수정은 새 마이그레이션이 아닙니다.
+const migrationAdded = lines.some((l) =>
+  /^(\?\?|A.) drizzle\/.+\.sql$/.test(l),
+);
 const schemaDrift = schemaChanged && !migrationAdded;
 
 try {
