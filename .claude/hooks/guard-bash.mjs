@@ -70,7 +70,9 @@ if (MIGRATION.test(cmd)) {
   const touching = cmd
     .split(/&&|\|\||[;|\n]/)
     .filter((segment) => MIGRATION.test(segment));
-  if (!touching.every(isReadOnly))
+  // 명령 치환·프로세스 치환 안의 명령은 분류하지 않고 보수적으로 묻습니다.
+  const nested = /\$\(|`|[<>]\(/.test(cmd);
+  if (nested || !touching.every(isReadOnly))
     ask(
       "drizzle/ 를 읽기 전용 목록에 없는 명령으로 건드립니다. 마이그레이션을 바꾸는 명령이 아닌지 확인하세요.",
     );
