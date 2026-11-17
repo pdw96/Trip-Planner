@@ -17,7 +17,8 @@
 
 ## 명령
 - `npm run dev` / `npm run build`
-- `npm run lint` · `npm run typecheck` — 커밋 전 둘 다 통과
+- `npm run lint` · `npm run typecheck` — 커밋 전 둘 다 통과 (`git commit` 때 Bash 가드 훅이 lint 를 다시 확인)
+- `/pre-pr` — 커밋·PR 전 점검. 검사를 돌리고 리뷰 에이전트를 병렬로 실행 (`--commit` · `--pr`)
 - `npm run db:generate` — schema.ts 변경 후 마이그레이션 생성
 - `npm run db:migrate` — 마이그레이션 적용 (사람이 확인한 뒤에만)
 
