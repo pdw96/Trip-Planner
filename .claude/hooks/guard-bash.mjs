@@ -46,9 +46,23 @@ const isReadOnly = (segment) => {
 
 // drizzle.config.ts 와 같은 순서로 DATABASE_URL 을 찾습니다: dotenv 는 이미 있는 환경 변수를 덮어쓰지 않으므로
 // 환경 변수가 먼저, 없으면 .env.local. 비밀번호는 읽기만 하고 호스트만 내보냅니다.
+// 명령이 직접 DATABASE_URL 을 바꾸면(`DATABASE_URL=… npm run db:migrate`, `export DATABASE_URL=$X && …`)
+// 그 값이 우선입니다. 리터럴 URL 이 아니면 대상을 확인할 수 없다고 알립니다.
 const describeDbTarget = () => {
   let raw = process.env.DATABASE_URL;
   let source = "환경 변수";
+  const configNote = /(^|\s)--config(=|\s)/.test(cmd)
+    ? " (--config 로 다른 설정 파일을 쓰므로 실제 대상은 미확인)"
+    : "";
+  if (/DATABASE_URL/.test(cmd)) {
+    const assigned = [
+      ...cmd.matchAll(/\bDATABASE_URL=(["']?)([^\s"']*)\1/g),
+    ].at(-1)?.[2];
+    if (!assigned || !URL.canParse(assigned))
+      return `대상 DB: 명령이 DATABASE_URL 을 바꾸지만 값을 확인할 수 없습니다 (변수·치환·unset 등). 실제 대상은 미확인${configNote}`;
+    raw = assigned;
+    source = "명령에서 지정";
+  }
   if (!raw) {
     try {
       const text = readFileSync(path.join(cwd, ".env.local"), "utf8");
@@ -71,7 +85,7 @@ const describeDbTarget = () => {
   const label =
     KNOWN_ENDPOINTS[endpoint] ??
     "알 수 없는 엔드포인트 — Neon 콘솔이나 Neon MCP(list_branch_computes)로 어느 브랜치인지 확인하세요";
-  return `대상 DB: ${host} (${source}) → ${label}`;
+  return `대상 DB: ${host} (${source}) → ${label}${configNote}`;
 };
 
 const latestMigration = () => {
@@ -127,15 +141,43 @@ if (/\bdrizzle-kit(@\S+)?\s+(push|drop)\b/.test(cmd))
     "drizzle-kit push/drop 은 쓰지 않습니다. schema.ts 를 고치고 npm run db:generate 를 돌리세요.",
   );
 
+// 차단(exit 2)을 모두 먼저 판정하고, 확인(ask)은 사유를 모아 맨 끝에서 한 번만 냅니다.
+// ask 로 먼저 끝내면 같은 명령에 섞인 차단 대상(예: `sed -i … drizzle/… && npm run db:migrate`)이
+// 승인 한 번으로 통과되기 때문입니다.
+const asks = [];
+
 // permissions.ask 도 확인을 받지만, 어느 DB 에 적용되는지는 보여 주지 않습니다.
 if (
   /\bnpm\s+run(-script)?\s+db:migrate\b|\bdrizzle-kit(@\S+)?\s+migrate\b/.test(
     cmd,
   )
 )
-  ask(
+  asks.push(
     `마이그레이션을 적용합니다. ${describeDbTarget()}. 최신 마이그레이션: ${latestMigration()}. migration-reviewer 검토를 마쳤는지, 파괴적 변경이면 사용자 확인을 받았는지 보세요.`,
   );
+
+if (MIGRATION.test(cmd)) {
+  if (WRITE.test(cmd))
+    block(
+      "생성된 마이그레이션은 셸로도 고치지 않습니다. schema.ts 를 고치고 npm run db:generate 를 돌리세요.",
+    );
+  // 파일을 쓰지 않는 리다이렉션(2>&1, >/dev/null)은 먼저 지웁니다.
+  const touching = cmd
+    .replace(/\d*>&\d/g, "")
+    .replace(/[\d&]*>>?\s*\/dev\/null/g, "")
+    .split(/&&|\|\||[;|&\n]/)
+    .filter((segment) => MIGRATION.test(segment));
+  // 명령 치환·프로세스 치환 안의 명령은 분류하지 않고 보수적으로 묻습니다.
+  const nested = /\$\(|`|[<>]\(/.test(cmd);
+  if (REMOVE.test(cmd))
+    asks.push(
+      "drizzle/ 아래 마이그레이션을 지우거나 되돌리려 합니다. 아직 적용되지 않은 마이그레이션인지 확인하세요.",
+    );
+  else if (nested || !touching.every(isReadOnly))
+    asks.push(
+      "drizzle/ 를 읽기 전용 목록에 없는 명령으로 건드립니다. 마이그레이션을 바꾸는 명령이 아닌지 확인하세요.",
+    );
+}
 
 // CLAUDE.md: 커밋 전 lint·typecheck 통과. typecheck 는 Stop 훅이, 편집한 파일의 lint 는 format.mjs 가 보지만
 // 셸로 바꾼 파일이나 프로젝트 전체 lint 는 여기서 막습니다. 스테이징 전(`git add -A && git commit`)일 수 있어 작업 트리 전체를 봅니다.
@@ -154,25 +196,4 @@ if (cmd.split(/&&|\|\||[;|&\n]/).some(isGitCommit)) {
   }
 }
 
-if (MIGRATION.test(cmd)) {
-  if (WRITE.test(cmd))
-    block(
-      "생성된 마이그레이션은 셸로도 고치지 않습니다. schema.ts 를 고치고 npm run db:generate 를 돌리세요.",
-    );
-  if (REMOVE.test(cmd))
-    ask(
-      "drizzle/ 아래 마이그레이션을 지우거나 되돌리려 합니다. 아직 적용되지 않은 마이그레이션인지 확인하세요.",
-    );
-  // 파일을 쓰지 않는 리다이렉션(2>&1, >/dev/null)은 먼저 지웁니다.
-  const touching = cmd
-    .replace(/\d*>&\d/g, "")
-    .replace(/[\d&]*>>?\s*\/dev\/null/g, "")
-    .split(/&&|\|\||[;|&\n]/)
-    .filter((segment) => MIGRATION.test(segment));
-  // 명령 치환·프로세스 치환 안의 명령은 분류하지 않고 보수적으로 묻습니다.
-  const nested = /\$\(|`|[<>]\(/.test(cmd);
-  if (nested || !touching.every(isReadOnly))
-    ask(
-      "drizzle/ 를 읽기 전용 목록에 없는 명령으로 건드립니다. 마이그레이션을 바꾸는 명령이 아닌지 확인하세요.",
-    );
-}
+if (asks.length) ask(asks.join(" / "));
