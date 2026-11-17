@@ -23,7 +23,8 @@ const GIT_SAFE = /^(status|diff|log|show|ls-files|blame|add|commit)$/;
 // 읽기 명령도 출력 파일 옵션(git diff --output=…)이 있으면 쓰기가 됩니다.
 const OUTPUT_OPTION = /(^|\s)--output\b/;
 const isReadOnly = (segment) => {
-  if (OUTPUT_OPTION.test(segment)) return false;
+  // 남아 있는 > 는 파일로 가는 리다이렉션입니다. 따옴표로 경로를 감춰도 여기서 걸립니다.
+  if (OUTPUT_OPTION.test(segment) || segment.includes(">")) return false;
   const words = segment.trim().split(/\s+/);
   while (/^\w+=/.test(words[0] ?? "")) words.shift();
   const [bin, sub] = words;
@@ -67,7 +68,10 @@ if (MIGRATION.test(cmd)) {
     ask(
       "drizzle/ 아래 마이그레이션을 지우거나 되돌리려 합니다. 아직 적용되지 않은 마이그레이션인지 확인하세요.",
     );
+  // 파일을 쓰지 않는 리다이렉션(2>&1, >/dev/null)은 먼저 지웁니다.
   const touching = cmd
+    .replace(/\d*>&\d/g, "")
+    .replace(/[\d&]*>>?\s*\/dev\/null/g, "")
     .split(/&&|\|\||[;|&\n]/)
     .filter((segment) => MIGRATION.test(segment));
   // 명령 치환·프로세스 치환 안의 명령은 분류하지 않고 보수적으로 묻습니다.
