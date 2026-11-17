@@ -10,7 +10,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-// Drizzle 스키마. 테이블 변경은 `/new-migration` 절차로 진행합니다.
+// Drizzle 스키마. 테이블 변경 후 `npm run db:generate` 로 마이그레이션을 만들고, CLAUDE.md '작업 흐름'의 마이그레이션 PR 순서를 따릅니다.
 
 // --- 인증 (Better Auth) ---
 // user · session · account · verification 은 Better Auth 가 요구하는 테이블입니다.

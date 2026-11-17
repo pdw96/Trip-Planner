@@ -1,0 +1,38 @@
+# 위험 경로(마이그레이션·인증·설정·게이트 자신)를 건드린 PR 은 사람이 `human-approved` 라벨을 붙여야 통과합니다.
+# 판정 규칙과 위험 경로 목록은 .github/scripts/human-gate.mjs 에 있습니다.
+# 설계: docs/superpowers/specs/2026-11-17-ai-native-workflow-design.md (6.4)
+#
+# pull_request_target 을 쓰는 이유: 워크플로와 스크립트를 PR 이 아니라 기준 브랜치(main)에서 읽어야
+# PR 이 게이트 자신을 고쳐 스스로 통과시키지 못합니다. PR 의 코드는 실행하지 않고 git 객체만 비교합니다.
+name: human-gate
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, labeled, unlabeled, edited]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+# concurrency 그룹을 두지 않는다. 그룹이 있으면 대기 중인 실행이 새 실행으로 교체되어
+# labeled 실행(승인 기록)이 버려질 수 있다. 병렬 실행 간 경합은 스크립트가 승인 기록을 잠시 기다려 흡수한다.
+
+jobs:
+  human-gate:
+    name: human-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # 기준 브랜치를 체크아웃합니다(pull_request_target 의 기본값). PR 쪽은 git 객체로만 가져옵니다.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: git fetch --no-tags https://github.com/${{ github.repository }} +refs/pull/${{ github.event.pull_request.number }}/head:refs/remotes/pr/head
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: node .github/scripts/human-gate.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
