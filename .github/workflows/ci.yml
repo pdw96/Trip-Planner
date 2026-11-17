@@ -1,4 +1,4 @@
-# PR 마다 lint 와 typecheck 를 돌립니다. Claude Code 훅은 Claude 세션 안에서만 동작하므로 그 바깥의 안전망입니다.
+# PR 마다 lint · typecheck · 게이트 스크립트 테스트를 돌립니다. main ruleset 의 필수 검사(`check`)입니다.
 # build 는 Vercel 프리뷰 배포가 실제 환경 변수로 PR 마다 돌리므로 여기서는 하지 않습니다.
 name: CI
 
@@ -27,3 +27,4 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
+      - run: node --test '.github/scripts/*.test.mjs'

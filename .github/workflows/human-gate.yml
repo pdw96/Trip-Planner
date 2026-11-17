@@ -1,0 +1,34 @@
+# 위험 경로(마이그레이션·인증·설정·게이트 자신)를 건드린 PR 은 사람이 `human-approved` 라벨을 붙여야 통과합니다.
+# 판정 규칙과 위험 경로 목록은 .github/scripts/human-gate.mjs 에 있습니다.
+# 설계: docs/superpowers/specs/2026-11-17-ai-native-workflow-design.md (6.4)
+name: human-gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: human-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  human-gate:
+    name: human-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # 체크아웃되는 것은 PR 머지 커밋이라, 스크립트는 HEAD 가 아니라 이벤트의 head.sha 를 씁니다.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: node .github/scripts/human-gate.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
