@@ -62,7 +62,7 @@
 
 **마이그레이션 PR.** 자동 머지를 켜지 않는다. 사람이 SQL 을 보고 `human-approved` 라벨을 붙이면 `npm run db:migrate` 를 실행하고(실행 직전 사람 확인), 적용이 성공하면 자동 머지를 켠다. 적용 뒤 PR 을 포기하게 되면 되돌리는 방법을 보고한다.
 
-**위험 경로.** 아래를 바꾼 PR 은 `human-approved` 라벨이 있어야 `human-gate` 검사가 통과한다. 기준은 `.github/scripts/human-gate.mjs` 이다.
+**위험 경로.** 아래를 바꾼 PR 은 `human-approved` 라벨이 있어야 `human-gate` 검사가 통과한다. 기준은 `.github/scripts/human-gate.mjs` 이다. 승인 뒤 위험 경로를 다시 바꾸면 게이트가 라벨을 떼므로, PR 에 무엇이 바뀌었는지 적고 사람에게 다시 확인을 요청한다.
 - `drizzle/**`, `src/db/schema.ts`, `src/db/index.ts`, `drizzle.config.ts`
 - `src/lib/auth.ts`, `src/lib/auth-client.ts`, `src/lib/session.ts`, `src/app/api/auth/**`
 - `next.config.ts`, `.env.example`, `package.json`, `package-lock.json`, `vercel.json`, `proxy.ts`, `src/proxy.ts`
