@@ -18,7 +18,8 @@ const REMOVE = /\b(rm|unlink|git\s+(rm|clean|checkout|restore))\b/;
 
 // 패턴으로 쓰기를 전부 나열할 수는 없으므로, drizzle/ 을 건드리는 명령은
 // 아래 읽기 전용 목록에 있을 때만 그냥 통과시키고 나머지는 사용자에게 묻습니다.
-const READ_ONLY = /^(ls|cat|head|tail|wc|grep|rg|diff|stat|file|echo)$/;
+// rg 는 --pre 로 임의 프로그램을 실행할 수 있어 목록에서 뺐습니다.
+const READ_ONLY = /^(ls|cat|head|tail|wc|grep|diff|stat|file|echo)$/;
 const GIT_SAFE = /^(status|diff|log|show|ls-files|blame|add|commit)$/;
 // 읽기 명령도 출력 파일 옵션(git diff --output=…)이 있으면 쓰기가 됩니다.
 const OUTPUT_OPTION = /(^|\s)--output\b/;
@@ -54,7 +55,7 @@ if (SECRET.test(cmd))
     "셸에서 시크릿 파일(.env*)을 읽거나 쓰지 않습니다. 키 이름은 .env.example 을 보세요.",
   );
 
-if (/\bdrizzle-kit\s+(push|drop)\b/.test(cmd))
+if (/\bdrizzle-kit(@\S+)?\s+(push|drop)\b/.test(cmd))
   block(
     "drizzle-kit push/drop 은 쓰지 않습니다. schema.ts 를 고치고 npm run db:generate 를 돌리세요.",
   );
