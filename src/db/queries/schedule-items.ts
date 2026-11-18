@@ -1,7 +1,7 @@
 import "server-only";
-import { and, asc, eq, inArray, type SQL } from "drizzle-orm";
+import { and, asc, eq, inArray, type SQL, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { type ScheduleItem, scheduleItems, trips } from "@/db/schema";
+import { places, type ScheduleItem, scheduleItems, trips } from "@/db/schema";
 import { isUuid } from "@/lib/ids";
 import type { ScheduleInput } from "@/lib/schedule-input";
 import { accessibleTrips } from "./trips";
@@ -64,7 +64,26 @@ export async function getScheduleItem(
   return item ?? null;
 }
 
+// 이 사용자가 접근할 수 있는 여행 tripId 의 장소 placeId. 일정에 장소를 이을 때 같은 문 안에서 쓴다.
+// 장소 id 와 여행 id 를 함께 묶으므로 남의 여행 장소나 다른 여행의 내 장소는 걸리지 않는다.
+function placeInAccessibleTrip(
+  userId: string,
+  tripId: string,
+  placeId: string,
+): SQL {
+  return and(
+    eq(places.id, placeId),
+    eq(places.tripId, tripId),
+    inArray(
+      places.tripId,
+      db.select({ id: trips.id }).from(trips).where(accessibleTrips(userId)),
+    ),
+  ) as SQL;
+}
+
 // 접근할 수 있는 여행일 때만 넣는다. 넣지 못했으면 null.
+// 장소를 이으면(placeId) 한 문(insert … select from places)으로 넣고, place 글자는 그 장소의 이름표로 저장한다.
+// 장소가 같은 여행·접근 가능한 것이 아니면 0행이라 null.
 // 확인과 넣기 사이에 여행이 지워지면 FK 오류가 나고, 액션이 저장 실패로 처리한다.
 export async function createScheduleItem(
   userId: string,
@@ -72,22 +91,48 @@ export async function createScheduleItem(
   input: ScheduleInput,
 ): Promise<string | null> {
   if (!validIds(tripId)) return null;
+  if (input.placeId !== null) {
+    if (!validIds(input.placeId)) return null;
+    // insert … select 는 모든 열을 테이블 정의 순서대로 고른다. 기본값(id·done·시각)도 여기서 채우고,
+    // 매개변수는 열 타입으로 바꿔 둔다.
+    const [row] = await db
+      .insert(scheduleItems)
+      .select(
+        db
+          .select({
+            id: sql<string>`gen_random_uuid()`.as("id"),
+            tripId: places.tripId,
+            date: sql<string>`${input.date}::date`.as("date"),
+            time: sql<string | null>`${input.time}::time`.as("time"),
+            title: sql<string>`${input.title}::text`.as("title"),
+            place: places.label,
+            placeId: places.id,
+            memo: sql<string | null>`${input.memo}::text`.as("memo"),
+            done: sql<boolean>`false`.as("done"),
+            createdAt: sql<Date>`now()`.as("created_at"),
+            updatedAt: sql<Date>`now()`.as("updated_at"),
+          })
+          .from(places)
+          .where(placeInAccessibleTrip(userId, tripId, input.placeId)),
+      )
+      .returning({ id: scheduleItems.id });
+    return row?.id ?? null;
+  }
   const [trip] = await db
     .select({ id: trips.id })
     .from(trips)
     .where(and(eq(trips.id, tripId), accessibleTrips(userId)))
     .limit(1);
   if (!trip) return null;
-  // 장소 연결(placeId)은 이후 작업에서 컬럼과 함께 붙인다.
-  const { placeId: _placeId, ...fields } = input;
   const [row] = await db
     .insert(scheduleItems)
-    .values({ ...fields, tripId: trip.id })
+    .values({ ...input, placeId: null, tripId: trip.id })
     .returning({ id: scheduleItems.id });
   return row.id;
 }
 
-// 바뀐 행이 없으면(없거나 남의 것이거나 id 형식이 틀림) false.
+// 바뀐 행이 없으면(없거나 남의 것이거나 id 형식이 틀림, 이을 장소가 조건에 안 맞음) false.
+// 장소를 이으면 place 글자는 그 장소의 이름표로, 잇지 않으면 place_id 를 비우고 적은 글자를 그대로 둔다.
 export async function updateScheduleItem(
   userId: string,
   tripId: string,
@@ -95,11 +140,25 @@ export async function updateScheduleItem(
   input: ScheduleInput,
 ): Promise<boolean> {
   if (!validIds(tripId, itemId)) return false;
-  // 장소 연결(placeId)은 이후 작업에서 컬럼과 함께 붙인다.
-  const { placeId: _placeId, ...fields } = input;
+  if (input.placeId !== null) {
+    if (!validIds(input.placeId)) return false;
+    // 한 문(update … from places): 일정과 장소가 모두 같은 접근 가능한 여행일 때만 바뀐다.
+    const rows = await db
+      .update(scheduleItems)
+      .set({ ...input, place: places.label, placeId: places.id })
+      .from(places)
+      .where(
+        and(
+          itemCondition(userId, tripId, itemId),
+          placeInAccessibleTrip(userId, tripId, input.placeId),
+        ),
+      )
+      .returning({ id: scheduleItems.id });
+    return rows.length > 0;
+  }
   const rows = await db
     .update(scheduleItems)
-    .set(fields)
+    .set({ ...input, placeId: null })
     .where(itemCondition(userId, tripId, itemId))
     .returning({ id: scheduleItems.id });
   return rows.length > 0;
