@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
 
@@ -45,24 +44,37 @@ export function GoogleSignInButton() {
 }
 
 export function SignOutButton() {
-  const router = useRouter();
   const [pending, setPending] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   async function signOut() {
     setPending(true);
-    await authClient.signOut();
-    router.refresh();
-    setPending(false);
+    setFailed(false);
+    const { error } = await authClient.signOut();
+    if (error) {
+      setFailed(true);
+      setPending(false);
+      return;
+    }
+    // 전체 페이지를 새로 불러온다. 클라이언트 이동은 숨겨 보관된 화면(내 여행 목록 등)을 페이지에 남긴다.
+    window.location.assign("/");
   }
 
   return (
-    <button
-      type="button"
-      className={buttonClass}
-      onClick={signOut}
-      disabled={pending}
-    >
-      로그아웃
-    </button>
+    <div className="flex flex-col items-end gap-1">
+      <button
+        type="button"
+        className={buttonClass}
+        onClick={signOut}
+        disabled={pending}
+      >
+        로그아웃
+      </button>
+      {failed && (
+        <p role="alert" className="text-sm text-red-600">
+          로그아웃하지 못했어요. 다시 시도해 주세요.
+        </p>
+      )}
+    </div>
   );
 }
