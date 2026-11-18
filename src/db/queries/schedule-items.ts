@@ -78,9 +78,11 @@ export async function createScheduleItem(
     .where(and(eq(trips.id, tripId), accessibleTrips(userId)))
     .limit(1);
   if (!trip) return null;
+  // 장소 연결(placeId)은 이후 작업에서 컬럼과 함께 붙인다.
+  const { placeId: _placeId, ...fields } = input;
   const [row] = await db
     .insert(scheduleItems)
-    .values({ ...input, tripId: trip.id })
+    .values({ ...fields, tripId: trip.id })
     .returning({ id: scheduleItems.id });
   return row.id;
 }
@@ -93,9 +95,11 @@ export async function updateScheduleItem(
   input: ScheduleInput,
 ): Promise<boolean> {
   if (!validIds(tripId, itemId)) return false;
+  // 장소 연결(placeId)은 이후 작업에서 컬럼과 함께 붙인다.
+  const { placeId: _placeId, ...fields } = input;
   const rows = await db
     .update(scheduleItems)
-    .set(input)
+    .set(fields)
     .where(itemCondition(userId, tripId, itemId))
     .returning({ id: scheduleItems.id });
   return rows.length > 0;

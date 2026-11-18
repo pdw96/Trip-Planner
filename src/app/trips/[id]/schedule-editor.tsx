@@ -170,6 +170,7 @@ export function ScheduleItemRow({
             time: item.time,
             title: item.title,
             place: item.place ?? "",
+            placeId: "",
             memo: item.memo ?? "",
           }}
           dateOptions={dateOptions}

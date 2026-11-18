@@ -37,6 +37,7 @@ function readScheduleFields(
     time: field("time"),
     title: field("title"),
     place: field("place"),
+    placeId: field("placeId"),
     memo: field("memo"),
   };
 }
