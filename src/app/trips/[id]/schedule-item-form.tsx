@@ -35,6 +35,7 @@ type ScheduleItemFormProps = {
 
 // 일정 추가·고치기가 같이 쓰는 양식. 검증은 서버에서 하고, 오류와 입력값을 action 상태로 돌려받는다.
 // 추가는 저장할 때마다 key 를 바꿔 빈 양식으로 다시 열고(연달아 적기), 고치기는 저장하면 접는다.
+// (고치기를 접는 일은 부르는 쪽 action 이 같은 전환 안에서 한다. 여기서의 onClose 는 그 뒤의 안전장치다.)
 export function ScheduleItemForm(props: ScheduleItemFormProps) {
   const [version, setVersion] = useState(0);
   const { mode, onClose } = props;

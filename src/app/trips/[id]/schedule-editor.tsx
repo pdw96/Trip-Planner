@@ -10,7 +10,10 @@ import {
   useTransition,
 } from "react";
 import { mapsSearchUrl } from "@/lib/schedule";
-import { EMPTY_SCHEDULE_FIELDS } from "@/lib/schedule-input";
+import {
+  EMPTY_SCHEDULE_FIELDS,
+  type ScheduleFormState,
+} from "@/lib/schedule-input";
 import { SAVE_FAILED } from "../messages";
 import {
   createScheduleItemAction,
@@ -133,12 +136,28 @@ export function ScheduleItemRow({
     });
   }
 
+  // 저장에 성공하면 같은 전환 안에서 입력칸을 닫는다. 날짜를 옮기면 줄이 다른 날 칸에서 새로 그려져
+  // 양식의 effect 가 돌기 전에 사라지므로, effect 로 닫으면 옮겨 간 자리에서 입력칸이 다시 열린다.
+  async function saveAndClose(
+    prev: ScheduleFormState,
+    formData: FormData,
+  ): Promise<ScheduleFormState> {
+    const next = await updateScheduleItemAction(
+      tripId,
+      item.id,
+      prev,
+      formData,
+    );
+    if (next.savedAt !== prev.savedAt) setOpenKey(null);
+    return next;
+  }
+
   if (openKey === key) {
     return (
       <li>
         <ScheduleItemForm
           mode="edit"
-          action={updateScheduleItemAction.bind(null, tripId, item.id)}
+          action={saveAndClose}
           initialValues={{
             date: item.date,
             time: item.time,
