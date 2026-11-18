@@ -1,7 +1,10 @@
 import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { getTrip } from "@/db/queries/trips";
+import { calendarRange, yearsInRange } from "@/lib/calendar";
+import { getHolidays } from "@/lib/holidays-api";
 import { getCurrentUser } from "@/lib/session";
+import { todayInSeoul } from "@/lib/trip-dates";
 import { updateTripAction } from "../../actions";
 import { TripForm } from "../../trip-form";
 
@@ -29,8 +32,14 @@ async function EditTripForm({
   const trip = await getTrip(user.id, id);
   if (!trip) notFound();
 
+  const today = todayInSeoul();
+  const range = calendarRange(today, trip.startDate, trip.endDate);
+
   return (
     <TripForm
+      today={today}
+      range={range}
+      holidays={getHolidays(yearsInRange(range))}
       action={updateTripAction.bind(null, trip.id)}
       initialValues={{
         title: trip.title,
