@@ -22,6 +22,13 @@
       "when": 1794993094774,
       "tag": "0002_mature_moira_mactaggert",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1795024589002,
+      "tag": "0003_ancient_deathbird",
+      "breakpoints": true
     }
   ]
 }
