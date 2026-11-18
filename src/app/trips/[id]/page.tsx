@@ -3,9 +3,10 @@ import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { getTrip } from "@/db/queries/trips";
 import { getCurrentUser } from "@/lib/session";
-import { formatLongRange } from "@/lib/trip-dates";
+import { formatLongRange, todayInSeoul } from "@/lib/trip-dates";
 import { DeleteTripButton } from "../delete-trip-button";
 import { secondaryButtonClass } from "../styles";
+import { ScheduleSection } from "./schedule-section";
 
 export default function TripPage({ params }: PageProps<"/trips/[id]">) {
   return (
@@ -57,7 +58,8 @@ async function TripDetail({
           </p>
         )}
       </header>
-      {/* 일정(#12)·장소(#13)·예산(#14)이 이 아래에 들어온다. */}
+      <ScheduleSection userId={user.id} trip={trip} today={todayInSeoul()} />
+      {/* 장소(#13)·예산(#14)이 이 아래에 들어온다. */}
     </article>
   );
 }
