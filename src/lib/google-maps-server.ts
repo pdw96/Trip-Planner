@@ -106,9 +106,13 @@ export async function fetchPlaceCoords(
   );
   if (!res) return { ok: false, notFound: false };
   if (!res.ok) {
+    // Google 은 풀 수 없는 id 에 404 가 아니라 400 INVALID_ARGUMENT 를 준다(2026-11-18 확인).
     return {
       ok: false,
-      notFound: res.status === 404 || res.googleStatus === "NOT_FOUND",
+      notFound:
+        res.status === 404 ||
+        res.googleStatus === "NOT_FOUND" ||
+        (res.status === 400 && res.googleStatus === "INVALID_ARGUMENT"),
     };
   }
   const loc = isRecord(res.body) ? res.body.location : null;
