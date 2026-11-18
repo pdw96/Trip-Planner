@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { getTrip } from "@/db/queries/trips";
 import { getCurrentUser } from "@/lib/session";
 import { formatLongRange } from "@/lib/trip-dates";
+import { DeleteTripButton } from "../delete-trip-button";
 import { secondaryButtonClass } from "../styles";
 
 export default function TripPage({ params }: PageProps<"/trips/[id]">) {
@@ -44,6 +45,7 @@ async function TripDetail({
             >
               고치기
             </Link>
+            <DeleteTripButton tripId={trip.id} />
           </div>
         </div>
         <p className="text-zinc-600 break-words dark:text-zinc-400">
