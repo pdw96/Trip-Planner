@@ -2,7 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
-import { createPlace, deletePlace, updatePlace } from "@/db/queries/places";
+import {
+  countPlaces,
+  createPlace,
+  deletePlace,
+  MAX_PLACES_PER_TRIP,
+  updatePlace,
+} from "@/db/queries/places";
 import { setTripBase } from "@/db/queries/trip-bases";
 import { getTrip } from "@/db/queries/trips";
 import { fetchPlaceCoords } from "@/lib/google-maps-server";
@@ -15,7 +21,12 @@ import {
 } from "@/lib/place-input";
 import { getCurrentUser } from "@/lib/session";
 import { isValidIsoDate } from "@/lib/trip-input";
-import { PLACE_DUPLICATE, PLACE_NOT_FOUND, SAVE_FAILED } from "./messages";
+import {
+  PLACE_DUPLICATE,
+  PLACE_LIMIT,
+  PLACE_NOT_FOUND,
+  SAVE_FAILED,
+} from "./messages";
 
 // tripId·placeId·date 는 bind 나 인자로 오지만 클라이언트가 바꿀 수 있는 값이다.
 // 쿼리의 uuid 검사와 여행 접근 조건(userId 범위), 장소·여행을 함께 묶는 조건, 날짜 검사가 막는다.
@@ -75,6 +86,16 @@ export async function createPlaceAction(
   // 남의 여행에 대해 Google 을 부르지 않도록 여행 접근을 먼저 확인한다.
   const trip = await getTrip(user.id, tripId);
   if (!trip) notFound();
+
+  // 장소 수 상한도 Google 을 부르기 전에 확인한다(호출 비용 상한). 동시에 넣으면 몇 개 넘을 수 있지만
+  // 목적은 끝없는 호출을 막는 것이라 그 정도는 받아들인다.
+  let placeCount: number;
+  try {
+    placeCount = await countPlaces(user.id, trip.id);
+  } catch {
+    return failed(SAVE_FAILED);
+  }
+  if (placeCount >= MAX_PLACES_PER_TRIP) return failed(PLACE_LIMIT);
 
   const coords = await fetchPlaceCoords(parsed.value.googlePlaceId);
   if (!coords.ok) {

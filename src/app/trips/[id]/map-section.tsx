@@ -33,7 +33,7 @@ export async function MapSection({
     listTripBases(userId, trip.id),
     listScheduleItems(userId, trip.id),
   ]);
-  const placesNow = await refreshStaleCoords(placeRows);
+  const placesNow = await refreshStaleCoords(userId, placeRows);
 
   const days = tripDays(trip.startDate, trip.endDate);
   const dayNumberOf = new Map(days.map((d) => [d.date, d.dayNumber]));
@@ -92,7 +92,10 @@ export async function MapSection({
         placeId: s.place.id,
         number: s.number,
       })),
-      linkedCount: stops.length,
+      unlocatedCount: stops.filter((stop) => {
+        const place = routePlaces.get(stop.placeId);
+        return !place || place.lat === null || place.lng === null;
+      }).length,
       legs: route.legs.map((leg) => ({
         fromId: leg.from.id,
         toId: leg.to.id,
@@ -144,9 +147,14 @@ export async function MapSection({
 // coords_fetched_at 이 30일 지난 장소만 Google 에서 좌표를 다시 받아 덮어쓴다(병렬). 화면은 갱신된 값으로 그린다.
 // 실패하면 어느 경우든 30일 지난 좌표는 지운다(§3.2). 받은 시각은 경우에 따라 다르게 둔다:
 // - 장소가 Google 에서 사라짐(notFound): 지금 시각으로 둔다. 다시 물어도 같으므로 30일 동안 묻지 않는다.
-// - 키 없음·한도·네트워크 같은 일시적 실패: 원래 시각을 그대로 둔다. 다음 화면에서 다시 시도한다.
-// setPlaceCoords 는 범위를 좁히지 않는 쓰기라, listPlaces(userId, tripId) 로 방금 받은 행에만 쓴다.
-async function refreshStaleCoords(rows: Place[]): Promise<Place[]> {
+// - 키 없음·한도·네트워크 같은 일시적 실패: 지금보다 29일 앞으로 둔다. 하루쯤 지나 다시 시도한다
+//   (원래 시각을 두면 화면을 그릴 때마다 Google 을 다시 부른다).
+const RETRY_AFTER_FAILURE_AGO_MS = 29 * 24 * 60 * 60 * 1000;
+
+async function refreshStaleCoords(
+  userId: string,
+  rows: Place[],
+): Promise<Place[]> {
   const now = new Date();
   return Promise.all(
     rows.map(async (place) => {
@@ -154,9 +162,11 @@ async function refreshStaleCoords(rows: Place[]): Promise<Place[]> {
       const result = await fetchPlaceCoords(place.googlePlaceId);
       const coords = result.ok ? { lat: result.lat, lng: result.lng } : null;
       const fetchedAt =
-        result.ok || result.notFound ? now : place.coordsFetchedAt;
+        result.ok || result.notFound
+          ? now
+          : new Date(now.getTime() - RETRY_AFTER_FAILURE_AGO_MS);
       try {
-        await setPlaceCoords(place.id, place.tripId, coords, fetchedAt);
+        await setPlaceCoords(userId, place.tripId, place.id, coords, fetchedAt);
       } catch {
         // 저장에 실패해도 화면은 그린다. 오래된 좌표는 보이지 않고, 받은 시각이 그대로라 다음 방문에 다시 시도한다.
         console.error("[places] coords: 좌표 저장 실패");

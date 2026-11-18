@@ -247,7 +247,10 @@ function PlaceField({
   const initialPlaceId = places.some((place) => place.id === values.placeId)
     ? values.placeId
     : "";
-  const [placeId, setPlaceId] = useState(initialPlaceId);
+  const [chosenId, setChosenId] = useState(initialPlaceId);
+  // 고른 장소가 다시 그린 목록에서 사라지면(다른 곳에서 지움) 브라우저 select 는 "직접 적기"로 돌아간다.
+  // 보이기도 목록에 있는지로 정해, 화면·글자 칸·제출 값이 같은 "직접 적기"가 되게 한다(글자 칸은 일정의 장소 글자로 채움).
+  const placeId = places.some((place) => place.id === chosenId) ? chosenId : "";
   const selectId = `${idPrefix}-placeId`;
   const textId = `${idPrefix}-place`;
   const errorId = `${idPrefix}-place-error`;
@@ -260,7 +263,7 @@ function PlaceField({
         id={selectId}
         name="placeId"
         defaultValue={initialPlaceId}
-        onChange={(event) => setPlaceId(event.target.value)}
+        onChange={(event) => setChosenId(event.target.value)}
         aria-invalid={Boolean(error) && placeId !== ""}
         aria-describedby={error && placeId !== "" ? errorId : undefined}
         className={inputClass}

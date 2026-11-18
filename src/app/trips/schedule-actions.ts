@@ -22,6 +22,9 @@ import { SAVE_FAILED } from "./messages";
 // tripId·itemId·date 는 bind 로 오지만 클라이언트가 바꿀 수 있는 값이다.
 // 쿼리의 uuid 검사와 여행 접근 조건(userId 범위), 입력 검증의 날짜 규칙이 막는다.
 
+// 고른 장소가 이 여행의 장소가 아니어서(그 사이 지워짐 등) 쓰기가 걸리지 않았을 때의 문구.
+const PLACE_GONE = "장소를 다시 골라 주세요.";
+
 // FormData 를 통째로 넘기지 않고 필요한 필드만 문자열로 꺼낸다. 추가는 날짜를 bind 값으로 받는다.
 function readScheduleFields(
   formData: FormData,
@@ -79,7 +82,20 @@ export async function createScheduleItemAction(
       savedAt: prev.savedAt,
     };
   }
-  if (!id) notFound();
+  if (!id) {
+    // 장소를 골랐는데 쓰기가 걸리지 않았고 여행은 여전히 보이면, 고른 장소가 그 사이 지워진 것이다.
+    // 내 여행 안의 일이므로 notFound 대신 장소를 다시 고르게 한다. 여행이 안 보이면 지금처럼 찾을 수 없음.
+    if (parsed.value.placeId !== null && (await getTrip(user.id, tripId))) {
+      revalidatePath(tripPath(tripId));
+      return {
+        values: { ...values, placeId: "" },
+        errors: { place: PLACE_GONE },
+        formError: null,
+        savedAt: prev.savedAt,
+      };
+    }
+    notFound();
+  }
 
   revalidatePath(tripPath(tripId));
   return {
@@ -130,7 +146,23 @@ export async function updateScheduleItemAction(
       savedAt: prev.savedAt,
     };
   }
-  if (!updated) notFound();
+  if (!updated) {
+    // 추가와 같다. 일정이 여전히 보이면 고른 장소가 그 사이 지워진 것이므로 장소를 다시 고르게 한다.
+    // 글자 칸은 지금 일정의 장소 글자(이어졌던 장소의 이름표)로 채워 돌려준다.
+    if (parsed.value.placeId !== null) {
+      const current = await getScheduleItem(user.id, tripId, itemId);
+      if (current) {
+        revalidatePath(tripPath(tripId));
+        return {
+          values: { ...values, placeId: "", place: current.place ?? "" },
+          errors: { place: PLACE_GONE },
+          formError: null,
+          savedAt: prev.savedAt,
+        };
+      }
+    }
+    notFound();
+  }
 
   revalidatePath(tripPath(tripId));
   return { values, errors: {}, formError: null, savedAt: Date.now() };

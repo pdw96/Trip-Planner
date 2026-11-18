@@ -54,6 +54,11 @@ type Region = { countryCode: string | null; timeZone: string | null };
 
 const NOTICE_ORDER: Notice[] = ["kr", "jp", "other"];
 
+// 한 번에 Google 에 묻는 구간 수 상한(호출 비용 상한). 한 날 구간은 많아야 십여 개다(§5.3).
+// 넘는 구간은 Google 을 부르지 않고 직선 거리만(안내 문구 없이) 보인다. 나라·시간대도 앞 구간들의 장소만 묻는다.
+const MAX_LEGS_PER_DAY = 20;
+const STRAIGHT_ONLY: LegResult = { kind: "straight", notice: null };
+
 function coordsOf(place: RoutePlace): LatLng | null {
   return place.lat === null || place.lng === null
     ? null
@@ -172,8 +177,9 @@ export async function loadDayRouteAction(
   );
 
   // 구간에 나오는 장소마다 나라·시간대를 한 번씩, 병렬로 묻는다(이 요청 안에서만 쓴다).
+  const askedLegs = route.legs.slice(0, MAX_LEGS_PER_DAY);
   const regionPlaces = new Map<string, RoutePlace>();
-  for (const leg of route.legs) {
+  for (const leg of askedLegs) {
     regionPlaces.set(leg.from.id, leg.from);
     regionPlaces.set(leg.to.id, leg.to);
   }
@@ -189,7 +195,8 @@ export async function loadDayRouteAction(
   const now = new Date();
   const pending = new Map<string, Promise<LegResult>>();
   const results = await Promise.all(
-    route.legs.map((leg) => {
+    route.legs.map((leg, i) => {
+      if (i >= MAX_LEGS_PER_DAY) return STRAIGHT_ONLY;
       const key = `${leg.from.id}>${leg.to.id}|${leg.timing.kind}|${leg.timing.time}`;
       let result = pending.get(key);
       if (!result) {

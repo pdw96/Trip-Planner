@@ -175,9 +175,11 @@ function PanelBody({
                 places={places}
               />
             )}
+            {/* 위치 정보 문구는 좌표가 없어 빠진 장소가 있을 때만. 기준점만 이어진 날도 번호 장소가 없으므로
+                아래 문구가 보인다(지도에는 기준점이 보인다). */}
             {day.stops.length === 0 ? (
               <p className="text-sm text-zinc-500">
-                {day.linkedCount > 0
+                {day.unlocatedCount > 0
                   ? "고른 장소의 위치 정보가 없어요"
                   : "이 날 일정에 고른 장소가 없어요"}
               </p>

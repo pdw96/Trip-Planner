@@ -5,3 +5,5 @@ export const SAVE_FAILED = "저장하지 못했어요. 잠시 후 다시 시도�
 export const PLACE_DUPLICATE = "이미 목록에 있는 장소예요.";
 
 export const PLACE_NOT_FOUND = "장소를 찾지 못했어요. 다시 검색해 주세요.";
+
+export const PLACE_LIMIT = "장소는 한 여행에 100개까지 넣을 수 있어요.";

@@ -1,5 +1,6 @@
 import "server-only";
 import { and, asc, eq, inArray, type SQL, sql } from "drizzle-orm";
+import { cache } from "react";
 import { db } from "@/db";
 import { places, type ScheduleItem, scheduleItems, trips } from "@/db/schema";
 import { isUuid } from "@/lib/ids";
@@ -32,22 +33,22 @@ function validIds(...ids: string[]): boolean {
   return ids.every(isUuid);
 }
 
-export async function listScheduleItems(
-  userId: string,
-  tripId: string,
-): Promise<ScheduleItem[]> {
-  if (!validIds(tripId)) return [];
-  return db
-    .select()
-    .from(scheduleItems)
-    .where(inAccessibleTrip(userId, tripId))
-    .orderBy(
-      asc(scheduleItems.date),
-      asc(scheduleItems.time), // Postgres 오름차순은 NULL 이 맨 뒤
-      asc(scheduleItems.createdAt),
-      asc(scheduleItems.id),
-    );
-}
+// 한 화면 요청 안에서 지도 칸과 일정 칸이 같은 결과를 나눠 쓰도록 cache 로 감싼다(요청마다 새로 묻는다).
+export const listScheduleItems = cache(
+  async (userId: string, tripId: string): Promise<ScheduleItem[]> => {
+    if (!validIds(tripId)) return [];
+    return db
+      .select()
+      .from(scheduleItems)
+      .where(inAccessibleTrip(userId, tripId))
+      .orderBy(
+        asc(scheduleItems.date),
+        asc(scheduleItems.time), // Postgres 오름차순은 NULL 이 맨 뒤
+        asc(scheduleItems.createdAt),
+        asc(scheduleItems.id),
+      );
+  },
+);
 
 // 없거나 남의 것이거나 id 형식이 틀리면 null.
 export async function getScheduleItem(

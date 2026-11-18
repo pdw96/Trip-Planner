@@ -42,8 +42,8 @@ export type PanelDay = {
   // 동선에 들어간 기준점(좌표가 있을 때만).
   routeBaseId: string | null;
   stops: { placeId: string; number: number }[];
-  // 그날 장소가 이어진 일정 수(좌표가 없어 동선에서 빠진 것 포함).
-  linkedCount: number;
+  // 그날 장소가 이어진 일정 중 좌표가 없어 동선에서 빠진 것의 수.
+  unlocatedCount: number;
   legs: SkeletonLeg[];
 };
 

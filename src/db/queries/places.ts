@@ -1,5 +1,6 @@
 import "server-only";
-import { and, asc, eq, inArray, type SQL } from "drizzle-orm";
+import { and, asc, count, eq, inArray, type SQL } from "drizzle-orm";
+import { cache } from "react";
 import { db } from "@/db";
 import { type Place, places, scheduleItems, trips } from "@/db/schema";
 import { isUuid } from "@/lib/ids";
@@ -12,6 +13,9 @@ import { accessibleTrips } from "./trips";
 type Coords = { lat: number; lng: number };
 
 const DUPLICATE_CONSTRAINT = "places_trip_google_place_idx";
+
+// 한 여행에 넣을 수 있는 장소 수. 장소마다 Google 호출(넣기·30일 갱신·하루 동선의 Place Details)이 생기므로 상한을 둔다.
+export const MAX_PLACES_PER_TRIP = 100;
 
 // 이 사용자가 접근할 수 있는 여행 tripId 의 id 목록(서브쿼리).
 function accessibleTripIds(userId: string) {
@@ -49,16 +53,29 @@ function isDuplicatePlaceError(err: unknown): boolean {
   });
 }
 
-export async function listPlaces(
+// 한 화면 요청 안에서 지도 칸과 일정 칸이 같은 결과를 나눠 쓰도록 cache 로 감싼다(요청마다 새로 묻는다).
+export const listPlaces = cache(
+  async (userId: string, tripId: string): Promise<Place[]> => {
+    if (!validIds(tripId)) return [];
+    return db
+      .select()
+      .from(places)
+      .where(placeInAccessibleTrip(userId, tripId))
+      .orderBy(asc(places.createdAt), asc(places.id));
+  },
+);
+
+// 이 사용자가 접근할 수 있는 여행 tripId 의 장소 수. 넣기 전에 상한을 확인하는 데 쓴다(Google 을 부르기 전에).
+export async function countPlaces(
   userId: string,
   tripId: string,
-): Promise<Place[]> {
-  if (!validIds(tripId)) return [];
-  return db
-    .select()
+): Promise<number> {
+  if (!validIds(tripId)) return 0;
+  const [row] = await db
+    .select({ n: count() })
     .from(places)
-    .where(placeInAccessibleTrip(userId, tripId))
-    .orderBy(asc(places.createdAt), asc(places.id));
+    .where(placeInAccessibleTrip(userId, tripId));
+  return row?.n ?? 0;
 }
 
 // 접근할 수 있는 여행일 때만 넣는다. 좌표는 서버가 Google 에서 받은 값만 받는다.
@@ -100,7 +117,8 @@ export async function createPlace(
 }
 
 // 바뀐 행이 없으면(없거나 남의 것이거나 id 형식이 틀림) false.
-// 이름표가 바뀌면 같은 여행에서 이 장소에 이어진 일정의 place 글자도 새 이름표로 바꾼다(두 번째 문도 접근 조건).
+// 이름표가 바뀌면 같은 여행에서 이 장소에 이어진 일정의 place 글자도 새 이름표로 바꾼다.
+// 둘을 한 문(데이터를 바꾸는 CTE)으로 묶어, 장소 행이 바뀐 경우에만 일정 글자도 바뀐다. 두 쪽 모두 접근 조건을 건다.
 export async function updatePlace(
   userId: string,
   tripId: string,
@@ -108,23 +126,34 @@ export async function updatePlace(
   input: { label: string; category: PlaceCategory; memo: string | null },
 ): Promise<boolean> {
   if (!validIds(tripId, placeId)) return false;
+  const updatedPlace = db.$with("updated_place").as(
+    db
+      .update(places)
+      .set({ label: input.label, category: input.category, memo: input.memo })
+      .where(placeCondition(userId, tripId, placeId))
+      .returning({ id: places.id }),
+  );
+  const updatedItems = db.$with("updated_items").as(
+    db
+      .update(scheduleItems)
+      .set({ place: input.label })
+      .where(
+        and(
+          inArray(
+            scheduleItems.placeId,
+            db.select({ id: updatedPlace.id }).from(updatedPlace),
+          ),
+          eq(scheduleItems.tripId, tripId),
+          inArray(scheduleItems.tripId, accessibleTripIds(userId)),
+        ),
+      )
+      .returning({ id: scheduleItems.id }),
+  );
   const rows = await db
-    .update(places)
-    .set({ label: input.label, category: input.category, memo: input.memo })
-    .where(placeCondition(userId, tripId, placeId))
-    .returning({ id: places.id });
-  if (rows.length === 0) return false;
-  await db
-    .update(scheduleItems)
-    .set({ place: input.label })
-    .where(
-      and(
-        eq(scheduleItems.placeId, placeId),
-        eq(scheduleItems.tripId, tripId),
-        inArray(scheduleItems.tripId, accessibleTripIds(userId)),
-      ),
-    );
-  return true;
+    .with(updatedPlace, updatedItems)
+    .select({ id: updatedPlace.id })
+    .from(updatedPlace);
+  return rows.length > 0;
 }
 
 // 이어진 일정은 place_id 가 null 이 되고(place 글자는 남음), 기준점 행은 함께 지워진다(FK).
@@ -141,15 +170,16 @@ export async function deletePlace(
   return rows.length > 0;
 }
 
-// 서버 내부(30일 좌표 갱신)용. 호출자가 이미 listPlaces(userId, tripId) 로 받은 행에만 쓴다.
-// coords 가 null 이면(갱신 실패) 좌표를 비운다. 받은 시각은 어느 쪽이든 fetchedAt 으로 둔다.
+// 30일 좌표 갱신용. 다른 쓰기와 같이 장소 id·여행 id·접근 가능한 여행을 한 조건으로 묶는다.
+// coords 가 null 이면(갱신 실패) 좌표를 비운다. 받은 시각은 fetchedAt 으로 둔다(호출하는 쪽이 경우에 따라 정한다).
 export async function setPlaceCoords(
-  placeId: string,
+  userId: string,
   tripId: string,
+  placeId: string,
   coords: Coords | null,
   fetchedAt: Date,
 ): Promise<void> {
-  if (!validIds(placeId, tripId)) return;
+  if (!validIds(tripId, placeId)) return;
   await db
     .update(places)
     .set({
@@ -157,5 +187,5 @@ export async function setPlaceCoords(
       lng: coords?.lng ?? null,
       coordsFetchedAt: fetchedAt,
     })
-    .where(and(eq(places.id, placeId), eq(places.tripId, tripId)));
+    .where(placeCondition(userId, tripId, placeId));
 }
