@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": {
+    "deploymentEnabled": {
+      "claude/*": false,
+      "ccr-*": false
+    }
+  },
+  "ignoreCommand": "[ -n \"$VERCEL_GIT_PREVIOUS_SHA\" ] && git diff --quiet \"$VERCEL_GIT_PREVIOUS_SHA\" HEAD -- . ':(exclude)docs' ':(exclude,glob)*.md' ':(exclude).claude' ':(exclude).github' ':(exclude)*.test.mjs' || exit 1"
+}
