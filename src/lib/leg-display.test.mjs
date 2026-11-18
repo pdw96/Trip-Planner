@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  NOTICES,
-  WALK_MAX_SECONDS,
   decideLeg,
   directionsUrl,
   fallbackRule,
   legText,
+  NOTICES,
   placeUrl,
   summarizeTransit,
   summarizeWalk,
+  WALK_MAX_SECONDS,
 } from "./leg-display.ts";
 
 const step = (type, nameShort, name) => ({
