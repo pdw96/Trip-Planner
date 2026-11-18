@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
 
@@ -45,15 +44,13 @@ export function GoogleSignInButton() {
 }
 
 export function SignOutButton() {
-  const router = useRouter();
   const [pending, setPending] = useState(false);
 
   async function signOut() {
     setPending(true);
     await authClient.signOut();
-    router.push("/");
-    router.refresh();
-    setPending(false);
+    // 전체 페이지를 새로 불러온다. 클라이언트 이동은 숨겨 보관된 화면(내 여행 목록 등)을 페이지에 남긴다.
+    window.location.assign("/");
   }
 
   return (

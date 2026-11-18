@@ -1,25 +1,35 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useLayoutEffect, useState } from "react";
 import type { TripFields, TripFormState } from "@/lib/trip-input";
 import { primaryButtonClass, secondaryButtonClass } from "./styles";
 
 const inputClass =
   "w-full rounded-xl border border-black/[.15] bg-transparent px-4 py-2.5 aria-[invalid=true]:border-red-600 dark:border-white/[.2]";
 
-// 만들기·고치기가 같이 쓰는 양식. 검증은 서버에서 하고, 오류와 입력값을 action 상태로 돌려받는다.
-export function TripForm({
-  action,
-  initialValues,
-  submitLabel,
-  cancelHref,
-}: {
+type TripFormProps = {
   action: (prev: TripFormState, formData: FormData) => Promise<TripFormState>;
   initialValues: TripFields;
   submitLabel: string;
   cancelHref: string;
-}) {
+};
+
+// 만들기·고치기가 같이 쓰는 양식. 검증은 서버에서 하고, 오류와 입력값을 action 상태로 돌려받는다.
+// Next 는 지나온 화면을 숨겨 보관(Activity)하므로, 화면을 떠날 때 key 를 바꿔 다시 열면 새 양식이 되게 한다.
+// (그대로 두면 취소한 초안이나 지난 오류 문구가 다음 방문에 남는다.)
+export function TripForm(props: TripFormProps) {
+  const [version, setVersion] = useState(0);
+  useLayoutEffect(() => () => setVersion((v) => v + 1), []);
+  return <TripFormFields key={version} {...props} />;
+}
+
+function TripFormFields({
+  action,
+  initialValues,
+  submitLabel,
+  cancelHref,
+}: TripFormProps) {
   const [state, formAction, pending] = useActionState(action, {
     values: initialValues,
     errors: {},
