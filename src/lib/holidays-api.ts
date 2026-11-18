@@ -1,6 +1,10 @@
 import "server-only";
 import { cacheLife } from "next/cache";
-import { parseHolidayResponse } from "@/lib/holidays";
+import {
+  describeFailure,
+  normalizeServiceKey,
+  parseHolidayResponse,
+} from "@/lib/holidays";
 
 // 공휴일(한국천문연구원 특일 정보)을 연도별로 받아 하루 동안 재사용한다.
 // 키 값은 캐시 키·로그·클라이언트 어디에도 넣지 않는다.
@@ -16,7 +20,7 @@ async function holidaysForYear(year: number): Promise<string[]> {
   "use cache";
   cacheLife("days");
 
-  const key = process.env.DATA_GO_KR_SERVICE_KEY;
+  const key = normalizeServiceKey(process.env.DATA_GO_KR_SERVICE_KEY ?? "");
   if (!key) throw new Error("키 없음");
   const params = new URLSearchParams({
     serviceKey: key,
@@ -27,8 +31,22 @@ async function holidaysForYear(year: number): Promise<string[]> {
   const res = await fetch(`${ENDPOINT}?${params}`, {
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return parseHolidayResponse(await res.text());
+  const body = await res.text();
+  if (!res.ok) {
+    // use cache 안에서 던진 메시지는 프로덕션에서 가려지므로 원인은 여기서 남긴다.
+    console.warn(
+      `[holidays] ${year}: ${describeFailure(res.status, body, key)}`,
+    );
+    throw new Error(`HTTP ${res.status}`);
+  }
+  try {
+    return parseHolidayResponse(body);
+  } catch (error) {
+    console.warn(
+      `[holidays] ${year}: 응답 형식 오류 ${describeFailure(res.status, body, key)}`,
+    );
+    throw error;
+  }
 }
 
 // 절대 reject 하지 않는다. 실패한 해는 빠지고, 그 해는 달력에 일요일만 빨갛게 보인다.

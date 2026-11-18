@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { HolidayResponseError, parseHolidayResponse } from "./holidays.ts";
+import {
+  describeFailure,
+  HolidayResponseError,
+  normalizeServiceKey,
+  parseHolidayResponse,
+} from "./holidays.ts";
 
 // 2026년 실제 응답 (getRestDeInfo?solYear=2026&numOfRows=100&_type=json, 사용자가 브라우저로 받아 준 것).
 const REAL_2026 = `{"response":{"header":{"resultCode":"00","resultMsg":"NORMAL SERVICE."},"body":{"items":{"item":[{"dateKind":"01","dateName":"1월1일","isHoliday":"Y","locdate":20260101,"seq":1},{"dateKind":"01","dateName":"설날","isHoliday":"Y","locdate":20260216,"seq":1},{"dateKind":"01","dateName":"설날","isHoliday":"Y","locdate":20260217,"seq":1},{"dateKind":"01","dateName":"설날","isHoliday":"Y","locdate":20260218,"seq":1},{"dateKind":"01","dateName":"삼일절","isHoliday":"Y","locdate":20260301,"seq":1},{"dateKind":"01","dateName":"대체공휴일(삼일절)","isHoliday":"Y","locdate":20260302,"seq":1},{"dateKind":"01","dateName":"노동절","isHoliday":"Y","locdate":20260501,"seq":2},{"dateKind":"01","dateName":"어린이날","isHoliday":"Y","locdate":20260505,"seq":2},{"dateKind":"01","dateName":"부처님오신날","isHoliday":"Y","locdate":20260524,"seq":1},{"dateKind":"01","dateName":"대체공휴일(부처님오신날)","isHoliday":"Y","locdate":20260525,"seq":1},{"dateKind":"01","dateName":"전국동시지방선거","isHoliday":"Y","locdate":20260603,"seq":1},{"dateKind":"01","dateName":"현충일","isHoliday":"Y","locdate":20260606,"seq":2},{"dateKind":"01","dateName":"제헌절","isHoliday":"Y","locdate":20260717,"seq":1},{"dateKind":"01","dateName":"광복절","isHoliday":"Y","locdate":20260815,"seq":1},{"dateKind":"01","dateName":"대체공휴일(광복절)","isHoliday":"Y","locdate":20260817,"seq":1},{"dateKind":"01","dateName":"추석","isHoliday":"Y","locdate":20260924,"seq":1},{"dateKind":"01","dateName":"추석","isHoliday":"Y","locdate":20260925,"seq":1},{"dateKind":"01","dateName":"추석","isHoliday":"Y","locdate":20260926,"seq":1},{"dateKind":"01","dateName":"개천절","isHoliday":"Y","locdate":20261003,"seq":1},{"dateKind":"01","dateName":"대체공휴일(개천절)","isHoliday":"Y","locdate":20261005,"seq":1},{"dateKind":"01","dateName":"한글날","isHoliday":"Y","locdate":20261009,"seq":1},{"dateKind":"01","dateName":"기독탄신일","isHoliday":"Y","locdate":20261225,"seq":1}]},"numOfRows":100,"pageNo":1,"totalCount":22}}}`;
@@ -79,4 +84,26 @@ test("rejects error responses", () => {
     HolidayResponseError,
   );
   assert.throws(() => parseHolidayResponse("{}"), HolidayResponseError);
+});
+
+test("normalizeServiceKey decodes an Encoding key", () => {
+  assert.equal(normalizeServiceKey("abc%2Bdef%2F%3D%3D"), "abc+def/==");
+  assert.equal(normalizeServiceKey("abc+def/=="), "abc+def/==");
+  assert.equal(normalizeServiceKey("  abc+def  "), "abc+def");
+  // 깨진 % 는 그대로 둔다
+  assert.equal(normalizeServiceKey("abc%ZZ"), "abc%ZZ");
+});
+
+test("describeFailure hides the key and trims the body", () => {
+  const key = "abc+def/==";
+  const body = `<OpenAPI_ServiceResponse><returnAuthMsg>SERVICE_KEY_IS_NOT_REGISTERED_ERROR</returnAuthMsg><key>${key}</key><enc>${encodeURIComponent(key)}</enc></OpenAPI_ServiceResponse>`;
+  const text = describeFailure(403, body, key);
+  assert.ok(text.startsWith("HTTP 403 "), text);
+  assert.ok(text.includes("SERVICE_KEY_IS_NOT_REGISTERED_ERROR"), text);
+  assert.ok(
+    !text.includes(key) && !text.includes(encodeURIComponent(key)),
+    text,
+  );
+  assert.ok(describeFailure(500, "x".repeat(1000), key).length <= 220);
+  assert.equal(describeFailure(403, "a\n  b", key), "HTTP 403 a b");
 });
