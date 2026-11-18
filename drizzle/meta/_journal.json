@@ -15,6 +15,13 @@
       "when": 1794840575215,
       "tag": "0001_cute_multiple_man",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794993094774,
+      "tag": "0002_mature_moira_mactaggert",
+      "breakpoints": true
     }
   ]
 }
