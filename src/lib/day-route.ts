@@ -56,7 +56,9 @@ type Point = {
   place: RoutePlace;
   coords: LatLng;
   isBase: boolean;
-  time: string | null;
+  // 이 점에 도착하는 구간에 쓰는 시각(합친 stop 중 처음 시각)과 떠나는 구간에 쓰는 시각(마지막 시각).
+  arriveTime: string | null;
+  departTime: string | null;
 };
 
 type Located = { place: RoutePlace; coords: LatLng };
@@ -79,20 +81,40 @@ export function buildDayRoute(
 ): DayRoute {
   const base = locate(baseId, places);
   const sequence: Point[] = [];
-  if (base) sequence.push({ ...base, isBase: true, time: null });
+  if (base)
+    sequence.push({
+      ...base,
+      isBase: true,
+      arriveTime: null,
+      departTime: null,
+    });
   for (const stop of stops) {
     const found = locate(stop.placeId, places);
-    if (found) sequence.push({ ...found, isBase: false, time: stop.time });
+    if (found) {
+      sequence.push({
+        ...found,
+        isBase: false,
+        arriveTime: stop.time,
+        departTime: stop.time,
+      });
+    }
   }
-  if (base) sequence.push({ ...base, isBase: true, time: null });
+  if (base)
+    sequence.push({
+      ...base,
+      isBase: true,
+      arriveTime: null,
+      departTime: null,
+    });
 
-  // 연달아 같은 장소는 한 점으로 합친다. 시각은 stop 쪽(둘 다 stop 이면 나중 것)을 남긴다.
+  // 연달아 같은 장소는 한 점으로 합친다. 도착 시각은 처음 시각, 출발 시각은 마지막 시각을 남긴다(기준점은 시각이 없다).
   const points: Point[] = [];
   for (const point of sequence) {
     const last = points[points.length - 1];
     if (last && last.place.id === point.place.id) {
       last.isBase = last.isBase || point.isBase;
-      last.time = point.time ?? last.time;
+      last.arriveTime = last.arriveTime ?? point.arriveTime;
+      last.departTime = point.departTime ?? last.departTime;
     } else {
       points.push({ ...point });
     }
@@ -110,10 +132,10 @@ export function buildDayRoute(
     const from = points[i];
     const to = points[i + 1];
     let timing: LegTiming;
-    if (to.time) {
-      timing = { kind: "arrival", time: to.time };
-    } else if (from.time) {
-      timing = { kind: "departure", time: from.time };
+    if (to.arriveTime) {
+      timing = { kind: "arrival", time: to.arriveTime };
+    } else if (from.departTime) {
+      timing = { kind: "departure", time: from.departTime };
     } else {
       timing = { kind: "departure", time: DEFAULT_DEPART };
     }

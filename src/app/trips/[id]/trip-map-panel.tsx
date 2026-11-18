@@ -158,11 +158,6 @@ function PanelBody({
     setTab(next);
   }
 
-  function showOnMap(placeId: string) {
-    setHighlightedId(placeId);
-    setFocus((f) => ({ placeId, seq: (f?.seq ?? 0) + 1 }));
-  }
-
   // [전체] 보기의 기준점(저장하지 않는 화면 상태). 후보에서 사라졌으면(장소 삭제) 없음으로 본다.
   const overviewBase =
     overviewBaseId !== null && overviewBaseIds.includes(overviewBaseId)
@@ -176,6 +171,20 @@ function PanelBody({
   const view = day
     ? dayView(day, placesById, routeResult)
     : overviewView(places, overviewBase?.id ?? null, overviewBaseCoords);
+  // 이 날 보기에 핀이 없는 장소(다른 날·일정에 없는 장소)는 [전체]로 바꿔 그 핀을 보인다. [전체]는 구간을 묻지 않는다.
+  // 포커스는 탭이 바뀐 다음 그려질 때 FocusPin 이 새 핀으로 적용한다. 좌표가 없으면 보일 것이 없으므로 탭은 그대로 둔다.
+  function showOnMap(placeId: string) {
+    if (
+      day &&
+      !view.pins.some((p) => p.placeId === placeId) &&
+      positionOf(placesById.get(placeId)) !== null
+    ) {
+      setTab("all");
+    }
+    setHighlightedId(placeId);
+    setFocus((f) => ({ placeId, seq: (f?.seq ?? 0) + 1 }));
+  }
+
   const fitKey = `${tab}|${view.pins.map((p) => p.key).join(",")}`;
 
   // 전체 보기에서 기준점이 있으면 가까운 순과 거리, 아니면 넣은 순서.
