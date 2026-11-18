@@ -1,5 +1,7 @@
 "use client";
 
+import { secondaryButtonClass } from "./trips/styles";
+
 // 예상하지 못한 오류(DB 연결 실패 등)에서 영어 기본 화면 대신 보이는 한국어 화면.
 
 export default function ErrorPage({ retry }: { retry: () => void }) {
@@ -14,7 +16,7 @@ export default function ErrorPage({ retry }: { retry: () => void }) {
       <button
         type="button"
         onClick={() => retry()}
-        className="flex h-12 items-center justify-center rounded-full border border-solid border-black/[.08] px-5 font-medium transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+        className={secondaryButtonClass}
       >
         다시 시도
       </button>

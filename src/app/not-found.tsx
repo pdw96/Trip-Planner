@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { secondaryButtonClass } from "./trips/styles";
 
 export default function NotFound() {
   return (
@@ -9,10 +10,7 @@ export default function NotFound() {
       <p className="text-zinc-600 dark:text-zinc-400">
         주소가 잘못되었거나 볼 수 없는 여행이에요.
       </p>
-      <Link
-        href="/trips"
-        className="flex h-12 items-center justify-center rounded-full border border-solid border-black/[.08] px-5 font-medium transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
-      >
+      <Link href="/trips" className={secondaryButtonClass}>
         내 여행으로
       </Link>
     </main>

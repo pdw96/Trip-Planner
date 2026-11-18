@@ -8,8 +8,11 @@ const SEOUL_DATE = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
 });
 
+// 로케일 출력 형식에 기대지 않도록 부분별로 꺼내 조립한다.
 export function todayInSeoul(now: Date = new Date()): string {
-  return SEOUL_DATE.format(now);
+  const part = (type: string) =>
+    SEOUL_DATE.formatToParts(now).find((p) => p.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
 type Dated = { startDate: string; endDate: string; createdAt: Date };
