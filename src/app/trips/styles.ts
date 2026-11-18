@@ -7,4 +7,8 @@ export const primaryButtonClass = `${base} bg-foreground text-background hover:b
 
 export const secondaryButtonClass = `${base} border border-solid border-black/[.08] hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]`;
 
+// 양식 입력칸. aria-invalid 이면 빨간 테두리.
+export const inputClass =
+  "w-full rounded-xl border border-black/[.15] bg-transparent px-4 py-2.5 aria-[invalid=true]:border-red-600 dark:border-white/[.2]";
+
 export const dangerButtonClass = `${base} border border-solid border-red-600/40 text-red-600 hover:bg-red-600/10`;

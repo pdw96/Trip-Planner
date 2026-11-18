@@ -6,6 +6,7 @@ import {
   index,
   pgTable,
   text,
+  time,
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -118,3 +119,33 @@ export const trips = pgTable(
 
 export type Trip = typeof trips.$inferSelect;
 export type NewTrip = typeof trips.$inferInsert;
+
+// --- 일정 ---
+// 여행 기간 검사 제약은 걸지 않는다. 여행 날짜를 줄여도 일정을 남겨 "여행 기간 밖 일정"으로 보이기 위해서다.
+
+export const scheduleItems = pgTable(
+  "schedule_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tripId: uuid("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    date: date("date").notNull(),
+    // 분 단위만 쓴다("HH:MM"). 읽으면 "HH:MM:SS" 로 온다.
+    time: time("time"),
+    title: text("title").notNull(),
+    place: text("place"),
+    memo: text("memo"),
+    done: boolean("done").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [index("schedule_items_trip_id_date_idx").on(t.tripId, t.date)],
+);
+
+export type ScheduleItem = typeof scheduleItems.$inferSelect;

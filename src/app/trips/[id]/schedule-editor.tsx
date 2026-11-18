@@ -1,0 +1,231 @@
+"use client";
+
+import {
+  createContext,
+  use,
+  useEffect,
+  useLayoutEffect,
+  useOptimistic,
+  useState,
+  useTransition,
+} from "react";
+import { mapsSearchUrl } from "@/lib/schedule";
+import {
+  EMPTY_SCHEDULE_FIELDS,
+  type ScheduleFormState,
+} from "@/lib/schedule-input";
+import { SAVE_FAILED } from "../messages";
+import {
+  createScheduleItemAction,
+  deleteScheduleItemAction,
+  setScheduleItemDoneAction,
+  updateScheduleItemAction,
+} from "../schedule-actions";
+import { type DateOption, ScheduleItemForm } from "./schedule-item-form";
+
+export type { DateOption };
+
+// time 은 화면용 "HH:MM"(없으면 "").
+export type RowItem = {
+  id: string;
+  date: string;
+  time: string;
+  title: string;
+  place: string | null;
+  memo: string | null;
+  done: boolean;
+};
+
+const ERROR_VISIBLE_MS = 4000;
+
+// 입력칸은 화면 전체에서 하나만 열린다. 키: "add:<날짜>" 또는 "edit:<일정 id>".
+type OpenState = {
+  openKey: string | null;
+  setOpenKey: React.Dispatch<React.SetStateAction<string | null>>;
+};
+
+const OpenContext = createContext<OpenState | null>(null);
+
+function useOpen(): OpenState {
+  const value = use(OpenContext);
+  if (!value) throw new Error("ScheduleEditorProvider 안에서만 쓸 수 있어요.");
+  return value;
+}
+
+// Next 는 지나온 화면을 숨겨 보관(Activity)하므로, 화면을 떠날 때 열린 입력칸을 닫는다.
+// (그대로 두면 다음 방문에 쓰다 만 입력칸이나 지난 오류 문구가 남는다.)
+export function ScheduleEditorProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  useLayoutEffect(() => () => setOpenKey(null), []);
+  return <OpenContext value={{ openKey, setOpenKey }}>{children}</OpenContext>;
+}
+
+export function AddScheduleItem({
+  tripId,
+  date,
+}: {
+  tripId: string;
+  date: string;
+}) {
+  const { openKey, setOpenKey } = useOpen();
+  const key = `add:${date}`;
+
+  if (openKey !== key) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpenKey(key)}
+        className="self-start rounded-full px-3 py-1.5 text-sm text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
+      >
+        + 일정 추가
+      </button>
+    );
+  }
+  return (
+    <ScheduleItemForm
+      mode="add"
+      action={createScheduleItemAction.bind(null, tripId, date)}
+      initialValues={{ ...EMPTY_SCHEDULE_FIELDS, date }}
+      onClose={() => setOpenKey(null)}
+    />
+  );
+}
+
+export function ScheduleItemRow({
+  tripId,
+  item,
+  dateOptions,
+}: {
+  tripId: string;
+  item: RowItem;
+  dateOptions: DateOption[];
+}) {
+  const { openKey, setOpenKey } = useOpen();
+  const key = `edit:${item.id}`;
+  const [done, setOptimisticDone] = useOptimistic(item.done);
+  const [error, setError] = useState<string | null>(null);
+  const [, startToggle] = useTransition();
+  const [deleting, startDelete] = useTransition();
+
+  // 완료 저장 실패 문구는 잠깐만 보인다(연결이 돌아온 뒤에도 실패처럼 남지 않게).
+  useEffect(() => {
+    if (!error) return;
+    const timer = setTimeout(() => setError(null), ERROR_VISIBLE_MS);
+    return () => clearTimeout(timer);
+  }, [error]);
+
+  // 누르면 바로 화면에 반영하고 저장한다. 실패하면 전환이 끝날 때 서버 값으로 돌아가고 문구를 보인다.
+  function toggleDone() {
+    const next = !done;
+    setError(null);
+    startToggle(async () => {
+      setOptimisticDone(next);
+      // 연결이 끊기면 요청 자체가 실패(reject)한다. 오류 화면으로 넘기지 않고 같은 실패 문구로 되돌린다.
+      const ok = await setScheduleItemDoneAction(tripId, item.id, next).then(
+        (result) => result.ok,
+        () => false,
+      );
+      if (!ok) setError(SAVE_FAILED);
+    });
+  }
+
+  function onDelete() {
+    if (!window.confirm("이 일정을 삭제할까요?")) return;
+    startDelete(async () => {
+      await deleteScheduleItemAction(tripId, item.id);
+    });
+  }
+
+  // 저장에 성공하면 같은 전환 안에서 입력칸을 닫는다. 날짜를 옮기면 줄이 다른 날 칸에서 새로 그려져
+  // 양식의 effect 가 돌기 전에 사라지므로, effect 로 닫으면 옮겨 간 자리에서 입력칸이 다시 열린다.
+  async function saveAndClose(
+    prev: ScheduleFormState,
+    formData: FormData,
+  ): Promise<ScheduleFormState> {
+    const next = await updateScheduleItemAction(
+      tripId,
+      item.id,
+      prev,
+      formData,
+    );
+    // 저장하는 사이 다른 입력칸을 열었으면 그것은 그대로 둔다.
+    if (next.savedAt !== prev.savedAt) {
+      setOpenKey((current) => (current === key ? null : current));
+    }
+    return next;
+  }
+
+  if (openKey === key) {
+    return (
+      <li>
+        <ScheduleItemForm
+          mode="edit"
+          action={saveAndClose}
+          initialValues={{
+            date: item.date,
+            time: item.time,
+            title: item.title,
+            place: item.place ?? "",
+            memo: item.memo ?? "",
+          }}
+          dateOptions={dateOptions}
+          onClose={() =>
+            setOpenKey((current) => (current === key ? null : current))
+          }
+          onDelete={onDelete}
+          deleting={deleting}
+        />
+      </li>
+    );
+  }
+
+  return (
+    <li className="flex items-start gap-3 py-2">
+      <span className="w-12 shrink-0 pt-0.5 text-sm tabular-nums text-zinc-500">
+        {item.time}
+      </span>
+      <div
+        className={`flex min-w-0 flex-1 flex-col gap-0.5 ${done ? "opacity-50" : ""}`}
+      >
+        <button
+          type="button"
+          onClick={() => setOpenKey(key)}
+          className={`self-start text-left font-medium break-words hover:underline ${done ? "line-through" : ""}`}
+        >
+          {item.title}
+        </button>
+        {item.place && (
+          <a
+            href={mapsSearchUrl(item.place)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="self-start text-sm text-zinc-600 break-words hover:underline dark:text-zinc-400"
+          >
+            📍 {item.place}
+          </a>
+        )}
+        {item.memo && (
+          <p className="text-sm whitespace-pre-wrap break-words text-zinc-600 dark:text-zinc-400">
+            {item.memo}
+          </p>
+        )}
+        {error && (
+          <p role="alert" className="text-sm text-red-600">
+            {error}
+          </p>
+        )}
+      </div>
+      <input
+        type="checkbox"
+        checked={done}
+        onChange={toggleDone}
+        aria-label={`${item.title} 완료`}
+        className="mt-1 size-5 shrink-0 accent-foreground"
+      />
+    </li>
+  );
+}
