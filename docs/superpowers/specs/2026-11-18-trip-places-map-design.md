@@ -2,7 +2,7 @@
 
 - 날짜: 2026-11-18
 - 이슈: pdw96/Trip-Planner#13
-- 상태: 승인 대기. "Claude 판단" 표시 항목도 승인 대상이다.
+- 상태: 승인 대기. "Claude 판단" 표시 항목도 승인 대상이다. 검토자 확인 뒤 사용자 결정(Google 약관 준수: 경로 정보 저장 안 함)을 반영했다.
 
 ## 1. 의도
 
@@ -41,7 +41,8 @@
 - 장소 id·일정 id·여행 id 를 따로 믿는 것. 예: 내 일정에 **남의 여행의 장소** id 를 붙이는 것, 내 여행에 남의 장소를 기준점으로 거는 것.
 - 서버 키가 브라우저로 나가는 것.
 - Google 호출 실패(키 없음·한도 초과·네트워크)로 여행 화면이나 일정·장소 목록이 깨지는 것. 지도·구간 정보만 빠지고 나머지는 보여야 한다.
-- 화면을 열 때마다 같은 구간을 Google 에 다시 묻는 것(비용).
+- Google 약관을 어기는 저장: 경로 정보(시간·거리·노선·경로 선)를 DB 에 저장하는 것, Google 에서 받은 좌표를 30일 넘게 두는 것 (§3.2).
+- 필요 없을 때 Google 을 부르는 것(비용): 여행 화면을 열기만 해도, [전체] 보기에서도 경로를 묻는 것. 경로는 N일차 보기에서만 묻는다.
 - 장소를 지웠다고 일정이 사라지거나 일정의 장소 이름이 사라지는 것.
 - 대중교통 정보가 없는데 아무 설명 없이 빈칸으로 두는 것.
 
@@ -68,8 +69,22 @@ Routes API `computeRoutes` 로 직접 호출해 봤다.
 - 응답의 "대중교통 단계가 하나도 없는 TRANSIT 경로"는 "대중교통 정보 없음"으로 본다.
 - `DRIVE` 에 `departureTime` 을 주려면 `routingPreference` 가 필요하다(없으면 400). 자동차는 이번 범위에서 쓰지 않는다.
 - Places API (New) `searchText`·Place Details 는 `id`, `displayName`, `formattedAddress`, `location`, `types`, `primaryType`, `addressComponents`(나라 코드) 를 준다.
+- Places API (New) 는 `timeZone.id`(IANA, 예 `Europe/Paris`)와 `utcOffsetMinutes` 도 준다(확인함).
 
-### 3.2 키 (사용자가 만들어 둠)
+### 3.2 Google 약관의 저장 제한 (사용자 결정: 지킨다)
+
+Routes API 정책(Google Maps Platform 서비스별 약관)에 따르면:
+- **장소 id(place ID)** 는 저장 제한에서 빠진다 → 계속 저장한다.
+- **위도·경도**는 최대 30일 연속으로만 임시 저장할 수 있고, 그 뒤 지워야 한다.
+- 그 밖의 Routes 내용(소요 시간·거리·노선·경로 선)은 저장이 제한된다.
+
+그래서 (사용자 결정, Claude 추천안):
+- 구간 경로 정보는 **저장하지 않는다**. N일차 보기를 열 때마다 서버가 Google 에 묻는다. 비용은 사용자가 건 프로젝트 하루 할당량이 막고, 세 명 규모면 월 무료 한도 안이다.
+- 장소의 Google 값(이름·주소·좌표·나라·시간대·유형)은 받은 시각(`google_fetched_at`)과 함께 저장하고, **30일이 지난 장소는 다시 Place Details 로 받아 덮어쓴다**(§5.2). 장소 id 와 사용자가 정한 종류·메모는 계속 저장한다.
+- 이름·주소 같은 Places 필드의 정확한 보관 기간은 확인하지 못했다(약관 원문이 이 세션에서 열리지 않음). 좌표와 같은 30일 갱신을 적용해 안전한 쪽으로 둔다. 구현자는 약관을 다시 확인해 PR 본문 "남은 지적"에 적는다.
+- 일정의 `place` 글자에 장소 이름을 복사해 두는 것(§5.4)은 사용자가 적은 글자 칸과 같은 취급으로 남긴다. 이것도 "남은 지적"에 적어 사용자가 판단하게 한다.
+
+### 3.3 키 (사용자가 만들어 둠)
 
 | 키 | 쓰는 곳 | 제한 | 이름 |
 |---|---|---|---|
@@ -144,13 +159,14 @@ Routes API `computeRoutes` 로 직접 호출해 봤다.
 
 ### 5.2 장소 목록 (사용자 승인)
 
-- **넣기**: 검색칸에 치면 Google 자동완성 후보가 뜨고, 고르면 바로 목록에 들어간다. 브라우저는 **Google 장소 id 만** Server Action 에 보내고, 서버가 서버 키로 Place Details 를 불러 이름·주소·좌표·나라·유형을 받아 저장한다. (Claude 판단: 클라이언트가 보낸 좌표·이름을 믿지 않는다. 자동완성 검색 범위는 여행지(`trip.destination`)와 무관하게 전 세계 — 구현자가 원하면 지도 영역 쪽으로 기울이는 정도만)
+- **넣기**: 검색칸에 치면 Google 자동완성 후보가 뜨고, 고르면 바로 목록에 들어간다. 브라우저는 **Google 장소 id 만** Server Action 에 보내고, 서버가 서버 키로 Place Details 를 불러 이름·주소·좌표·나라·시간대·유형을 받아 저장한다. (Claude 판단: 클라이언트가 보낸 좌표·이름을 믿지 않는다. 자동완성 검색 범위는 여행지(`trip.destination`)와 무관하게 전 세계 — 구현자가 원하면 지도 영역 쪽으로 기울이는 정도만)
 - **종류**: 숙소·관광·맛집·카페·기타 (`lodging`·`sight`·`food`·`cafe`·`etc`). 넣을 때 Google `primaryType`/`types` 로 짐작한다(예: `lodging`/`hotel` → 숙소, `cafe`/`coffee_shop`/`bakery` → 카페, `*restaurant`/`food`/`meal_*`/`bar` → 맛집, `tourist_attraction`/`museum`/`park`/`point_of_interest` 등 → 관광, 나머지 기타). 짐작 규칙은 순수 함수로 두고 시험한다. 줄의 ⋯ 메뉴에서 바꾼다.
 - **메모**: 한 줄, 200자 이하(Claude 판단), 비면 null.
 - **중복**: 같은 여행에 같은 Google 장소는 한 번만(유니크 제약). 이미 있으면 "이미 목록에 있는 장소예요."
 - **일정 표시**: 일정에 이어진 장소는 "2일차 일정"처럼(여러 날이면 "1·3일차 일정") 표시한다.
 - **지우기**: ⋯ → "이 장소를 삭제할까요?"(`window.confirm`) → 지운다. 이어진 일정은 남고 장소 글자도 남는다(§5.4). 이 장소가 기준점인 날은 기준점 설정이 지워져 이전 기준점이 이어진다(§5.5).
 - 목록 순서: 기준점 정렬이 없으면 넣은 순서(`created_at`, `id`).
+- **30일 갱신**(§3.2): 여행 화면을 그릴 때 `google_fetched_at` 이 30일 지난 장소가 있으면 서버가 Place Details 로 다시 받아 덮어쓴다(종류·메모는 그대로). 갱신이 실패하면(키 없음·한도·장소가 Google 에서 사라짐) 그 장소의 좌표를 비우고(null, 이름은 목록 표시용으로 남김) 목록에는 "위치 정보를 다시 불러오지 못했어요"와 함께 남긴다. 좌표가 없는 장소는 지도·동선·거리 계산에서 빠진다. 갱신은 화면 첫 표시를 막지 않게 한다(구현자: Suspense 뒤에서, 또는 `after()` 등). (Claude 판단)
 - 그 자리 고치기는 #12 의 "한 번에 하나" 규칙과 같게 할지 구현자가 정한다(⋯ 메뉴에서 종류 고르기·메모 입력칸).
 
 ### 5.3 구간 이동 정보 (사용자 승인, 세부는 Claude 판단)
@@ -170,11 +186,18 @@ Routes API `computeRoutes` 로 직접 호출해 봤다.
 - 일본: "일본은 Google 이 앱에 대중교통 정보를 주지 않아요. Google 지도에서는 볼 수 있어요."
 - 같은 문구는 그날 구간 목록 아래에 한 번만 보인다. 해당하는 구간이 없으면 보이지 않는다.
 
-**출발 시각**: 일정에 시각이 있으면 **출발 장소 쪽 일정의 시각**(기준점에서 나가는 첫 구간은 첫 일정의 시각), 없으면 그날 10:00. 시각은 장소 현지 시각이다. Routes API 는 절대 시각을 받으므로 장소의 UTC 오프셋이 필요하다 → Place Details 의 `utcOffsetMinutes` 를 장소와 함께 저장한다(넣을 때 한 번). 여행 날짜가 지났거나 API 가 받지 않는 먼 미래면 **가장 가까운 앞날의 같은 요일·같은 시각**으로 바꿔 묻는다(대중교통 시간표는 요일 단위로 비슷하다는 가정, Claude 판단). 구현자는 Routes API 의 허용 범위를 문서로 확인한다.
+**시각** (Claude 판단): 일정 시각은 "그 장소에 도착하는(시작하는) 시각"으로 본다(예: 09:30 공항).
+- 도착 장소 쪽 일정에 시각이 있으면 → 대중교통은 `arrivalTime` = 그 시각("그때까지 도착").
+- 없고 출발 장소 쪽 일정에 시각이 있으면 → `departureTime` = 그 시각(머무는 시간을 모르므로 가장 이른 출발로 본다).
+- 둘 다 없으면 → 그날 10:00 출발.
+- 기준점은 일정이 아니므로 시각이 없다. 기준점에서 나가는 첫 구간은 첫 일정 시각이 도착 시각, 돌아오는 구간은 마지막 일정 시각이 출발 시각(없으면 10:00).
+- 시각은 장소 현지 시각이다. 절대 시각으로 바꿀 때 장소의 IANA 시간대(`time_zone`)를 쓴다(서머타임 반영). 시간대가 없으면 시각 없이(지금 기준) 묻는다.
+- 여행 날짜가 지났거나 Routes API 가 받지 않는 먼 미래면 **가장 가까운 앞날의 같은 요일·같은 시각**으로 바꿔 묻는다(대중교통 시간표는 요일 단위로 비슷하다는 가정). 구현자는 Routes API 의 허용 범위를 문서로 확인한다.
+- `WALK` 대체 조회에는 시각을 주지 않는다.
 
-**저장(캐시)**: 결과를 `route_segments` 에 저장하고, 같은 (출발 장소, 도착 장소, 요일, 출발 시각 HH:MM) 이면 다시 묻지 않는다. 30일 지나면 다시 묻는다(Claude 판단). 장소가 지워지면 cascade 로 함께 지운다.
+**저장하지 않음** (사용자 결정, §3.2): 구간 결과는 DB 에도, 요청을 넘어서는 서버 메모리에도 두지 않는다. 한 번의 화면 요청 안에서 같은 구간이 두 번 나오면 한 번만 묻는 정도는 된다.
 
-**언제 묻나**: N일차 탭을 열 때 그날 구간 중 저장 안 된 것만 서버에서 묻는다. 한 날 구간은 많아야 십여 개라 병렬로 묻는다. [전체] 보기는 직선 거리만 쓰므로 Google 을 부르지 않는다. 묻는 경로(Server Component 안에서 / 탭을 누를 때 Server Action 으로)는 구현자가 정하되, 서버 키는 서버에서만 쓰고, 여행 화면 첫 표시가 Google 응답을 기다리느라 막히지 않게 한다(Suspense 등).
+**언제 묻나**: N일차 탭을 열 때(여행 중 오늘 탭이 처음 열리는 경우 포함) 그날 구간을 서버에서 묻는다. 한 날 구간은 많아야 십여 개라 병렬로 묻는다. [전체] 보기와 탭을 열지 않은 날은 Google 을 부르지 않는다. 기다리는 동안 직선 거리와 점선을 먼저 보이고, 정보가 오면 채운다. 묻는 경로(탭을 누를 때 Server Action / 날짜를 주소에 넣고 Server Component 에서)는 구현자가 정하되, 서버 키는 서버에서만 쓰고 여행 화면 첫 표시가 Google 응답을 기다리느라 막히지 않게 한다.
 
 ### 5.4 일정과 잇기 (사용자 승인)
 
@@ -204,15 +227,17 @@ Routes API `computeRoutes` 로 직접 호출해 봤다.
 | `google_place_id` | text not null | |
 | `name` | text not null | Place Details `displayName.text` |
 | `address` | text null | `formattedAddress` |
-| `lat`, `lng` | double precision not null | |
+| `lat`, `lng` | double precision null | 30일 갱신 실패 시 null (§5.2) |
 | `country_code` | text null | `addressComponents` 의 `country` `shortText` (ISO 2자) |
-| `utc_offset_minutes` | integer null | 출발 시각 계산(§5.3). 없으면 대한민국 +540 으로 가정하지 말고 `departureTime` 없이(지금 시각) 묻는다 |
+| `time_zone` | text null | Place Details `timeZone.id` (IANA). 출발 시각 계산(§5.3) |
+| `google_types` | text[] 또는 text null | 종류 짐작에 쓴 유형. 저장할지는 구현자(짐작은 넣을 때 한 번이면 저장 불필요) |
+| `google_fetched_at` | timestamptz not null | Google 값을 받은 시각. 30일 갱신 기준(§3.2) |
 | `category` | text not null, check in (`lodging`,`sight`,`food`,`cafe`,`etc`) | |
 | `memo` | text null | |
 | `created_at`, `updated_at` | timestamptz, `trips` 와 같은 방식 | |
 
 - 유니크 `(trip_id, google_place_id)`, 인덱스 `(trip_id)`.
-- Google 약관상 Place ID 는 무기한 저장해도 되고, 좌표는 캐시 기간 제한이 있다. 이번에는 좌표를 계속 저장한다(장소를 다시 불러오는 기능은 비목표). 구현자는 약관 문구를 확인하고 PR 본문 "남은 지적"에 적는다.
+- Google 값(`name`·`address`·`lat`·`lng`·`country_code`·`time_zone`)은 30일마다 갱신한다(§3.2, §5.2).
 
 **`schedule_items.place_id`** — uuid null, FK → `places.id` on delete set null. 비파괴(null 허용 컬럼 추가).
 
@@ -227,33 +252,16 @@ Routes API `computeRoutes` 로 직접 호출해 봤다.
 
 - PK `(trip_id, start_date)`.
 
-**`route_segments`** (구간 캐시)
-
-| 컬럼 | 타입 | 비고 |
-|---|---|---|
-| `id` | uuid PK | |
-| `origin_place_id`, `destination_place_id` | uuid not null FK → `places.id` on delete cascade | |
-| `weekday` | smallint not null (0–6) | 출발 요일(현지) |
-| `depart_time` | time not null | 현지 HH:MM |
-| `kind` | text not null, check in (`transit`,`walk`,`none`) | `none` = 대중교통·도보 모두 없음(직선만). 실패는 저장하지 않음 |
-| `duration_seconds`, `distance_meters` | integer null | |
-| `summary` | text null | 첫 노선 이름·차량 종류·환승 횟수 등 화면에 쓰는 요약. 구조는 구현자(jsonb 도 가능) |
-| `polyline` | text null | 인코딩 폴리라인 |
-| `fetched_at` | timestamptz not null | 30일 지나면 다시 묻는다 |
-
-- 유니크 `(origin_place_id, destination_place_id, weekday, depart_time)`.
-- 구간은 장소에 매달리고 장소는 여행에 매달리므로, 구간 읽기·쓰기도 여행 접근 조건을 거친다(두 장소가 같은 접근 가능한 여행의 것인지).
-
-마이그레이션은 `CREATE TABLE` 3개 + `ALTER TABLE schedule_items ADD COLUMN place_id uuid` + FK·인덱스뿐이라 파괴적이지 않다. `npm run db:generate` 로 만들고 손대지 않는다.
+마이그레이션은 `CREATE TABLE` 2개(`places`, `trip_bases`) + `ALTER TABLE schedule_items ADD COLUMN place_id uuid` + FK·인덱스뿐이라 파괴적이지 않다. `npm run db:generate` 로 만들고 손대지 않는다.
 
 ### 5.7 쿼리·Server Action·접근 확인
 
-- 쿼리는 `src/db/queries/places.ts`, `trip-bases.ts`, `route-segments.ts` (이름은 구현자), `import "server-only"`, 첫 인자 `userId`, 여행 접근은 `accessibleTrips(userId)` 를 같은 SQL 문 안에.
+- 쿼리는 `src/db/queries/places.ts`, `trip-bases.ts` (이름은 구현자), `import "server-only"`, 첫 인자 `userId`, 여행 접근은 `accessibleTrips(userId)` 를 같은 SQL 문 안에.
 - 장소 고치기·지우기: 한 문의 `where` 에 `places.id = placeId` **그리고** `places.trip_id = tripId` **그리고** 접근 가능한 여행. 바뀐 행이 없으면 찾을 수 없음.
 - 장소 넣기: `getTrip(userId, tripId)` 확인 → Place Details(서버 키) → insert. 유니크 위반은 "이미 목록에 있는 장소예요."
 - **일정에 장소 잇기**(추가·고치기): `place_id` 가 **같은 여행(tripId)의 장소이고 그 여행이 접근 가능한지**를 일정 쓰기와 같은 문 안의 조건(예: `insert … select … where exists`, `update … where … and exists`)으로 확인한다. 아니면 찾을 수 없음과 같은 반응. (반목표: 남의 장소 붙이기)
 - **기준점 정하기**: 날짜가 여행 기간 안인지 검사하고, `place_id` 가 같은 여행의 장소인지 같은 문 안에서 확인해 upsert.
-- 구간 캐시 읽기·쓰기: 서버 내부에서만. 출발·도착 장소가 같은 접근 가능한 여행의 것일 때만.
+- 구간 조회: 서버가 그날 동선을 이 사용자의 접근 가능한 여행의 장소들로만 만든 뒤 Google 에 묻는다. 클라이언트가 좌표나 장소 id 쌍을 보내 임의 구간을 묻게 하지 않는다(서버 키로 남의 좌표 조회 막기). 탭을 누를 때 Server Action 으로 묻는다면 인자는 `tripId`·날짜뿐이고 같은 접근 확인을 거친다.
 - Server Action 순서는 CLAUDE.md 그대로: `getCurrentUser()` → 필드별 검증 → 범위 좁힌 쿼리 → `revalidatePath("/trips/<id>")`. uuid·Google 장소 id 형식(영문·숫자·`-`·`_`, 길이 제한)은 쿼리·외부 호출 전에 거른다.
 - 남의 것과 없는 것은 같은 반응(`notFound()`, 또는 #12 완료 체크처럼 같은 실패 문구).
 
@@ -275,7 +283,8 @@ Routes API `computeRoutes` 로 직접 호출해 봤다.
 - 두 좌표의 직선 거리(하버사인), 거리 표기("850m", "3.4km").
 - 날의 기준점 고르기(§5.5 규칙).
 - 하루 동선 만들기: 기준점 + 그날 일정(정렬된) → 구간 목록(연속 같은 장소 빼기, 기준점 없음 처리), 구간별 출발 시각.
-- 출발 시각 → 요일·HH:MM, 그리고 "가장 가까운 앞날의 같은 요일" 계산.
+- 구간별 시각 정하기(§5.3 '시각': 도착/출발/10:00), 현지 시각 + IANA 시간대 → 절대 시각, "가장 가까운 앞날의 같은 요일" 계산.
+- 30일 갱신 대상 고르기.
 - Google 유형 → 종류 짐작.
 - 구간 표시 결정: Routes 응답 요약 + 나라 코드 → 표시 문구·안내 문구 종류(§5.3 의 1–2단계).
 - 입력 검증(§5.8).
@@ -297,7 +306,9 @@ Routes API `computeRoutes` 로 직접 호출해 봤다.
    - 일정에서 장소 고르기, 직접 적기로 되돌리기.
    - 기준점: 1일차에 정하면 뒤 날에 이어짐, 2일차에 바꾸면 그 뒤만 바뀜, 기준점 장소를 지우면 앞 기준점이 이어짐.
    - N일차 동선: 번호 핀·선, 서울 구간(대중교통), 일본 구간(도보 + 일본 안내), 국내 안내 문구, Google 지도 링크.
-   - 같은 날을 다시 열면 Google 을 다시 부르지 않음(서버 로그·`route_segments` 행 수).
+   - [전체] 보기와 열지 않은 날에는 Routes 를 부르지 않음(서버 로그). 경로 정보가 DB 에 저장되지 않음.
+   - `google_fetched_at` 을 31일 전으로 바꾼 장소가 화면을 열면 갱신됨, 서버 키를 틀리게 두면 좌표가 비고 지도에서 빠짐.
+   - 서머타임 지역 장소(예: 파리) 구간의 시각이 현지 시각대로 나감(서버 로그의 요청 시각).
    - 전체 보기: 기준점 고르면 가까운 순 정렬.
    - 서버 키를 틀린 값으로 두면 직선 거리 + "불러오지 못했어요"로 떨어지고 화면은 정상.
    - A 가 B 의 장소 id 를 자기 일정에 붙이기·기준점으로 걸기·고치기·지우기 → 찾을 수 없음, B 의 행 그대로(#12 의 `page.route` 방식).
@@ -310,7 +321,6 @@ Routes API `computeRoutes` 로 직접 호출해 봤다.
 - 파일 이름·위치, 컴포넌트 나누기, 지도 라이브러리(§5.10).
 - 구간 정보를 묻는 시점의 구현(§5.3 '언제 묻나' 조건 안에서).
 - 핀 모양·색, 탭 모양, 강조 표시, 지도 높이 세부.
-- `route_segments.summary` 구조.
 - 안내·오류 문구 최종 표현.
 - 장소 줄 고치기 UI(⋯ 메뉴 / 그 자리 입력칸).
 - Routes API 의 출발 시각 허용 범위 확인과 그에 맞춘 대체 규칙 세부.
