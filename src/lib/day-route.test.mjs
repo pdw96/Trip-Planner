@@ -148,3 +148,55 @@ test("needsCoordsRefresh", () => {
     false,
   );
 });
+
+test("마지막 stop 이 base 와 합쳐져도 시각은 도착으로 남는다", () => {
+  const r = buildDayRoute(
+    [
+      { placeId: "B", time: null },
+      { placeId: "A", time: "15:00" },
+    ],
+    "A",
+    places,
+    dist,
+  );
+  assert.deepEqual(summary(r), ["A>B departure 10:00", "B>A arrival 15:00"]);
+  const r2 = buildDayRoute(
+    [
+      { placeId: "B", time: "09:00" },
+      { placeId: "A", time: null },
+    ],
+    "A",
+    places,
+    dist,
+  );
+  assert.deepEqual(summary(r2), ["A>B arrival 09:00", "B>A departure 09:00"]);
+});
+
+test("base 와 같은 stop 하나뿐이면 동선이 없다", () => {
+  const r = buildDayRoute([{ placeId: "A", time: "12:00" }], "A", places, dist);
+  assert.deepEqual(r.legs, []);
+  assert.deepEqual(r.stops, []);
+  assert.equal(r.base.id, "A");
+});
+
+test("가운데의 base 와 같은 stop 은 번호가 남는다", () => {
+  const r = buildDayRoute(
+    [
+      { placeId: "B", time: null },
+      { placeId: "A", time: null },
+      { placeId: "C", time: null },
+    ],
+    "A",
+    places,
+    dist,
+  );
+  assert.deepEqual(
+    r.stops.map((s) => [s.place.id, s.number]),
+    [
+      ["B", 1],
+      ["A", 2],
+      ["C", 3],
+    ],
+  );
+  assert.equal(r.legs.length, 4);
+});

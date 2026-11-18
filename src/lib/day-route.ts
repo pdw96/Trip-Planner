@@ -110,7 +110,7 @@ export function buildDayRoute(
     const from = points[i];
     const to = points[i + 1];
     let timing: LegTiming;
-    if (!to.isBase && to.time) {
+    if (to.time) {
       timing = { kind: "arrival", time: to.time };
     } else if (from.time) {
       timing = { kind: "departure", time: from.time };
