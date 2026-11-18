@@ -2,7 +2,7 @@
 
 - 날짜: 2026-11-18
 - 이슈: pdw96/Trip-Planner#13
-- 상태: 승인 대기. "Claude 판단" 표시 항목도 승인 대상이다. 검토자 확인 뒤 사용자 결정(Google 약관 준수: 경로 정보 저장 안 함)을 반영했다.
+- 상태: 승인 대기. "Claude 판단" 표시 항목도 승인 대상이다. 검토자 확인 뒤 사용자 결정(Google 약관 원문 확인 → 경로 정보 저장 안 함, 장소는 id·좌표(30일)·이름표만)을 반영했다.
 
 ## 1. 의도
 
@@ -20,7 +20,7 @@
 
 **목표**
 - 여행 자세히 보기(`/trips/[id]`)에 Google 지도를 띄우고, 이 여행의 장소를 핀으로 보인다.
-- 장소 넣기는 Google 장소 검색으로 고른다(이름·주소·좌표·나라를 Google 에서 받는다). 종류·메모를 고치고 지운다.
+- 장소 넣기는 Google 장소 검색으로 고른다. 이름표는 Google 이름으로 미리 채우고 사용자가 확인해 저장하며, 좌표는 Google 에서 받는다(§3.2). 이름표·종류·메모를 고치고 지운다.
 - 일정의 장소 칸에서 이 여행의 장소를 고를 수 있다. 지금처럼 글자로 적는 것도 남긴다.
 - 날마다 기준점을 고른다. 기본은 전날과 같다 (사용자 결정, Claude 추천안).
 - N일차 보기: 기준점 → 그날 일정 장소들 → 기준점의 번호 핀과 선, 구간마다 이동 정보.
@@ -71,18 +71,19 @@ Routes API `computeRoutes` 로 직접 호출해 봤다.
 - Places API (New) `searchText`·Place Details 는 `id`, `displayName`, `formattedAddress`, `location`, `types`, `primaryType`, `addressComponents`(나라 코드) 를 준다.
 - Places API (New) 는 `timeZone.id`(IANA, 예 `Europe/Paris`)와 `utcOffsetMinutes` 도 준다(확인함).
 
-### 3.2 Google 약관의 저장 제한 (사용자 결정: 지킨다)
+### 3.2 Google 약관 (원문 확인, 사용자 결정: 지킨다)
 
-Routes API 정책(Google Maps Platform 서비스별 약관)에 따르면:
-- **장소 id(place ID)** 는 저장 제한에서 빠진다 → 계속 저장한다.
-- **위도·경도**는 최대 30일 연속으로만 임시 저장할 수 있고, 그 뒤 지워야 한다.
-- 그 밖의 Routes 내용(소요 시간·거리·노선·경로 선)은 저장이 제한된다.
+[서비스별 약관](https://cloud.google.com/maps-platform/terms/maps-service-terms)과 [기본 약관](https://cloud.google.com/maps-platform/terms) 원문(2026-11-18 받음):
+- **장소 id**: 저장해도 된다 (서비스별 약관 일반 조항 3 "Google ID Caching": Places·Routes 의 `place_id`).
+- **위도·경도**: 최대 30일 연속만 임시 저장, 그 뒤 지운다 (Places 14.3, Routes 19.3).
+- **그 밖의 Google 내용은 저장 금지**: "서비스별 약관이 명시적으로 허용한 것 말고는 캐시하지 않는다"(기본 약관 3.2.3 (b)), 금지 예로 "상호명·주소·사용자 리뷰를 복사해 저장"(3.2.3 (a)(iii)). 경로 정보(시간·거리·노선·경로 선), 장소 이름·주소·나라·시간대·유형 모두 해당.
+- **사용자에게 알리기**: 앱이 Google 지도 기능을 쓰며 [Google 지도 추가 약관](https://maps.google.com/help/terms_maps/)과 [Google 개인정보처리방침](https://policies.google.com/privacy)을 따른다는 것을 알린다 (3.2.2 (a)). Google 표기는 문서대로 한다 (일반 조항 2 "Attribution").
 
-그래서 (사용자 결정, Claude 추천안):
-- 구간 경로 정보는 **저장하지 않는다**. N일차 보기를 열 때마다 서버가 Google 에 묻는다. 비용은 사용자가 건 프로젝트 하루 할당량이 막고, 세 명 규모면 월 무료 한도 안이다.
-- 장소의 Google 값(이름·주소·좌표·나라·시간대·유형)은 받은 시각(`google_fetched_at`)과 함께 저장하고, **30일이 지난 장소는 다시 Place Details 로 받아 덮어쓴다**(§5.2). 장소 id 와 사용자가 정한 종류·메모는 계속 저장한다.
-- 이름·주소 같은 Places 필드의 정확한 보관 기간은 확인하지 못했다(약관 원문이 이 세션에서 열리지 않음). 좌표와 같은 30일 갱신을 적용해 안전한 쪽으로 둔다. 구현자는 약관을 다시 확인해 PR 본문 "남은 지적"에 적는다.
-- 일정의 `place` 글자에 장소 이름을 복사해 두는 것(§5.4)은 사용자가 적은 글자 칸과 같은 취급으로 남긴다. 이것도 "남은 지적"에 적어 사용자가 판단하게 한다.
+그래서:
+- **구간 경로 정보는 저장하지 않는다** (사용자 결정, 가). N일차 보기를 열 때마다 서버가 묻는다(§5.3).
+- **장소에는** Google 장소 id, **좌표(30일마다 갱신)**, 그리고 사용자 값(이름표·종류·메모)만 저장한다. 나라·시간대는 저장하지 않고 N일차 보기에서 그날 장소들만 Place Details 로 물어 쓴다(§5.3). 주소는 저장도 표시도 하지 않는다(장소를 누르면 Google 지도).
+- **이름표** (사용자 결정, 가): 장소를 고르면 이름 칸에 Google 이름을 **미리 채워 주고**, 사용자가 확인하거나 고쳐 [넣기]로 저장한다. 저장된 값은 사용자가 정한 이름표로 다룬다. 고치지 않고 저장하면 결과적으로 Google 이름과 같으므로 엄격히는 회색지대임을 사용자에게 설명했고, 개인 3명 규모라 이 방식을 골랐다. 매번 Google 에서 이름을 받아 오는 방식은 이름이 비싼 등급(월 무료 5천 건)이고 여행 화면마다 장소 수만큼 불러야 해, 하루 할당량(300)에 닿아 화면이 깨지므로 버렸다.
+- 일정의 `place` 글자에 넣는 것도 이 이름표다(§5.4).
 
 ### 3.3 키 (사용자가 만들어 둠)
 
@@ -159,14 +160,25 @@ Routes API 정책(Google Maps Platform 서비스별 약관)에 따르면:
 
 ### 5.2 장소 목록 (사용자 승인)
 
-- **넣기**: 검색칸에 치면 Google 자동완성 후보가 뜨고, 고르면 바로 목록에 들어간다. 브라우저는 **Google 장소 id 만** Server Action 에 보내고, 서버가 서버 키로 Place Details 를 불러 이름·주소·좌표·나라·시간대·유형을 받아 저장한다. (Claude 판단: 클라이언트가 보낸 좌표·이름을 믿지 않는다. 자동완성 검색 범위는 여행지(`trip.destination`)와 무관하게 전 세계 — 구현자가 원하면 지도 영역 쪽으로 기울이는 정도만)
-- **종류**: 숙소·관광·맛집·카페·기타 (`lodging`·`sight`·`food`·`cafe`·`etc`). 넣을 때 Google `primaryType`/`types` 로 짐작한다(예: `lodging`/`hotel` → 숙소, `cafe`/`coffee_shop`/`bakery` → 카페, `*restaurant`/`food`/`meal_*`/`bar` → 맛집, `tourist_attraction`/`museum`/`park`/`point_of_interest` 등 → 관광, 나머지 기타). 짐작 규칙은 순수 함수로 두고 시험한다. 줄의 ⋯ 메뉴에서 바꾼다.
+- **넣기** (사용자 결정 §3.2 가):
+  ```
+  [🔍 이치란          ]  → 후보에서 "이치란 시부야점" 고름
+  이름 [이치란 시부야점      ]  ← Google 이름을 미리 채움, 고쳐도 됨
+  종류 [맛집 ▾]                ← 자동 짐작
+  메모 [                    ]   [넣기] [취소]
+  ```
+  1. 검색칸에 치면 Google 자동완성 후보가 뜬다(브라우저 키).
+  2. 후보를 고르면 브라우저가 이름과 유형을 받아(Maps JavaScript 의 Place, 브라우저 키) 이름 칸·종류 칸을 채운다. 이 값은 화면에만 있고 저장 전이다.
+  3. [넣기]를 누르면 Server Action 에 **Google 장소 id, 이름표, 종류, 메모**를 보낸다. 서버는 서버 키로 Place Details 의 **좌표만**(`location`) 받아 저장한다. 클라이언트가 보낸 좌표는 받지 않는다. (Claude 판단)
+  - 자동완성 검색 범위는 전 세계. 구현자가 원하면 지도 영역 쪽으로 기울이는 정도만.
+- **이름표**: 필수, 1–100자. ⋯ 메뉴에서 고칠 수 있다(Claude 판단: 사용자 값이므로).
+- **종류**: 숙소·관광·맛집·카페·기타 (`lodging`·`sight`·`food`·`cafe`·`etc`). 넣을 때(2단계, 브라우저) Google `primaryType`/`types` 로 짐작한다(예: `lodging`/`hotel` → 숙소, `cafe`/`coffee_shop`/`bakery` → 카페, `*restaurant`/`food`/`meal_*`/`bar` → 맛집, `tourist_attraction`/`museum`/`park`/`point_of_interest` 등 → 관광, 나머지 기타). 짐작 규칙은 순수 함수로 두고 시험한다. 줄의 ⋯ 메뉴에서 바꾼다.
 - **메모**: 한 줄, 200자 이하(Claude 판단), 비면 null.
 - **중복**: 같은 여행에 같은 Google 장소는 한 번만(유니크 제약). 이미 있으면 "이미 목록에 있는 장소예요."
 - **일정 표시**: 일정에 이어진 장소는 "2일차 일정"처럼(여러 날이면 "1·3일차 일정") 표시한다.
-- **지우기**: ⋯ → "이 장소를 삭제할까요?"(`window.confirm`) → 지운다. 이어진 일정은 남고 장소 글자도 남는다(§5.4). 이 장소가 기준점인 날은 기준점 설정이 지워져 이전 기준점이 이어진다(§5.5).
+- **지우기**: ⋯ → "이 장소를 삭제할까요?"(`window.confirm`) → 지운다. 이어진 일정은 남고 장소 글자(이름표)도 남는다(§5.4). 이 장소가 기준점인 날은 기준점 설정이 지워져 이전 기준점이 이어진다(§5.5).
 - 목록 순서: 기준점 정렬이 없으면 넣은 순서(`created_at`, `id`).
-- **30일 갱신**(§3.2): 여행 화면을 그릴 때 `google_fetched_at` 이 30일 지난 장소가 있으면 서버가 Place Details 로 다시 받아 덮어쓴다(종류·메모는 그대로). 갱신이 실패하면(키 없음·한도·장소가 Google 에서 사라짐) 그 장소의 좌표를 비우고(null, 이름은 목록 표시용으로 남김) 목록에는 "위치 정보를 다시 불러오지 못했어요"와 함께 남긴다. 좌표가 없는 장소는 지도·동선·거리 계산에서 빠진다. 갱신은 화면 첫 표시를 막지 않게 한다(구현자: Suspense 뒤에서, 또는 `after()` 등). (Claude 판단)
+- **좌표 30일 갱신**(§3.2): 여행 화면을 그릴 때 `coords_fetched_at` 이 30일 지난 장소가 있으면 서버가 Place Details 로 좌표만 다시 받아 덮어쓴다. 갱신이 실패하면(키 없음·한도·장소가 Google 에서 사라짐) 그 장소의 좌표를 비우고(null) 목록에는 "위치 정보를 다시 불러오지 못했어요"와 함께 남긴다. 좌표가 없는 장소는 지도·동선·거리 계산에서 빠진다. 갱신은 화면 첫 표시를 막지 않게 한다(구현자: Suspense 뒤에서, 또는 `after()` 등). (Claude 판단)
 - 그 자리 고치기는 #12 의 "한 번에 하나" 규칙과 같게 할지 구현자가 정한다(⋯ 메뉴에서 종류 고르기·메모 입력칸).
 
 ### 5.3 구간 이동 정보 (사용자 승인, 세부는 Claude 판단)
@@ -179,6 +191,7 @@ Routes API 정책(Google Maps Platform 서비스별 약관)에 따르면:
    - 그 밖: `WALK` 로 한 번 더 묻고, 60분 이하면 `🚶 N분 (대중교통 정보 없음)` 과 그 경로 선, 넘으면 직선 거리만. 두 장소 중 하나라도 일본(`JP`)이면 일본 안내 문구, 아니면 "이 지역은 Google 이 대중교통 정보를 주지 않아요."
 3. **Google 호출이 실패하면**(키 없음·403·한도·시간 초과): 직선 거리만 보이고 "이동 정보를 불러오지 못했어요." 실패는 저장하지 않는다(다음에 다시 시도). 서버 로그에 `[routes]` 한 줄(키 가림).
 4. 직선 구간은 지도에 점선으로 그린다.
+6. **나라·시간대**: 1–2단계 판단과 시각 계산에 쓰는 나라 코드(`addressComponents` 의 `country`)와 IANA 시간대(`timeZone.id`)는 저장하지 않는다(§3.2). N일차 보기를 열 때 그날 동선의 장소들(많아야 십여 개)만 서버가 Place Details 로 묻고, 그 요청 안에서만 쓴다. 실패하면 안내 문구 없이, 시각 없이(지금 기준) 묻는다.
 5. 모든 구간에 Google 지도 길찾기 링크: `https://www.google.com/maps/dir/?api=1&origin=<이름>&origin_place_id=<id>&destination=<이름>&destination_place_id=<id>&travelmode=transit`.
 
 **안내 문구** (최종 표현은 구현자, 화면에서 사용자와 다듬는다)
@@ -191,7 +204,7 @@ Routes API 정책(Google Maps Platform 서비스별 약관)에 따르면:
 - 없고 출발 장소 쪽 일정에 시각이 있으면 → `departureTime` = 그 시각(머무는 시간을 모르므로 가장 이른 출발로 본다).
 - 둘 다 없으면 → 그날 10:00 출발.
 - 기준점은 일정이 아니므로 시각이 없다. 기준점에서 나가는 첫 구간은 첫 일정 시각이 도착 시각, 돌아오는 구간은 마지막 일정 시각이 출발 시각(없으면 10:00).
-- 시각은 장소 현지 시각이다. 절대 시각으로 바꿀 때 장소의 IANA 시간대(`time_zone`)를 쓴다(서머타임 반영). 시간대가 없으면 시각 없이(지금 기준) 묻는다.
+- 시각은 장소 현지 시각이다. 절대 시각으로 바꿀 때 장소의 IANA 시간대(위 6)를 쓴다(서머타임 반영). 시간대를 못 얻으면 시각 없이(지금 기준) 묻는다.
 - 여행 날짜가 지났거나 Routes API 가 받지 않는 먼 미래면 **가장 가까운 앞날의 같은 요일·같은 시각**으로 바꿔 묻는다(대중교통 시간표는 요일 단위로 비슷하다는 가정). 구현자는 Routes API 의 허용 범위를 문서로 확인한다.
 - `WALK` 대체 조회에는 시각을 주지 않는다.
 
@@ -202,10 +215,10 @@ Routes API 정책(Google Maps Platform 서비스별 약관)에 따르면:
 ### 5.4 일정과 잇기 (사용자 승인)
 
 - 일정 입력칸의 "장소": **이 여행의 장소 중 고르기**(선택 목록, 맨 위 "직접 적기") 또는 지금처럼 글자로 적기.
-- 장소를 고르면 `schedule_items.place_id` 에 장소 id 를, `place` 글자에 장소 이름을 함께 저장한다. 그래서 장소를 지워도(`place_id` → null) 이름은 남는다.
+- 장소를 고르면 `schedule_items.place_id` 에 장소 id 를, `place` 글자에 장소 이름표를 함께 저장한다. 그래서 장소를 지워도(`place_id` → null) 이름은 남는다.
 - 지도·동선에는 `place_id` 가 있는 일정만 들어간다. 글자만 있는 일정은 지금처럼 Google 지도 검색 링크.
 - 일정 줄에서 장소가 이어진 경우 링크는 §5.1 의 장소 링크(place_id 포함)로 연다.
-- 장소 이름을 나중에 바꾸는 기능은 없으므로 `place` 글자와 장소 이름이 어긋날 일은 없다. 직접 적기로 바꾸면 `place_id` 를 비운다.
+- 장소 이름표를 고치면 그 장소가 이어진 일정의 `place` 글자도 함께 바꾼다(같은 Server Action 안, 같은 여행 범위). (Claude 판단) 직접 적기로 바꾸면 `place_id` 를 비운다.
 
 ### 5.5 기준점 (사용자 결정: 날마다, 기본은 전날과 같게)
 
@@ -225,19 +238,15 @@ Routes API 정책(Google Maps Platform 서비스별 약관)에 따르면:
 | `id` | uuid PK `defaultRandom()` | |
 | `trip_id` | uuid not null FK → `trips.id` on delete cascade | |
 | `google_place_id` | text not null | |
-| `name` | text not null | Place Details `displayName.text` |
-| `address` | text null | `formattedAddress` |
-| `lat`, `lng` | double precision null | 30일 갱신 실패 시 null (§5.2) |
-| `country_code` | text null | `addressComponents` 의 `country` `shortText` (ISO 2자) |
-| `time_zone` | text null | Place Details `timeZone.id` (IANA). 출발 시각 계산(§5.3) |
-| `google_types` | text[] 또는 text null | 종류 짐작에 쓴 유형. 저장할지는 구현자(짐작은 넣을 때 한 번이면 저장 불필요) |
-| `google_fetched_at` | timestamptz not null | Google 값을 받은 시각. 30일 갱신 기준(§3.2) |
+| `label` | text not null | 이름표(사용자 값, §3.2). 1–100자 |
+| `lat`, `lng` | double precision null | Google 좌표. 30일 갱신 실패 시 null (§5.2) |
+| `coords_fetched_at` | timestamptz not null | 좌표를 받은 시각. 30일 갱신 기준 |
 | `category` | text not null, check in (`lodging`,`sight`,`food`,`cafe`,`etc`) | |
 | `memo` | text null | |
 | `created_at`, `updated_at` | timestamptz, `trips` 와 같은 방식 | |
 
 - 유니크 `(trip_id, google_place_id)`, 인덱스 `(trip_id)`.
-- Google 값(`name`·`address`·`lat`·`lng`·`country_code`·`time_zone`)은 30일마다 갱신한다(§3.2, §5.2).
+- Google 에서 온 값은 `google_place_id`(무기한 허용)와 `lat`·`lng`(30일)뿐이다. 이름·주소·나라·시간대·유형은 저장하지 않는다(§3.2).
 
 **`schedule_items.place_id`** — uuid null, FK → `places.id` on delete set null. 비파괴(null 허용 컬럼 추가).
 
@@ -258,7 +267,8 @@ Routes API 정책(Google Maps Platform 서비스별 약관)에 따르면:
 
 - 쿼리는 `src/db/queries/places.ts`, `trip-bases.ts` (이름은 구현자), `import "server-only"`, 첫 인자 `userId`, 여행 접근은 `accessibleTrips(userId)` 를 같은 SQL 문 안에.
 - 장소 고치기·지우기: 한 문의 `where` 에 `places.id = placeId` **그리고** `places.trip_id = tripId` **그리고** 접근 가능한 여행. 바뀐 행이 없으면 찾을 수 없음.
-- 장소 넣기: `getTrip(userId, tripId)` 확인 → Place Details(서버 키) → insert. 유니크 위반은 "이미 목록에 있는 장소예요."
+- 장소 넣기: `getTrip(userId, tripId)` 확인 → Place Details 좌표(서버 키) → insert.
+- 이름표 고치기: 장소 행과, 그 장소가 이어진 같은 여행의 일정 `place` 글자를 바꾼다(각 문에 접근 조건). 유니크 위반은 "이미 목록에 있는 장소예요."
 - **일정에 장소 잇기**(추가·고치기): `place_id` 가 **같은 여행(tripId)의 장소이고 그 여행이 접근 가능한지**를 일정 쓰기와 같은 문 안의 조건(예: `insert … select … where exists`, `update … where … and exists`)으로 확인한다. 아니면 찾을 수 없음과 같은 반응. (반목표: 남의 장소 붙이기)
 - **기준점 정하기**: 날짜가 여행 기간 안인지 검사하고, `place_id` 가 같은 여행의 장소인지 같은 문 안에서 확인해 upsert.
 - 구간 조회: 서버가 그날 동선을 이 사용자의 접근 가능한 여행의 장소들로만 만든 뒤 Google 에 묻는다. 클라이언트가 좌표나 장소 id 쌍을 보내 임의 구간을 묻게 하지 않는다(서버 키로 남의 좌표 조회 막기). 탭을 누를 때 Server Action 으로 묻는다면 인자는 `tripId`·날짜뿐이고 같은 접근 확인을 거친다.
@@ -270,6 +280,7 @@ Routes API 정책(Google Maps Platform 서비스별 약관)에 따르면:
 | 필드 | 규칙 |
 |---|---|
 | Google 장소 id | 필수, `^[A-Za-z0-9_-]{1,300}$` |
+| 이름표 | 앞뒤 공백 제거 뒤 1–100자(코드 포인트) |
 | 종류 | 다섯 값 중 하나 |
 | 메모 | 앞뒤 공백 제거 뒤 200자 이하(코드 포인트), 비면 null |
 | 일정의 장소 선택 | 비면 직접 적기. 있으면 uuid |
@@ -284,7 +295,7 @@ Routes API 정책(Google Maps Platform 서비스별 약관)에 따르면:
 - 날의 기준점 고르기(§5.5 규칙).
 - 하루 동선 만들기: 기준점 + 그날 일정(정렬된) → 구간 목록(연속 같은 장소 빼기, 기준점 없음 처리), 구간별 출발 시각.
 - 구간별 시각 정하기(§5.3 '시각': 도착/출발/10:00), 현지 시각 + IANA 시간대 → 절대 시각, "가장 가까운 앞날의 같은 요일" 계산.
-- 30일 갱신 대상 고르기.
+- 좌표 30일 갱신 대상 고르기.
 - Google 유형 → 종류 짐작.
 - 구간 표시 결정: Routes 응답 요약 + 나라 코드 → 표시 문구·안내 문구 종류(§5.3 의 1–2단계).
 - 입력 검증(§5.8).
@@ -295,19 +306,27 @@ Routes API 정책(Google Maps Platform 서비스별 약관)에 따르면:
 - 번호 핀은 Advanced Marker(지도 ID 필요). 옛 `google.maps.Marker` 는 쓰지 않는다.
 - 장소 자동완성은 Places API (New) 의 자동완성(`PlaceAutocompleteElement` 또는 `AutocompleteSuggestion`). 옛 `places.Autocomplete` 는 쓰지 않는다. 자동완성 세션 토큰을 써서 비용을 줄인다.
 
-### 5.11 확인 순서
+### 5.11 Google 알림·표기 (§3.2, Claude 판단)
+
+- 지도 칸 아래 작은 글씨: "지도·장소·길찾기 정보: Google 지도 · [Google 지도 추가 약관](https://maps.google.com/help/terms_maps/) · [Google 개인정보처리방침](https://policies.google.com/privacy)". 지도를 쓸 수 없을 때(키 없음)도 장소 검색이 없으면 숨긴다.
+- 지도 위 Google 로고·저작권 표시, 자동완성 목록의 Google 표기는 Google 이 그리는 그대로 두고 가리지 않는다.
+- 구간 목록의 이동 정보(Google 에서 받은 것)는 지도와 같은 화면에 있으므로 따로 로고를 붙이지 않는다. 구현자는 Routes·Places 의 표기 문서를 확인하고 필요하면 "Google 지도 제공"을 덧붙인다.
+
+### 5.12 확인 순서
 
 1. 순수 함수 시험, `npm run lint`, `npm run typecheck`, `npm run build`.
 2. 클라우드 환경 네트워크에 `maps.googleapis.com`, `maps.gstatic.com` 허용 요청, `GOOGLE_MAPS_SERVER_KEY` 를 아무 값으로 두는 환경 변수 요청(사용자 승인).
 3. 마이그레이션 PR. 본문 맨 위 "사람 확인 필요"(위험 경로: `src/db/schema.ts`, `drizzle/**`, `.env.example`, 의존성을 넣었으면 `package.json`·`package-lock.json`), SQL 전문, 비파괴 판정, 사용자가 할 일(운영 브라우저 키, Vercel 환경 변수 3개).
 4. `human-approved` → `npm run db:migrate`(실행 직전 사람 확인).
 5. 브라우저 확인(로컬 dev + 테스트 계정 A·B, `docs/status.md` 방식):
-   - 장소 검색·넣기(국내 1, 일본 1, 그 밖 해외 1), 종류 짐작, 종류·메모 고치기, 중복 막기, 지우기(이어진 일정의 글자가 남음).
+   - 장소 검색·넣기(국내 1, 일본 1, 그 밖 해외 1), 이름 미리 채움·고쳐서 넣기, 종류 짐작, 종류·메모 고치기, 중복 막기, 지우기(이어진 일정의 글자가 남음).
    - 일정에서 장소 고르기, 직접 적기로 되돌리기.
    - 기준점: 1일차에 정하면 뒤 날에 이어짐, 2일차에 바꾸면 그 뒤만 바뀜, 기준점 장소를 지우면 앞 기준점이 이어짐.
    - N일차 동선: 번호 핀·선, 서울 구간(대중교통), 일본 구간(도보 + 일본 안내), 국내 안내 문구, Google 지도 링크.
    - [전체] 보기와 열지 않은 날에는 Routes 를 부르지 않음(서버 로그). 경로 정보가 DB 에 저장되지 않음.
-   - `google_fetched_at` 을 31일 전으로 바꾼 장소가 화면을 열면 갱신됨, 서버 키를 틀리게 두면 좌표가 비고 지도에서 빠짐.
+   - `coords_fetched_at` 을 31일 전으로 바꾼 장소가 화면을 열면 좌표가 갱신됨, 서버 키를 틀리게 두면 좌표가 비고 지도에서 빠짐.
+   - DB 의 `places` 에 이름표·종류·메모·장소 id·좌표 말고 Google 값이 없음. 이름표를 고치면 이어진 일정 글자도 바뀜.
+   - 지도 아래 Google 약관·개인정보처리방침 링크.
    - 서머타임 지역 장소(예: 파리) 구간의 시각이 현지 시각대로 나감(서버 로그의 요청 시각).
    - 전체 보기: 기준점 고르면 가까운 순 정렬.
    - 서버 키를 틀린 값으로 두면 직선 거리 + "불러오지 못했어요"로 떨어지고 화면은 정상.
