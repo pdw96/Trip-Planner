@@ -1,6 +1,9 @@
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
+import { calendarRange, yearsInRange } from "@/lib/calendar";
+import { getHolidays } from "@/lib/holidays-api";
 import { getCurrentUser } from "@/lib/session";
+import { todayInSeoul } from "@/lib/trip-dates";
 import { EMPTY_TRIP_FIELDS } from "@/lib/trip-input";
 import { createTripAction } from "../actions";
 import { TripForm } from "../trip-form";
@@ -20,8 +23,14 @@ async function NewTripForm() {
   const user = await getCurrentUser();
   if (!user) redirect("/");
 
+  const today = todayInSeoul();
+  const range = calendarRange(today, "", "");
+
   return (
     <TripForm
+      today={today}
+      range={range}
+      holidays={getHolidays(yearsInRange(range))}
       action={createTripAction}
       initialValues={EMPTY_TRIP_FIELDS}
       submitLabel="만들기"

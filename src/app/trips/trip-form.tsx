@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useActionState, useLayoutEffect, useState } from "react";
+import type { CalendarRange } from "@/lib/calendar";
 import type { TripFields, TripFormState } from "@/lib/trip-input";
+import { DateRangePicker } from "./date-range-picker";
 import { primaryButtonClass, secondaryButtonClass } from "./styles";
 
 const inputClass =
@@ -13,6 +15,9 @@ type TripFormProps = {
   initialValues: TripFields;
   submitLabel: string;
   cancelHref: string;
+  today: string;
+  range: CalendarRange;
+  holidays: Promise<string[]>;
 };
 
 // 만들기·고치기가 같이 쓰는 양식. 검증은 서버에서 하고, 오류와 입력값을 action 상태로 돌려받는다.
@@ -29,6 +34,9 @@ function TripFormFields({
   initialValues,
   submitLabel,
   cancelHref,
+  today,
+  range,
+  holidays,
 }: TripFormProps) {
   const [state, formAction, pending] = useActionState(action, {
     values: initialValues,
@@ -67,28 +75,14 @@ function TripFormFields({
           />
         )}
       </Field>
-      <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="시작 날짜" name="startDate" error={errors.startDate}>
-          {(props) => (
-            <input
-              {...props}
-              type="date"
-              defaultValue={values.startDate}
-              className={inputClass}
-            />
-          )}
-        </Field>
-        <Field label="끝 날짜" name="endDate" error={errors.endDate}>
-          {(props) => (
-            <input
-              {...props}
-              type="date"
-              defaultValue={values.endDate}
-              className={inputClass}
-            />
-          )}
-        </Field>
-      </div>
+      <DateRangePicker
+        startDate={values.startDate}
+        endDate={values.endDate}
+        today={today}
+        range={range}
+        holidays={holidays}
+        error={errors.startDate ?? errors.endDate}
+      />
       <Field label="메모 (선택)" name="notes" error={errors.notes}>
         {(props) => (
           <textarea
