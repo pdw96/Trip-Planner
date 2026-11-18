@@ -92,6 +92,7 @@ export async function MapSection({
         placeId: s.place.id,
         number: s.number,
       })),
+      linkedCount: stops.length,
       legs: route.legs.map((leg) => ({
         fromId: leg.from.id,
         toId: leg.to.id,
@@ -99,6 +100,7 @@ export async function MapSection({
         toIsBase: leg.toIsBase,
         straightMeters: leg.straightMeters,
         distanceText: formatDistance(leg.straightMeters),
+        timing: `${leg.timing.kind} ${leg.timing.time}`,
       })),
     };
   });

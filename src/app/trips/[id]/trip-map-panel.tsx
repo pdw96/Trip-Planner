@@ -177,7 +177,9 @@ function PanelBody({
             )}
             {day.stops.length === 0 ? (
               <p className="text-sm text-zinc-500">
-                이 날 일정에 고른 장소가 없어요
+                {day.linkedCount > 0
+                  ? "고른 장소의 위치 정보가 없어요"
+                  : "이 날 일정에 고른 장소가 없어요"}
               </p>
             ) : (
               <DayLegs
@@ -238,9 +240,9 @@ function PanelBody({
 
 type RouteState = { date: string; signature: string; result: DayRouteResult };
 
-// 그날 동선의 모양(기준점·장소 순서). 바뀌면(일정·기준점을 고친 뒤 새로 그려지면) 다시 묻는다.
+// 그날 동선의 모양(기준점·장소 순서)과 구간 시각. 바뀌면(일정·기준점을 고친 뒤 새로 그려지면) 다시 묻는다.
 function routeSignature(day: PanelDay): string {
-  return `${day.routeBaseId}|${day.legs.map((l) => `${l.fromId}>${l.toId}`).join(",")}`;
+  return `${day.routeBaseId}|${day.legs.map((l) => `${l.fromId}>${l.toId}@${l.timing}`).join(",")}`;
 }
 
 // N일차 탭이 열려 있을 때만 묻는다. 결과는 화면 상태로만 두고 저장하지 않는다.
@@ -448,7 +450,10 @@ function legRows(
     } else if (!result.ok) {
       text = legText({ kind: "failed" });
     } else {
-      text = matchedLeg(result, i, leg.fromId, leg.toId)?.text ?? "";
+      // 서버가 본 동선이 그 사이 바뀌어 맞는 구간이 없으면 실패와 같게 보인다(빈칸으로 두지 않는다).
+      text =
+        matchedLeg(result, i, leg.fromId, leg.toId)?.text ??
+        legText({ kind: "failed" });
     }
     rows.push({
       key: `${i}:${leg.fromId}>${leg.toId}`,

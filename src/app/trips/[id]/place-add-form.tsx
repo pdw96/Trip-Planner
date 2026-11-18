@@ -68,6 +68,7 @@ function PlaceSearch({
     });
     element.style.width = "100%";
     element.style.colorScheme = "light dark";
+    element.setAttribute("aria-label", "장소 검색");
 
     async function onSelect(
       event: google.maps.places.PlacePredictionSelectEvent,

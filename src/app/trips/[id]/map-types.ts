@@ -28,6 +28,8 @@ export type SkeletonLeg = {
   toIsBase: boolean;
   straightMeters: number;
   distanceText: string;
+  // 구간 시각(일정 시각에서, 사용자 값): "arrival 09:30" / "departure 10:00". 바뀌면 구간 정보를 다시 묻는다.
+  timing: string;
 };
 
 export type PanelDay = {
@@ -40,6 +42,8 @@ export type PanelDay = {
   // 동선에 들어간 기준점(좌표가 있을 때만).
   routeBaseId: string | null;
   stops: { placeId: string; number: number }[];
+  // 그날 장소가 이어진 일정 수(좌표가 없어 동선에서 빠진 것 포함).
+  linkedCount: number;
   legs: SkeletonLeg[];
 };
 

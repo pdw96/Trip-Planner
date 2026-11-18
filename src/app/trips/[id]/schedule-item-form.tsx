@@ -150,6 +150,7 @@ function ScheduleItemFields({
       </Field>
       {places.length > 0 ? (
         <PlaceField
+          key={resultKey(state)}
           idPrefix={idPrefix}
           places={places}
           values={values}
@@ -214,8 +215,23 @@ function ScheduleItemFields({
   );
 }
 
+// 액션 결과(state 객체)마다 다른 키. React 19 는 제출할 때마다(검증 오류로 돌아와도) form.reset() 을 하므로,
+// 장소 칸을 결과마다 다시 만들어 select·글자 칸·보이기 상태를 돌려받은 values 로 함께 맞춘다.
+const resultKeys = new WeakMap<object, number>();
+let lastResultKey = 0;
+function resultKey(state: object): number {
+  let key = resultKeys.get(state);
+  if (key === undefined) {
+    key = ++lastResultKey;
+    resultKeys.set(state, key);
+  }
+  return key;
+}
+
 // 장소 칸: 이 여행의 장소 중 고르기(맨 위 "직접 적기") + 직접 적기일 때만 보이는 글자 칸(§5.4).
 // 장소를 고르면 서버가 그 장소의 이름표를 place 글자로 저장하므로 글자 칸은 보내지 않는다.
+// select 는 제어하지 않는다(defaultValue). 제어하면 form.reset() 뒤 화면은 "직접 적기"로 돌아가는데
+// React 상태는 고른 장소로 남아 글자 칸이 숨은 채 placeId="" 가 제출된다. onChange 는 글자 칸 보이기만 바꾼다.
 function PlaceField({
   idPrefix,
   places,
@@ -228,9 +244,10 @@ function PlaceField({
   error: string | undefined;
 }) {
   // 이어졌던 장소가 그 사이 지워졌으면 직접 적기로 연다(글자는 그대로 남아 있다).
-  const [placeId, setPlaceId] = useState(
-    places.some((place) => place.id === values.placeId) ? values.placeId : "",
-  );
+  const initialPlaceId = places.some((place) => place.id === values.placeId)
+    ? values.placeId
+    : "";
+  const [placeId, setPlaceId] = useState(initialPlaceId);
   const selectId = `${idPrefix}-placeId`;
   const textId = `${idPrefix}-place`;
   const errorId = `${idPrefix}-place-error`;
@@ -242,7 +259,7 @@ function PlaceField({
       <select
         id={selectId}
         name="placeId"
-        value={placeId}
+        defaultValue={initialPlaceId}
         onChange={(event) => setPlaceId(event.target.value)}
         aria-invalid={Boolean(error) && placeId !== ""}
         aria-describedby={error && placeId !== "" ? errorId : undefined}
