@@ -41,7 +41,7 @@ const ERROR_VISIBLE_MS = 4000;
 // 입력칸은 화면 전체에서 하나만 열린다. 키: "add:<날짜>" 또는 "edit:<일정 id>".
 type OpenState = {
   openKey: string | null;
-  setOpenKey: (key: string | null) => void;
+  setOpenKey: React.Dispatch<React.SetStateAction<string | null>>;
 };
 
 const OpenContext = createContext<OpenState | null>(null);
@@ -124,8 +124,12 @@ export function ScheduleItemRow({
     setError(null);
     startToggle(async () => {
       setOptimisticDone(next);
-      const result = await setScheduleItemDoneAction(tripId, item.id, next);
-      if (!result.ok) setError(SAVE_FAILED);
+      // 연결이 끊기면 요청 자체가 실패(reject)한다. 오류 화면으로 넘기지 않고 같은 실패 문구로 되돌린다.
+      const ok = await setScheduleItemDoneAction(tripId, item.id, next).then(
+        (result) => result.ok,
+        () => false,
+      );
+      if (!ok) setError(SAVE_FAILED);
     });
   }
 
@@ -148,7 +152,10 @@ export function ScheduleItemRow({
       prev,
       formData,
     );
-    if (next.savedAt !== prev.savedAt) setOpenKey(null);
+    // 저장하는 사이 다른 입력칸을 열었으면 그것은 그대로 둔다.
+    if (next.savedAt !== prev.savedAt) {
+      setOpenKey((current) => (current === key ? null : current));
+    }
     return next;
   }
 
@@ -166,7 +173,9 @@ export function ScheduleItemRow({
             memo: item.memo ?? "",
           }}
           dateOptions={dateOptions}
-          onClose={() => setOpenKey(null)}
+          onClose={() =>
+            setOpenKey((current) => (current === key ? null : current))
+          }
           onDelete={onDelete}
           deleting={deleting}
         />
