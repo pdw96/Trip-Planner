@@ -1,6 +1,7 @@
+import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { getCurrentUser } from "@/lib/session";
-import { GoogleSignInButton, SignOutButton } from "./auth-buttons";
+import { GoogleSignInButton } from "./auth-buttons";
 
 export default function Home() {
   return (
@@ -27,12 +28,6 @@ async function AuthStatus() {
     );
   }
 
-  return (
-    <>
-      <p className="text-zinc-600 dark:text-zinc-400">
-        {user.name} 님으로 로그인했습니다.
-      </p>
-      <SignOutButton />
-    </>
-  );
+  // 로그인 버튼의 callbackURL 이 "/" 이므로, 로그인 뒤에는 여기서 목록으로 보낸다.
+  redirect("/trips");
 }
