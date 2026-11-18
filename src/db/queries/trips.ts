@@ -5,9 +5,9 @@ import { type Trip, trips } from "@/db/schema";
 import { isUuid } from "@/lib/ids";
 import type { TripInput } from "@/lib/trip-input";
 
-// 이 사용자가 접근할 수 있는 여행의 조건. 모든 쿼리가 이것을 거친다.
+// 이 사용자가 접근할 수 있는 여행의 조건. 여행·일정의 모든 쿼리가 이것을 거친다.
 // 공유(#15)는 이 조건만 "내 여행이거나 초대받은 여행"으로 바꾼다.
-function accessibleTrips(userId: string): SQL {
+export function accessibleTrips(userId: string): SQL {
   return eq(trips.userId, userId);
 }
 
