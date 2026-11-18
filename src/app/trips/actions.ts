@@ -9,8 +9,7 @@ import {
   type TripFields,
   type TripFormState,
 } from "@/lib/trip-input";
-
-const SAVE_FAILED = "저장하지 못했어요. 잠시 후 다시 시도해 주세요.";
+import { SAVE_FAILED } from "./messages";
 
 // FormData 를 통째로 넘기지 않고 필요한 필드만 문자열로 꺼낸다.
 function readTripFields(formData: FormData): TripFields {

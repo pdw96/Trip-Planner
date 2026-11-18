@@ -11,12 +11,10 @@ import {
 import type { ScheduleFields, ScheduleFormState } from "@/lib/schedule-input";
 import {
   dangerButtonClass,
+  inputClass,
   primaryButtonClass,
   secondaryButtonClass,
 } from "../styles";
-
-const inputClass =
-  "w-full rounded-xl border border-black/[.15] bg-transparent px-4 py-2.5 aria-[invalid=true]:border-red-600 dark:border-white/[.2]";
 
 export type DateOption = { value: string; label: string };
 

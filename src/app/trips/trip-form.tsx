@@ -5,10 +5,7 @@ import { useActionState, useLayoutEffect, useState } from "react";
 import type { CalendarRange } from "@/lib/calendar";
 import type { TripFields, TripFormState } from "@/lib/trip-input";
 import { DateRangePicker } from "./date-range-picker";
-import { primaryButtonClass, secondaryButtonClass } from "./styles";
-
-const inputClass =
-  "w-full rounded-xl border border-black/[.15] bg-transparent px-4 py-2.5 aria-[invalid=true]:border-red-600 dark:border-white/[.2]";
+import { inputClass, primaryButtonClass, secondaryButtonClass } from "./styles";
 
 type TripFormProps = {
   action: (prev: TripFormState, formData: FormData) => Promise<TripFormState>;

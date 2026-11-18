@@ -17,11 +17,10 @@ import {
   type ScheduleFormState,
 } from "@/lib/schedule-input";
 import { getCurrentUser } from "@/lib/session";
+import { SAVE_FAILED } from "./messages";
 
 // tripId·itemId·date 는 bind 로 오지만 클라이언트가 바꿀 수 있는 값이다.
 // 쿼리의 uuid 검사와 여행 접근 조건(userId 범위), 입력 검증의 날짜 규칙이 막는다.
-
-const SAVE_FAILED = "저장하지 못했어요. 잠시 후 다시 시도해 주세요.";
 
 // FormData 를 통째로 넘기지 않고 필요한 필드만 문자열로 꺼낸다. 추가는 날짜를 bind 값으로 받는다.
 function readScheduleFields(
@@ -100,10 +99,11 @@ export async function updateScheduleItemAction(
   if (!user) redirect("/");
 
   const values = readScheduleFields(formData, null);
-  const trip = await getTrip(user.id, tripId);
-  if (!trip) notFound();
-  const item = await getScheduleItem(user.id, tripId, itemId);
-  if (!item) notFound();
+  const [trip, item] = await Promise.all([
+    getTrip(user.id, tripId),
+    getScheduleItem(user.id, tripId, itemId),
+  ]);
+  if (!trip || !item) notFound();
   const parsed = parseScheduleInput(values, {
     startDate: trip.startDate,
     endDate: trip.endDate,

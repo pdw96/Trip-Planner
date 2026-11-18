@@ -1,11 +1,6 @@
 import { listScheduleItems } from "@/db/queries/schedule-items";
 import type { ScheduleItem, Trip } from "@/db/schema";
-import {
-  dateLabel,
-  displayTime,
-  groupSchedule,
-  tripDays,
-} from "@/lib/schedule";
+import { dateLabel, displayTime, groupSchedule } from "@/lib/schedule";
 import {
   AddScheduleItem,
   type DateOption,
@@ -27,9 +22,10 @@ export async function ScheduleSection({
 }) {
   const items = await listScheduleItems(userId, trip.id);
   const { days, outside } = groupSchedule(items, trip.startDate, trip.endDate);
-  const dayOptions: DateOption[] = tripDays(trip.startDate, trip.endDate).map(
-    (day) => ({ value: day.date, label: day.label }),
-  );
+  const dayOptions: DateOption[] = days.map(({ day }) => ({
+    value: day.date,
+    label: day.label,
+  }));
   const todayInTrip = today >= trip.startDate && today <= trip.endDate;
 
   function row(item: ScheduleItem, dateOptions: DateOption[]) {

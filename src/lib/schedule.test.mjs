@@ -129,3 +129,10 @@ test("mapsSearchUrl", () => {
     "https://www.google.com/maps/search/?api=1&query=%EC%98%A4%EC%82%AC%EC%B9%B4%20%EC%84%B1",
   );
 });
+
+test("tripDays ends at the last representable year", () => {
+  assert.deepEqual(
+    tripDays("9999-12-30", "9999-12-31").map((d) => d.date),
+    ["9999-12-30", "9999-12-31"],
+  );
+});

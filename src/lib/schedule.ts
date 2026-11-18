@@ -16,6 +16,7 @@ export type ScheduleGroups<T> = {
 };
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 function parts(date: string): [number, number, number] {
   const [year, month, day] = date.split("-").map(Number);
@@ -27,9 +28,9 @@ function toUtc(date: string): Date {
   return new Date(Date.UTC(year, month - 1, day));
 }
 
-function nextDate(date: string): string {
+function addDays(date: string, days: number): string {
   const [year, month, day] = parts(date);
-  return new Date(Date.UTC(year, month - 1, day + 1))
+  return new Date(Date.UTC(year, month - 1, day + days))
     .toISOString()
     .slice(0, 10);
 }
@@ -42,17 +43,20 @@ export function dateLabel(date: string, withYear: boolean): string {
 }
 
 // 여행 기간의 모든 날. label 은 "1일차 · 12월 3일 (목)".
+// 날짜 문자열끼리 비교하며 하루씩 더하면 9999-12-31 다음 날("+010000-…")이 더 작게 비교되어 끝나지 않으므로 일수로 센다.
 export function tripDays(startDate: string, endDate: string): TripDay[] {
-  const days: TripDay[] = [];
-  for (let date = startDate; date <= endDate; date = nextDate(date)) {
-    const dayNumber = days.length + 1;
-    days.push({
+  const count =
+    Math.round(
+      (toUtc(endDate).getTime() - toUtc(startDate).getTime()) / DAY_MS,
+    ) + 1;
+  return Array.from({ length: Math.max(count, 0) }, (_, i) => {
+    const date = addDays(startDate, i);
+    return {
       date,
-      dayNumber,
-      label: `${dayNumber}일차 · ${dateLabel(date, false)}`,
-    });
-  }
-  return days;
+      dayNumber: i + 1,
+      label: `${i + 1}일차 · ${dateLabel(date, false)}`,
+    };
+  });
 }
 
 // 날짜 → 시각 있는 것(시각 순) → 시각 없는 것 → 만든 순서 → id.

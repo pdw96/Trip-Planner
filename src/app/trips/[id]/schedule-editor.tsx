@@ -3,6 +3,7 @@
 import {
   createContext,
   use,
+  useEffect,
   useLayoutEffect,
   useOptimistic,
   useState,
@@ -10,6 +11,7 @@ import {
 } from "react";
 import { mapsSearchUrl } from "@/lib/schedule";
 import { EMPTY_SCHEDULE_FIELDS } from "@/lib/schedule-input";
+import { SAVE_FAILED } from "../messages";
 import {
   createScheduleItemAction,
   deleteScheduleItemAction,
@@ -31,7 +33,7 @@ export type RowItem = {
   done: boolean;
 };
 
-const SAVE_FAILED = "저장하지 못했어요. 잠시 후 다시 시도해 주세요.";
+const ERROR_VISIBLE_MS = 4000;
 
 // 입력칸은 화면 전체에서 하나만 열린다. 키: "add:<날짜>" 또는 "edit:<일정 id>".
 type OpenState = {
@@ -105,6 +107,13 @@ export function ScheduleItemRow({
   const [error, setError] = useState<string | null>(null);
   const [, startToggle] = useTransition();
   const [deleting, startDelete] = useTransition();
+
+  // 완료 저장 실패 문구는 잠깐만 보인다(연결이 돌아온 뒤에도 실패처럼 남지 않게).
+  useEffect(() => {
+    if (!error) return;
+    const timer = setTimeout(() => setError(null), ERROR_VISIBLE_MS);
+    return () => clearTimeout(timer);
+  }, [error]);
 
   // 누르면 바로 화면에 반영하고 저장한다. 실패하면 전환이 끝날 때 서버 값으로 돌아가고 문구를 보인다.
   function toggleDone() {
