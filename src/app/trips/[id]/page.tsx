@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/session";
 import { formatLongRange, todayInSeoul } from "@/lib/trip-dates";
 import { DeleteTripButton } from "../delete-trip-button";
 import { secondaryButtonClass } from "../styles";
+import { MapSection } from "./map-section";
 import { ScheduleSection } from "./schedule-section";
 
 export default function TripPage({ params }: PageProps<"/trips/[id]">) {
@@ -31,6 +32,7 @@ async function TripDetail({
   const { id } = await params;
   const trip = await getTrip(user.id, id);
   if (!trip) notFound();
+  const today = todayInSeoul();
 
   return (
     <article className="flex flex-col gap-8">
@@ -58,8 +60,14 @@ async function TripDetail({
           </p>
         )}
       </header>
-      <ScheduleSection userId={user.id} trip={trip} today={todayInSeoul()} />
-      {/* 장소(#13)·예산(#14)이 이 아래에 들어온다. */}
+      {/* 지도는 좌표 30일 갱신으로 Google 을 부를 수 있어 따로 기다린다(머리·일정이 먼저 보이게). */}
+      <Suspense
+        fallback={<p className="text-sm text-zinc-500">지도를 불러오는 중…</p>}
+      >
+        <MapSection userId={user.id} trip={trip} today={today} />
+      </Suspense>
+      <ScheduleSection userId={user.id} trip={trip} today={today} />
+      {/* 예산(#14)이 이 아래에 들어온다. */}
     </article>
   );
 }

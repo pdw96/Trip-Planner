@@ -15,6 +15,7 @@ import {
   primaryButtonClass,
   secondaryButtonClass,
 } from "../styles";
+import { CATEGORY_ICONS, type PlaceOption } from "./map-types";
 
 export type DateOption = { value: string; label: string };
 
@@ -26,6 +27,8 @@ type ScheduleItemFormProps = {
   initialValues: ScheduleFields;
   // 있으면 날짜 고르기를 보인다(고치기).
   dateOptions?: DateOption[];
+  // 이 여행의 장소(숙소 먼저). 있으면 장소 칸에서 고를 수 있다.
+  places: PlaceOption[];
   mode: "add" | "edit";
   onClose: () => void;
   // 고치기에서만 "삭제" 버튼.
@@ -52,6 +55,7 @@ function ScheduleItemFields({
   action,
   initialValues,
   dateOptions,
+  places,
   mode,
   onClose,
   onDelete,
@@ -144,21 +148,30 @@ function ScheduleItemFields({
           />
         )}
       </Field>
-      <Field
-        idPrefix={idPrefix}
-        label="장소 (선택)"
-        name="place"
-        error={errors.place}
-      >
-        {(props) => (
-          <input
-            {...props}
-            type="text"
-            defaultValue={values.place}
-            className={inputClass}
-          />
-        )}
-      </Field>
+      {places.length > 0 ? (
+        <PlaceField
+          idPrefix={idPrefix}
+          places={places}
+          values={values}
+          error={errors.place}
+        />
+      ) : (
+        <Field
+          idPrefix={idPrefix}
+          label="장소 (선택)"
+          name="place"
+          error={errors.place}
+        >
+          {(props) => (
+            <input
+              {...props}
+              type="text"
+              defaultValue={values.place}
+              className={inputClass}
+            />
+          )}
+        </Field>
+      )}
       <Field
         idPrefix={idPrefix}
         label="메모 (선택)"
@@ -198,6 +211,69 @@ function ScheduleItemFields({
         )}
       </div>
     </form>
+  );
+}
+
+// 장소 칸: 이 여행의 장소 중 고르기(맨 위 "직접 적기") + 직접 적기일 때만 보이는 글자 칸(§5.4).
+// 장소를 고르면 서버가 그 장소의 이름표를 place 글자로 저장하므로 글자 칸은 보내지 않는다.
+function PlaceField({
+  idPrefix,
+  places,
+  values,
+  error,
+}: {
+  idPrefix: string;
+  places: PlaceOption[];
+  values: ScheduleFields;
+  error: string | undefined;
+}) {
+  // 이어졌던 장소가 그 사이 지워졌으면 직접 적기로 연다(글자는 그대로 남아 있다).
+  const [placeId, setPlaceId] = useState(
+    places.some((place) => place.id === values.placeId) ? values.placeId : "",
+  );
+  const selectId = `${idPrefix}-placeId`;
+  const textId = `${idPrefix}-place`;
+  const errorId = `${idPrefix}-place-error`;
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={selectId} className="text-sm font-medium">
+        장소 (선택)
+      </label>
+      <select
+        id={selectId}
+        name="placeId"
+        value={placeId}
+        onChange={(event) => setPlaceId(event.target.value)}
+        aria-invalid={Boolean(error) && placeId !== ""}
+        aria-describedby={error && placeId !== "" ? errorId : undefined}
+        className={inputClass}
+      >
+        <option value="">직접 적기</option>
+        {places.map((place) => (
+          <option key={place.id} value={place.id}>
+            {CATEGORY_ICONS[place.category]} {place.label}
+          </option>
+        ))}
+      </select>
+      {placeId === "" && (
+        <input
+          id={textId}
+          name="place"
+          type="text"
+          defaultValue={values.place}
+          aria-label="장소 직접 적기"
+          placeholder="장소 이름"
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? errorId : undefined}
+          className={inputClass}
+        />
+      )}
+      {error && (
+        <p id={errorId} role="alert" className="text-sm text-red-600">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 
