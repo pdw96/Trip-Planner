@@ -16,7 +16,7 @@ import { type PanelDay, type PanelPlace, toCategory } from "./map-types";
 import { TripMapPanel } from "./trip-map-panel";
 
 // 여행 자세히 보기의 지도·가 볼 곳. 장소·기준점·일정으로 날마다 동선의 뼈대를 미리 만들어 패널에 넘긴다.
-// 구간 이동 정보(Google Routes)는 여기서 묻지 않는다. N일차 탭을 열 때 패널이 loadDayRouteAction 으로 묻는다(§5.3).
+// 구간 이동 정보(Google Routes)는 여기서 묻지 않는다. N일차 탭을 열 때 패널이 Route Handler(./day-route)로 묻는다(§5.3).
 // 호출하는 쪽이 이미 getTrip 으로 이 사용자의 여행임을 확인했다. 쿼리들도 같은 접근 조건을 다시 건다.
 // 좌표 30일 갱신(§3.2, §5.2) 때문에 Google 을 부를 수 있으므로, 페이지는 이 칸을 따로 <Suspense> 로 감싼다.
 export async function MapSection({
@@ -72,7 +72,7 @@ export async function MapSection({
     ]),
   );
 
-  // 동선 순서는 #12 정렬(listScheduleItems 순서) 그대로. loadDayRouteAction 과 같은 규칙이다.
+  // 동선 순서는 #12 정렬(listScheduleItems 순서) 그대로. day-route-loader 와 같은 규칙이다.
   const panelDays: PanelDay[] = days.map((day) => {
     const stops: DayStop[] = itemRows
       .filter((item) => item.date === day.date && item.placeId !== null)

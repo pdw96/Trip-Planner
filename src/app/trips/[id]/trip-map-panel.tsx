@@ -6,16 +6,14 @@ import {
   useId,
   useLayoutEffect,
   useMemo,
-  useOptimistic,
   useRef,
   useState,
-  useTransition,
 } from "react";
 import { formatDistance, sortByDistance } from "@/lib/geo";
 import { directionsUrl, legText } from "@/lib/leg-display";
+import type { DayRouteResult } from "../day-route-loader";
 import { SAVE_FAILED } from "../messages";
 import { setTripBaseAction } from "../place-actions";
-import { type DayRouteResult, loadDayRouteAction } from "../route-actions";
 import { inputClass } from "../styles";
 import { DayLegs, type LegRow } from "./day-legs";
 import {
@@ -30,8 +28,9 @@ import { PlaceRow } from "./place-row";
 import { type MapLine, type MapPin, TripMapCanvas } from "./trip-map-canvas";
 
 // 여행 화면의 지도 칸과 "가 볼 곳"(§5.1). 탭([전체] + N일차), 기준점, 구간 목록, 장소 목록을 묶는다.
-// 데이터는 map-section(서버)이 준비한다. 구간 이동 정보는 N일차 탭을 열 때만 loadDayRouteAction 으로 묻고
+// 데이터는 map-section(서버)이 준비한다. 구간 이동 정보는 N일차 탭을 열 때만 Route Handler(./day-route)로 묻고
 // ([전체]·열지 않은 날은 묻지 않는다, §5.3), 기다리는 동안 서버가 넘긴 동선으로 직선 거리와 점선을 보인다.
+// Server Action 으로 묻지 않는 까닭: Server Action 은 하나씩 차례로 보내져 저장이 Google 응답을 기다린다(#39).
 
 type Maps = { browserKey: string; mapId: string };
 
@@ -49,6 +48,9 @@ type Props = {
 
 const ERROR_VISIBLE_MS = 4000;
 const EMPTY_ROUTE: DayRouteResult = { ok: true, legs: [], notices: [] };
+
+// N일차 기준점으로 고른 값. 저장 중이거나, 저장됐지만 서버가 새로 그린 값이 아직 오지 않은 동안 이 값을 보인다.
+type BaseChoice = { value: string | null; saving: boolean };
 
 export function TripMapPanel(props: Props) {
   const body = <PanelBody {...props} />;
@@ -76,6 +78,11 @@ function PanelBody({
     null,
   );
   const [editingId, setEditingId] = useState<string | null>(null);
+  // 날짜별로 고른 기준점. 고르기 칸은 탭마다 새로 그려지므로(key) 고른 값은 여기 둔다(#39).
+  const [baseChoices, setBaseChoices] = useState<Record<string, BaseChoice>>(
+    {},
+  );
+  const [baseError, setBaseError] = useState<{ date: string } | null>(null);
 
   // 화면을 떠날 때 열린 고치기 칸과 강조를 닫는다(Activity 보관, docs/status.md).
   useLayoutEffect(
@@ -90,6 +97,53 @@ function PanelBody({
     () => new Map(places.map((p) => [p.id, p])),
     [places],
   );
+  // 저장이 끝난 고른 값은 서버 값이 따라오면 내려놓는다. 그 날이 없어졌거나 고른 장소가 지워졌어도 내려놓는다.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 서버 값이 저장보다 먼저 와도 저장이 끝난 뒤 다시 보도록 baseChoices 도 지켜본다
+  useEffect(() => {
+    setBaseChoices((prev) => {
+      let next: Record<string, BaseChoice> | null = null;
+      for (const [date, choice] of Object.entries(prev)) {
+        if (choice.saving) continue;
+        const serverBase = days.find((d) => d.date === date)?.baseId;
+        const placeGone =
+          choice.value !== null && !placesById.has(choice.value);
+        if (
+          serverBase === undefined ||
+          serverBase === choice.value ||
+          placeGone
+        ) {
+          next ??= { ...prev };
+          delete next[date];
+        }
+      }
+      return next ?? prev;
+    });
+  }, [days, placesById, baseChoices]);
+
+  useEffect(() => {
+    if (!baseError) return;
+    const timer = setTimeout(() => setBaseError(null), ERROR_VISIBLE_MS);
+    return () => clearTimeout(timer);
+  }, [baseError]);
+
+  // 바꾸면 바로 보이고 저장한다. 실패하면 서버 값으로 돌아가고 문구를 보인다.
+  // 저장되면 화면이 새로 그려지고, 동선 모양이 바뀌었으면 useDayRoute 가 구간 정보를 다시 묻는다.
+  async function chooseBase(date: string, value: string | null) {
+    setBaseError(null);
+    setBaseChoices((prev) => ({ ...prev, [date]: { value, saving: true } }));
+    const ok = await setTripBaseAction(tripId, date, value).then(
+      (result) => result.ok,
+      () => false,
+    );
+    setBaseChoices((prev) => {
+      const next = { ...prev };
+      if (ok) next[date] = { value, saving: false };
+      else delete next[date];
+      return next;
+    });
+    if (!ok) setBaseError({ date });
+  }
+
   // 여행 날짜가 바뀌어 열린 날이 사라졌으면 [전체]로 본다.
   const day = tab === "all" ? null : (days.find((d) => d.date === tab) ?? null);
   const { result: routeResult, reload } = useDayRoute(tripId, day);
@@ -170,9 +224,16 @@ function PanelBody({
             {places.length > 0 && (
               <DayBasePicker
                 key={day.date}
-                tripId={tripId}
                 day={day}
                 places={places}
+                value={
+                  baseChoices[day.date]
+                    ? baseChoices[day.date].value
+                    : day.baseId
+                }
+                saving={baseChoices[day.date]?.saving ?? false}
+                error={baseError?.date === day.date ? SAVE_FAILED : null}
+                onChange={(value) => void chooseBase(day.date, value)}
               />
             )}
             {/* 위치 정보 문구는 좌표가 없어 빠진 장소가 있을 때만. 기준점만 이어진 날도 번호 장소가 없으므로
@@ -247,6 +308,29 @@ function routeSignature(day: PanelDay): string {
   return `${day.routeBaseId}|${day.legs.map((l) => `${l.fromId}>${l.toId}@${l.timing}`).join(",")}`;
 }
 
+// 연결이 끊기거나 서버가 실패(401·404·500)를 돌려줘도 화면을 깨지 않고 "불러오지 못했어요"로 둔다.
+async function fetchDayRoute(
+  tripId: string,
+  date: string,
+  signal: AbortSignal,
+): Promise<DayRouteResult> {
+  try {
+    const response = await fetch(
+      `/trips/${encodeURIComponent(tripId)}/day-route?date=${encodeURIComponent(date)}`,
+      { cache: "no-store", signal },
+    );
+    if (!response.ok) return { ok: false };
+    const body = (await response.json()) as DayRouteResult;
+    return body?.ok === true &&
+      Array.isArray(body.legs) &&
+      Array.isArray(body.notices)
+      ? body
+      : { ok: false };
+  } catch {
+    return { ok: false };
+  }
+}
+
 // N일차 탭이 열려 있을 때만 묻는다. 결과는 화면 상태로만 두고 저장하지 않는다.
 // result 가 null 이면 기다리는 중이다.
 function useDayRoute(
@@ -254,7 +338,6 @@ function useDayRoute(
   day: PanelDay | null,
 ): { result: DayRouteResult | null; reload: () => void } {
   const [route, setRoute] = useState<RouteState | null>(null);
-  const [, startLoading] = useTransition();
   // 마지막으로 보낸 요청. 늦게 온 이전 요청의 결과는 버린다.
   const requestRef = useRef<{
     date: string;
@@ -262,27 +345,29 @@ function useDayRoute(
     seq: number;
   } | null>(null);
   const seqRef = useRef(0);
+  // 아직 답이 오지 않은 요청. 새로 묻거나 탭을 바꾸거나 화면을 떠나면 끊는다.
+  const inFlightRef = useRef<AbortController | null>(null);
 
   const date = day?.date ?? null;
   const signature = day ? routeSignature(day) : "";
   const hasLegs = (day?.legs.length ?? 0) > 0;
 
   function load(date: string, signature: string) {
+    inFlightRef.current?.abort();
+    const controller = new AbortController();
+    inFlightRef.current = controller;
     const seq = ++seqRef.current;
     requestRef.current = { date, signature, seq };
     setRoute(null);
-    startLoading(async () => {
-      // 연결이 끊기는 등 요청 자체가 실패해도 화면을 깨지 않고 "불러오지 못했어요"로 둔다.
-      const result = await loadDayRouteAction(tripId, date).catch(
-        (): DayRouteResult => ({ ok: false }),
-      );
-      if (requestRef.current?.seq !== seq) return;
+    void fetchDayRoute(tripId, date, controller.signal).then((result) => {
+      if (controller.signal.aborted || requestRef.current?.seq !== seq) return;
+      inFlightRef.current = null;
       setRoute({ date, signature, result });
     });
   }
 
   // 탭을 열 때(처음 열린 오늘 탭 포함), 그리고 열린 날의 동선이 바뀌었을 때. 구간이 없는 날은 묻지 않는다.
-  // 화면을 떠났다 돌아와 effect 가 다시 돌아도, 같은 날·같은 동선을 이미 물었으면 다시 묻지 않는다.
+  // 화면을 떠났다 돌아와 effect 가 다시 돌아도, 같은 날·같은 동선을 이미 받아 두었으면 다시 묻지 않는다.
   // biome-ignore lint/correctness/useExhaustiveDependencies: 날짜·동선이 바뀔 때만 묻는다(load 는 매 렌더 새 함수)
   useEffect(() => {
     if (date === null || !hasLegs) {
@@ -290,10 +375,17 @@ function useDayRoute(
       return;
     }
     const current = requestRef.current;
-    if (current && current.date === date && current.signature === signature) {
-      return;
+    if (!current || current.date !== date || current.signature !== signature) {
+      load(date, signature);
     }
-    load(date, signature);
+    return () => {
+      // 탭을 바꾸거나 화면을 떠나면 답을 기다리던 요청을 끊고, 돌아왔을 때 다시 묻도록 기록을 지운다.
+      if (inFlightRef.current) {
+        inFlightRef.current.abort();
+        inFlightRef.current = null;
+        requestRef.current = null;
+      }
+    };
   }, [date, signature, hasLegs]);
 
   let result: DayRouteResult | null = null;
@@ -542,40 +634,23 @@ function GoogleTermsLine() {
 
 const selectClass = `${inputClass} w-auto max-w-full py-1.5 text-sm`;
 
-// N일차 기준점. 바꾸면 바로 보이고 저장한다. 실패하면 전환이 끝날 때 서버 값으로 돌아가고 문구를 보인다.
-// 저장되면 화면이 새로 그려지고, 동선 모양이 바뀌었으면 useDayRoute 가 구간 정보를 다시 묻는다.
+// N일차 기준점. 고른 값·저장 중·실패 문구는 패널이 날짜별로 가진다(chooseBase).
 function DayBasePicker({
-  tripId,
   day,
   places,
+  value,
+  saving,
+  error,
+  onChange,
 }: {
-  tripId: string;
   day: PanelDay;
   places: PanelPlace[];
+  value: string | null;
+  saving: boolean;
+  error: string | null;
+  onChange: (placeId: string | null) => void;
 }) {
-  const [baseId, setOptimisticBase] = useOptimistic(day.baseId);
-  const [saving, startSaving] = useTransition();
-  const [error, setError] = useState<string | null>(null);
   const id = useId();
-
-  useEffect(() => {
-    if (!error) return;
-    const timer = setTimeout(() => setError(null), ERROR_VISIBLE_MS);
-    return () => clearTimeout(timer);
-  }, [error]);
-
-  function onChange(event: React.ChangeEvent<HTMLSelectElement>) {
-    const next = event.target.value || null;
-    setError(null);
-    startSaving(async () => {
-      setOptimisticBase(next);
-      const ok = await setTripBaseAction(tripId, day.date, next).then(
-        (result) => result.ok,
-        () => false,
-      );
-      if (!ok) setError(SAVE_FAILED);
-    });
-  }
 
   return (
     <div className="flex flex-col gap-1">
@@ -585,8 +660,8 @@ function DayBasePicker({
         </label>
         <select
           id={id}
-          value={baseId ?? ""}
-          onChange={onChange}
+          value={value ?? ""}
+          onChange={(event) => onChange(event.target.value || null)}
           disabled={saving}
           className={selectClass}
         >

@@ -1,6 +1,4 @@
-"use server";
-
-import { redirect } from "next/navigation";
+import "server-only";
 import { listPlaces } from "@/db/queries/places";
 import { listScheduleItems } from "@/db/queries/schedule-items";
 import { listTripBases } from "@/db/queries/trip-bases";
@@ -27,10 +25,12 @@ import {
   type Notice,
 } from "@/lib/leg-display";
 import { ROUTES_MAX_AHEAD_DAYS, requestInstant } from "@/lib/route-time";
-import { getCurrentUser } from "@/lib/session";
 import { isValidIsoDate } from "@/lib/trip-input";
 
-// tripId·date 는 인자로 오지만 클라이언트가 바꿀 수 있는 값이다.
+// 하루 동선의 구간 이동 정보를 묻는다. 부르는 곳은 Route Handler(./[id]/day-route/route.ts) 하나다.
+// Server Action 으로 두면 Next 가 클라이언트의 Server Action 을 하나씩 차례로 보내므로,
+// Google 을 기다리는 동안 완료 체크·기준점·일정 저장이 뒤에서 기다린다(브라우저 확인 #39).
+// userId 는 부르는 쪽이 getCurrentUser() 로 확인한 값이다. tripId·date 는 클라이언트가 바꿀 수 있는 값이다.
 // 쿼리의 uuid 검사와 여행 접근 조건(userId 범위), 날짜 검사가 막는다.
 // 인자는 tripId·date 뿐이다(§5.7): 구간은 서버가 이 사용자의 여행 장소로만 만들고,
 // 클라이언트가 좌표나 장소 id 쌍을 보내 임의 구간을 묻게 하지 않는다(서버 키로 남의 좌표 조회 막기).
@@ -121,27 +121,25 @@ async function resolveLeg(
   return decideLeg(null, walk.ok ? walk.summary : null, rule);
 }
 
-export async function loadDayRouteAction(
+// null 은 찾을 수 없음(id·날짜 형식이 틀림, 없는 여행, 남의 여행, 여행 기간 밖 날짜)이다. 셋을 구별하지 않는다.
+// DB 조회가 실패하면 { ok: false }. Google 호출 실패는 구간마다 failed 로 담긴다.
+export async function loadDayRoute(
+  userId: string,
   tripId: string,
   date: string,
-): Promise<DayRouteResult> {
-  const user = await getCurrentUser();
-  if (!user) redirect("/");
-
-  if (typeof date !== "string" || !isValidIsoDate(date)) return { ok: false };
+): Promise<DayRouteResult | null> {
+  if (!isValidIsoDate(date)) return null;
 
   let placeRows: Awaited<ReturnType<typeof listPlaces>>;
   let baseRows: Awaited<ReturnType<typeof listTripBases>>;
   let itemRows: Awaited<ReturnType<typeof listScheduleItems>>;
   try {
-    const trip = await getTrip(user.id, tripId);
-    if (!trip || date < trip.startDate || date > trip.endDate) {
-      return { ok: false };
-    }
+    const trip = await getTrip(userId, tripId);
+    if (!trip || date < trip.startDate || date > trip.endDate) return null;
     [placeRows, baseRows, itemRows] = await Promise.all([
-      listPlaces(user.id, trip.id),
-      listTripBases(user.id, trip.id),
-      listScheduleItems(user.id, trip.id),
+      listPlaces(userId, trip.id),
+      listTripBases(userId, trip.id),
+      listScheduleItems(userId, trip.id),
     ]);
   } catch {
     return { ok: false };
