@@ -3,14 +3,18 @@ import {
   boolean,
   check,
   date,
+  doublePrecision,
   index,
   pgTable,
+  primaryKey,
   text,
   time,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
+// Google 값은 place id 와 좌표(30일)만 저장(§3.2).
 // Drizzle 스키마. 테이블 변경 후 `npm run db:generate` 로 마이그레이션을 만들고, CLAUDE.md '작업 흐름'의 마이그레이션 PR 순서를 따릅니다.
 
 // --- 인증 (Better Auth) ---
@@ -120,6 +124,45 @@ export const trips = pgTable(
 export type Trip = typeof trips.$inferSelect;
 export type NewTrip = typeof trips.$inferInsert;
 
+// --- 장소 ---
+// Google 값은 google_place_id(무기한)와 lat·lng(30일, coords_fetched_at 기준)만 저장한다. label 은 사용자가 확인한 이름표다.
+
+export const places = pgTable(
+  "places",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tripId: uuid("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    googlePlaceId: text("google_place_id").notNull(),
+    label: text("label").notNull(),
+    lat: doublePrecision("lat"),
+    lng: doublePrecision("lng"),
+    coordsFetchedAt: timestamp("coords_fetched_at", {
+      withTimezone: true,
+    }).notNull(),
+    category: text("category").notNull(),
+    memo: text("memo"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("places_trip_google_place_idx").on(t.tripId, t.googlePlaceId),
+    index("places_trip_id_idx").on(t.tripId),
+    check(
+      "places_category_check",
+      sql`${t.category} in ('lodging', 'sight', 'food', 'cafe', 'etc')`,
+    ),
+  ],
+);
+
+export type Place = typeof places.$inferSelect;
+
 // --- 일정 ---
 // 여행 기간 검사 제약은 걸지 않는다. 여행 날짜를 줄여도 일정을 남겨 "여행 기간 밖 일정"으로 보이기 위해서다.
 
@@ -135,6 +178,9 @@ export const scheduleItems = pgTable(
     time: time("time"),
     title: text("title").notNull(),
     place: text("place"),
+    placeId: uuid("place_id").references(() => places.id, {
+      onDelete: "set null",
+    }),
     memo: text("memo"),
     done: boolean("done").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -149,3 +195,29 @@ export const scheduleItems = pgTable(
 );
 
 export type ScheduleItem = typeof scheduleItems.$inferSelect;
+
+// --- 기준 숙소 ---
+// 여행의 날짜별 기준점(숙소 장소). 장소가 지워지면 행도 함께 지운다.
+
+export const tripBases = pgTable(
+  "trip_bases",
+  {
+    tripId: uuid("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    startDate: date("start_date").notNull(),
+    placeId: uuid("place_id").references(() => places.id, {
+      onDelete: "cascade",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [primaryKey({ columns: [t.tripId, t.startDate] })],
+);
+
+export type TripBase = typeof tripBases.$inferSelect;

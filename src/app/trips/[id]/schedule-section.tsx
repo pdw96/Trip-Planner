@@ -1,6 +1,8 @@
+import { listPlaces } from "@/db/queries/places";
 import { listScheduleItems } from "@/db/queries/schedule-items";
 import type { ScheduleItem, Trip } from "@/db/schema";
 import { dateLabel, displayTime, groupSchedule } from "@/lib/schedule";
+import { lodgingFirst, type PlaceOption, toCategory } from "./map-types";
 import {
   AddScheduleItem,
   type DateOption,
@@ -20,7 +22,19 @@ export async function ScheduleSection({
   trip: Trip;
   today: string;
 }) {
-  const items = await listScheduleItems(userId, trip.id);
+  const [items, placeRows] = await Promise.all([
+    listScheduleItems(userId, trip.id),
+    listPlaces(userId, trip.id),
+  ]);
+  // 일정 양식의 장소 고르기(숙소 먼저)와 이어진 장소의 링크에 쓴다.
+  const placeOptions: PlaceOption[] = lodgingFirst(
+    placeRows.map((p) => ({
+      id: p.id,
+      label: p.label,
+      category: toCategory(p.category),
+      googlePlaceId: p.googlePlaceId,
+    })),
+  );
   const { days, outside } = groupSchedule(items, trip.startDate, trip.endDate);
   const dayOptions: DateOption[] = days.map(({ day }) => ({
     value: day.date,
@@ -35,6 +49,7 @@ export async function ScheduleSection({
       time: displayTime(item.time),
       title: item.title,
       place: item.place,
+      placeId: item.placeId,
       memo: item.memo,
       done: item.done,
     };
@@ -63,7 +78,7 @@ export async function ScheduleSection({
           </a>
         )}
       </div>
-      <ScheduleEditorProvider>
+      <ScheduleEditorProvider places={placeOptions}>
         {days.map(({ day, items: dayItems }) => (
           <section
             key={day.date}

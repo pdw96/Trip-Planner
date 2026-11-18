@@ -13,9 +13,15 @@
 | #21 | #25 | 링크 미리 불러오기(런타임 prerender)가 세션 쿼리를 끊어 Better Auth 가 토큰이 담긴 ERROR 로그를 남김. `getCurrentUser()` 에 `connection()` |
 | #12 | #27 | 여행별 날짜 일정표(`schedule_items`, 마이그레이션 0002). 시각·제목·장소(글자, Google 지도 검색 새 탭)·메모·완료, 그 자리 추가·고치기, 여행 기간 밖 일정 따로 모음. 설계 `docs/superpowers/specs/2026-11-18-trip-schedule-design.md` |
 
+## 진행 중
+
+- **#13 가 볼 장소·지도·동선** — PR #31 (브랜치 `claude/determined-sagan-g4f8fw`, draft). 설계 승인됨 `docs/superpowers/specs/2026-11-18-trip-places-map-design.md`, 계획 `docs/superpowers/plans/2026-11-18-trip-places-map.md`. 다음: 새 세션에서 그 브랜치를 받아 **서브에이전트 방식**(superpowers:subagent-driven-development)으로 계획 Task 1 부터. 구현 커밋은 PR #31 에 이어서 올린다.
+- Google 키(사용자가 만들어 둠): 서버 키는 클라우드 환경 Network secret 두 개(`routes.googleapis.com`, `places.googleapis.com`, 머리글 `X-Goog-Api-Key`)로 프록시가 넣는다. 개발용 브라우저 키·지도 ID 는 클라우드 환경 변수 `NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY`·`NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID`. 프로젝트 하루 할당량: 지도 로드 300, Places 300. 운영 브라우저 키·Vercel 환경 변수는 아직(계획 Task 12).
+- Google 약관: DB 에 저장하는 Google 값은 place id(무기한)와 좌표(30일)뿐. 경로 정보·이름·주소·나라·시간대는 저장하지 않는다(설계 §3.2).
+
 ## 다음 할 일
 
-사용자가 열린 이슈에서 고른다. 추천은 #13 (사용자가 #12 설계 때 지도 연동·동선을 원했고, #13 에서 장소 목록과 함께 설계하기로 했다).
+#13 이 끝나면 사용자가 열린 이슈에서 고른다.
 
 - 기능: #13 가 볼 장소·맛집, #14 예산·지출, #15 지인과 공유
 - 개선: #22 단위 시험을 CI 에서, #23 달력 키보드 이동, #24 자잘한 개선 모음

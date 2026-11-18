@@ -6,6 +6,7 @@ export type ScheduleFields = {
   time: string;
   title: string;
   place: string;
+  placeId: string; // 빈 값 = 직접 적기
   memo: string;
 };
 
@@ -14,6 +15,7 @@ export type ScheduleInput = {
   time: string | null;
   title: string;
   place: string | null;
+  placeId: string | null;
   memo: string | null;
 };
 
@@ -36,6 +38,7 @@ export const EMPTY_SCHEDULE_FIELDS: ScheduleFields = {
   time: "",
   title: "",
   place: "",
+  placeId: "",
   memo: "",
 };
 
@@ -48,6 +51,9 @@ export type AllowedDates = {
 const TITLE_MAX = 100;
 const PLACE_MAX = 200;
 const MEMO_MAX = 2000;
+// ids.ts 의 isUuid 와 같은 형식. 순수 모듈 규칙 때문에 import 하지 않고 여기 둔다.
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 // 글자 수는 코드 포인트 기준이다 (이모지 하나 = 1자).
@@ -83,6 +89,7 @@ export function parseScheduleInput(
   const time = raw.time.trim();
   const title = raw.title.trim();
   const place = raw.place.trim();
+  const placeId = raw.placeId.trim();
   const memo = raw.memo.trim();
 
   const errors: ScheduleFieldErrors = {};
@@ -96,6 +103,9 @@ export function parseScheduleInput(
   if (titleError) errors.title = titleError;
   const placeError = tooLong(place, PLACE_MAX);
   if (placeError) errors.place = placeError;
+  if (placeId !== "" && !UUID_PATTERN.test(placeId) && !errors.place) {
+    errors.place = "장소를 다시 골라 주세요.";
+  }
   const memoError = tooLong(memo, MEMO_MAX);
   if (memoError) errors.memo = memoError;
 
@@ -107,6 +117,7 @@ export function parseScheduleInput(
       time: time || null,
       title,
       place: place || null,
+      placeId: placeId || null,
       memo: memo || null,
     },
   };

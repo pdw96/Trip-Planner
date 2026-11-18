@@ -9,6 +9,7 @@ import {
   useState,
   useTransition,
 } from "react";
+import { placeUrl } from "@/lib/leg-display";
 import { mapsSearchUrl } from "@/lib/schedule";
 import {
   EMPTY_SCHEDULE_FIELDS,
@@ -21,6 +22,7 @@ import {
   setScheduleItemDoneAction,
   updateScheduleItemAction,
 } from "../schedule-actions";
+import type { PlaceOption } from "./map-types";
 import { type DateOption, ScheduleItemForm } from "./schedule-item-form";
 
 export type { DateOption };
@@ -32,6 +34,7 @@ export type RowItem = {
   time: string;
   title: string;
   place: string | null;
+  placeId: string | null;
   memo: string | null;
   done: boolean;
 };
@@ -39,9 +42,11 @@ export type RowItem = {
 const ERROR_VISIBLE_MS = 4000;
 
 // 입력칸은 화면 전체에서 하나만 열린다. 키: "add:<날짜>" 또는 "edit:<일정 id>".
+// places: 이 여행의 장소(숙소 먼저). 양식의 장소 고르기와 이어진 장소의 링크에 쓴다.
 type OpenState = {
   openKey: string | null;
   setOpenKey: React.Dispatch<React.SetStateAction<string | null>>;
+  places: PlaceOption[];
 };
 
 const OpenContext = createContext<OpenState | null>(null);
@@ -55,13 +60,19 @@ function useOpen(): OpenState {
 // Next 는 지나온 화면을 숨겨 보관(Activity)하므로, 화면을 떠날 때 열린 입력칸을 닫는다.
 // (그대로 두면 다음 방문에 쓰다 만 입력칸이나 지난 오류 문구가 남는다.)
 export function ScheduleEditorProvider({
+  places,
   children,
 }: {
+  places: PlaceOption[];
   children: React.ReactNode;
 }) {
   const [openKey, setOpenKey] = useState<string | null>(null);
   useLayoutEffect(() => () => setOpenKey(null), []);
-  return <OpenContext value={{ openKey, setOpenKey }}>{children}</OpenContext>;
+  return (
+    <OpenContext value={{ openKey, setOpenKey, places }}>
+      {children}
+    </OpenContext>
+  );
 }
 
 export function AddScheduleItem({
@@ -71,7 +82,7 @@ export function AddScheduleItem({
   tripId: string;
   date: string;
 }) {
-  const { openKey, setOpenKey } = useOpen();
+  const { openKey, setOpenKey, places } = useOpen();
   const key = `add:${date}`;
 
   if (openKey !== key) {
@@ -90,6 +101,7 @@ export function AddScheduleItem({
       mode="add"
       action={createScheduleItemAction.bind(null, tripId, date)}
       initialValues={{ ...EMPTY_SCHEDULE_FIELDS, date }}
+      places={places}
       onClose={() => setOpenKey(null)}
     />
   );
@@ -104,7 +116,7 @@ export function ScheduleItemRow({
   item: RowItem;
   dateOptions: DateOption[];
 }) {
-  const { openKey, setOpenKey } = useOpen();
+  const { openKey, setOpenKey, places } = useOpen();
   const key = `edit:${item.id}`;
   const [done, setOptimisticDone] = useOptimistic(item.done);
   const [error, setError] = useState<string | null>(null);
@@ -170,9 +182,11 @@ export function ScheduleItemRow({
             time: item.time,
             title: item.title,
             place: item.place ?? "",
+            placeId: item.placeId ?? "",
             memo: item.memo ?? "",
           }}
           dateOptions={dateOptions}
+          places={places}
           onClose={() =>
             setOpenKey((current) => (current === key ? null : current))
           }
@@ -182,6 +196,17 @@ export function ScheduleItemRow({
       </li>
     );
   }
+
+  // 이어진 장소가 목록에 있으면 그 장소의 Google 지도 링크(장소 id 포함), 아니면 글자로 검색.
+  const linkedPlace =
+    item.placeId === null
+      ? undefined
+      : places.find((place) => place.id === item.placeId);
+  const placeHref = linkedPlace
+    ? placeUrl(linkedPlace)
+    : item.place
+      ? mapsSearchUrl(item.place)
+      : null;
 
   return (
     <li className="flex items-start gap-3 py-2">
@@ -198,9 +223,9 @@ export function ScheduleItemRow({
         >
           {item.title}
         </button>
-        {item.place && (
+        {item.place && placeHref && (
           <a
-            href={mapsSearchUrl(item.place)}
+            href={placeHref}
             target="_blank"
             rel="noopener noreferrer"
             className="self-start text-sm text-zinc-600 break-words hover:underline dark:text-zinc-400"

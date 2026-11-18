@@ -8,6 +8,7 @@ const valid = {
   time: "09:30",
   title: "박물관",
   place: "",
+  placeId: "",
   memo: "",
 };
 
@@ -27,6 +28,7 @@ test("empty fields are all blank", () => {
     time: "",
     title: "",
     place: "",
+    placeId: "",
     memo: "",
   });
 });
@@ -39,6 +41,7 @@ test("accepts valid input", () => {
       time: "09:30",
       title: "박물관",
       place: null,
+      placeId: null,
       memo: null,
     },
   });
@@ -56,6 +59,7 @@ test("trims and nulls optional fields", () => {
       time: null,
       title: "a",
       place: "역",
+      placeId: null,
       memo: null,
     },
   });
@@ -128,4 +132,17 @@ test("collects multiple errors", () => {
   const errors = errorsOf({ ...valid, title: "", time: "25:00" });
   assert.ok(errors.title);
   assert.ok(errors.time);
+});
+
+test("placeId: empty becomes null, uuid is kept, others are rejected", () => {
+  const id = "123e4567-e89b-12d3-a456-426614174000";
+  assert.equal(parseScheduleInput(valid, range).value.placeId, null);
+  assert.equal(
+    parseScheduleInput({ ...valid, placeId: id }, range).value.placeId,
+    id,
+  );
+  assert.equal(
+    errorsOf({ ...valid, placeId: "not-a-uuid" }).place,
+    "장소를 다시 골라 주세요.",
+  );
 });
