@@ -200,3 +200,39 @@ test("가운데의 base 와 같은 stop 은 번호가 남는다", () => {
   );
   assert.equal(r.legs.length, 4);
 });
+
+test("같은 장소가 이어지면 들어오는 구간은 첫 시각, 나가는 구간은 마지막 시각을 쓴다", () => {
+  const r = buildDayRoute(
+    [
+      { placeId: "B", time: "09:00" },
+      { placeId: "B", time: "11:00" },
+      { placeId: "C", time: null },
+    ],
+    "A",
+    places,
+    dist,
+  );
+  assert.deepEqual(summary(r), [
+    "A>B arrival 09:00",
+    "B>C departure 11:00",
+    "C>A departure 10:00",
+  ]);
+});
+
+test("합친 stop 중 나중 것만 시각이 있으면 그 시각이 도착·출발 모두에 쓰인다", () => {
+  const r = buildDayRoute(
+    [
+      { placeId: "B", time: null },
+      { placeId: "B", time: "11:00" },
+      { placeId: "C", time: null },
+    ],
+    "A",
+    places,
+    dist,
+  );
+  assert.deepEqual(summary(r), [
+    "A>B arrival 11:00",
+    "B>C departure 11:00",
+    "C>A departure 10:00",
+  ]);
+});
