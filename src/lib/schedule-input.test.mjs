@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { EMPTY_SCHEDULE_FIELDS, parseScheduleInput } from "./schedule-input.ts";
+import { PLACE_CATEGORIES } from "./place-input.ts";
+import {
+  EMPTY_SCHEDULE_FIELDS,
+  parseScheduleInput,
+  SCHEDULE_PLACE_CATEGORIES,
+} from "./schedule-input.ts";
 
 const range = { startDate: "2026-12-03", endDate: "2026-12-05" };
 const valid = {
@@ -10,6 +15,15 @@ const valid = {
   place: "",
   placeId: "",
   memo: "",
+  googlePlaceId: "",
+  googleLabel: "",
+  googleCategory: "",
+};
+
+const googlePick = {
+  googlePlaceId: "ChIJabc",
+  googleLabel: "시부야 스카이",
+  googleCategory: "sight",
 };
 
 function errorsOf(raw, allowed = range) {
@@ -30,6 +44,9 @@ test("empty fields are all blank", () => {
     place: "",
     placeId: "",
     memo: "",
+    googlePlaceId: "",
+    googleLabel: "",
+    googleCategory: "",
   });
 });
 
@@ -43,6 +60,7 @@ test("accepts valid input", () => {
       place: null,
       placeId: null,
       memo: null,
+      google: null,
     },
   });
 });
@@ -61,15 +79,66 @@ test("trims and nulls optional fields", () => {
       place: "역",
       placeId: null,
       memo: null,
+      google: null,
     },
   });
 });
 
-test("requires title", () => {
+test("title or place is required", () => {
   assert.equal(
     errorsOf({ ...valid, title: "   " }).title,
-    "제목을 입력해 주세요.",
+    "제목이나 장소를 적어 주세요.",
   );
+});
+
+test("title is optional when a place is given", () => {
+  const id = "123e4567-e89b-12d3-a456-426614174000";
+  assert.equal(
+    parseScheduleInput({ ...valid, title: "", place: "역" }, range).value.title,
+    null,
+  );
+  assert.equal(isOk({ ...valid, title: "", placeId: id }), true);
+  assert.equal(isOk({ ...valid, title: "", ...googlePick }), true);
+});
+
+test("google pick wins over placeId and place text", () => {
+  const result = parseScheduleInput(
+    {
+      ...valid,
+      placeId: "123e4567-e89b-12d3-a456-426614174000",
+      place: "x".repeat(300),
+      googlePlaceId: " ChIJabc ",
+      googleLabel: " 시부야 스카이 ",
+      googleCategory: "sight",
+    },
+    range,
+  );
+  assert.deepEqual(result.value.google, {
+    googlePlaceId: "ChIJabc",
+    label: "시부야 스카이",
+    category: "sight",
+  });
+  assert.equal(result.value.placeId, null);
+  assert.equal(result.value.place, null);
+});
+
+test("rejects a bad google pick", () => {
+  for (const bad of [
+    { googlePlaceId: "a/b" },
+    { googleLabel: "" },
+    { googleLabel: "가".repeat(101) },
+    { googleCategory: "shop" },
+  ]) {
+    assert.equal(
+      errorsOf({ ...valid, ...googlePick, ...bad }).place,
+      "장소를 찾지 못했어요. 다시 검색해 주세요.",
+      JSON.stringify(bad),
+    );
+  }
+});
+
+test("categories match place-input", () => {
+  assert.deepEqual([...SCHEDULE_PLACE_CATEGORIES], [...PLACE_CATEGORIES]);
 });
 
 test("limits lengths", () => {

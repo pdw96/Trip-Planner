@@ -1,5 +1,20 @@
 // 일정 입력 검증. 서버(Server Action)에서 쓰고, node --test 로 시험하므로 다른 모듈을 import 하지 않는다.
 // 날짜는 여행 기간 안이어야 한다. 단 고치기에서는 이 일정의 원래 날짜(기간 밖일 수 있음)를 그대로 둘 수 있다.
+// 제목은 장소(Google 장소·이 여행 장소·글자)가 있으면 비워 둘 수 있다(#35).
+// 장소는 셋 중 하나만 쓴다: Google 장소 → 이 여행 장소(placeId) → 글자 순.
+
+// place-input.ts 와 같은 값. 순수 모듈 규칙 때문에 import 하지 않고 다시 둔다(시험이 같은지 확인한다).
+export const SCHEDULE_PLACE_CATEGORIES = [
+  "lodging",
+  "sight",
+  "food",
+  "cafe",
+  "etc",
+] as const;
+
+export type SchedulePlaceCategory = (typeof SCHEDULE_PLACE_CATEGORIES)[number];
+
+export const TITLE_OR_PLACE_REQUIRED = "제목이나 장소를 적어 주세요.";
 
 export type ScheduleFields = {
   date: string;
@@ -8,15 +23,27 @@ export type ScheduleFields = {
   place: string;
   placeId: string; // 빈 값 = 직접 적기
   memo: string;
+  // 일정 양식에서 고른 Google 장소(저장할 때 '가 볼 곳'에도 넣는다). 빈 값 = 고르지 않음.
+  googlePlaceId: string;
+  googleLabel: string;
+  googleCategory: string;
+};
+
+export type GooglePlacePick = {
+  googlePlaceId: string;
+  label: string;
+  category: SchedulePlaceCategory;
 };
 
 export type ScheduleInput = {
   date: string;
   time: string | null;
-  title: string;
+  title: string | null;
   place: string | null;
   placeId: string | null;
   memo: string | null;
+  // 있으면 placeId·place 는 null 이다.
+  google: GooglePlacePick | null;
 };
 
 export type ScheduleFieldErrors = Partial<Record<keyof ScheduleFields, string>>;
@@ -40,6 +67,9 @@ export const EMPTY_SCHEDULE_FIELDS: ScheduleFields = {
   place: "",
   placeId: "",
   memo: "",
+  googlePlaceId: "",
+  googleLabel: "",
+  googleCategory: "",
 };
 
 export type AllowedDates = {
@@ -51,6 +81,10 @@ export type AllowedDates = {
 const TITLE_MAX = 100;
 const PLACE_MAX = 200;
 const MEMO_MAX = 2000;
+// place-input.ts 의 이름표 상한·Google 장소 id 형식과 같다.
+const GOOGLE_LABEL_MAX = 100;
+const GOOGLE_PLACE_ID_PATTERN = /^[A-Za-z0-9_-]{1,300}$/;
+const GOOGLE_PICK_INVALID = "장소를 찾지 못했어요. 다시 검색해 주세요.";
 // ids.ts 의 isUuid 와 같은 형식. 순수 모듈 규칙 때문에 import 하지 않고 여기 둔다.
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -88,9 +122,14 @@ export function parseScheduleInput(
   const date = raw.date.trim();
   const time = raw.time.trim();
   const title = raw.title.trim();
-  const place = raw.place.trim();
-  const placeId = raw.placeId.trim();
   const memo = raw.memo.trim();
+  const googlePlaceId = raw.googlePlaceId.trim();
+  const googleLabel = raw.googleLabel.trim();
+  const googleCategory = raw.googleCategory.trim();
+  // Google 장소를 골랐으면 placeId·글자는 쓰지 않는다.
+  const hasGoogle = googlePlaceId !== "";
+  const place = hasGoogle ? "" : raw.place.trim();
+  const placeId = hasGoogle ? "" : raw.placeId.trim();
 
   const errors: ScheduleFieldErrors = {};
   const dateError = checkDate(date, allowed);
@@ -98,9 +137,18 @@ export function parseScheduleInput(
   if (time !== "" && !TIME_PATTERN.test(time)) {
     errors.time = "시각을 올바르게 입력해 주세요.";
   }
+  const hasPlace = hasGoogle || placeId !== "" || place !== "";
   const titleError =
-    title === "" ? "제목을 입력해 주세요." : tooLong(title, TITLE_MAX);
+    title === ""
+      ? hasPlace
+        ? undefined
+        : TITLE_OR_PLACE_REQUIRED
+      : tooLong(title, TITLE_MAX);
   if (titleError) errors.title = titleError;
+  const google = hasGoogle
+    ? parseGooglePick(googlePlaceId, googleLabel, googleCategory)
+    : null;
+  if (hasGoogle && !google) errors.place = GOOGLE_PICK_INVALID;
   const placeError = tooLong(place, PLACE_MAX);
   if (placeError) errors.place = placeError;
   if (placeId !== "" && !UUID_PATTERN.test(placeId) && !errors.place) {
@@ -115,10 +163,29 @@ export function parseScheduleInput(
     value: {
       date,
       time: time || null,
-      title,
+      title: title || null,
       place: place || null,
       placeId: placeId || null,
       memo: memo || null,
+      google,
     },
   };
+}
+
+function isSchedulePlaceCategory(
+  value: string,
+): value is SchedulePlaceCategory {
+  return (SCHEDULE_PLACE_CATEGORIES as readonly string[]).includes(value);
+}
+
+// 셋 중 하나라도 틀리면 null(장소 칸에 "다시 검색" 오류).
+function parseGooglePick(
+  googlePlaceId: string,
+  label: string,
+  category: string,
+): GooglePlacePick | null {
+  if (!GOOGLE_PLACE_ID_PATTERN.test(googlePlaceId)) return null;
+  if (label === "" || length(label) > GOOGLE_LABEL_MAX) return null;
+  if (!isSchedulePlaceCategory(category)) return null;
+  return { googlePlaceId, label, category };
 }

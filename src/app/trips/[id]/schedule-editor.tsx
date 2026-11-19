@@ -179,6 +179,7 @@ export function ScheduleItemRow({
           mode="edit"
           action={saveAndClose}
           initialValues={{
+            ...EMPTY_SCHEDULE_FIELDS,
             date: item.date,
             time: item.time,
             title: item.title ?? "",

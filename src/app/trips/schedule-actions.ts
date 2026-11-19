@@ -42,6 +42,9 @@ function readScheduleFields(
     place: field("place"),
     placeId: field("placeId"),
     memo: field("memo"),
+    googlePlaceId: field("googlePlaceId"),
+    googleLabel: field("googleLabel"),
+    googleCategory: field("googleCategory"),
   };
 }
 

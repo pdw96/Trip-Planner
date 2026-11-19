@@ -33,6 +33,11 @@ function validIds(...ids: string[]): boolean {
   return ids.every(isUuid);
 }
 
+// 입력 중 일정 열에 쓰는 값만. Google 장소(google)는 Google 장소 경로의 쿼리가 따로 쓴다.
+function columnsOf({ google: _google, ...columns }: ScheduleInput) {
+  return columns;
+}
+
 // 한 화면 요청 안에서 지도 칸과 일정 칸이 같은 결과를 나눠 쓰도록 cache 로 감싼다(요청마다 새로 묻는다).
 export const listScheduleItems = cache(
   async (userId: string, tripId: string): Promise<ScheduleItem[]> => {
@@ -127,7 +132,7 @@ export async function createScheduleItem(
   if (!trip) return null;
   const [row] = await db
     .insert(scheduleItems)
-    .values({ ...input, placeId: null, tripId: trip.id })
+    .values({ ...columnsOf(input), placeId: null, tripId: trip.id })
     .returning({ id: scheduleItems.id });
   return row.id;
 }
@@ -146,7 +151,7 @@ export async function updateScheduleItem(
     // 한 문(update … from places): 일정과 장소가 모두 같은 접근 가능한 여행일 때만 바뀐다.
     const rows = await db
       .update(scheduleItems)
-      .set({ ...input, place: places.label, placeId: places.id })
+      .set({ ...columnsOf(input), place: places.label, placeId: places.id })
       .from(places)
       .where(
         and(
@@ -159,7 +164,7 @@ export async function updateScheduleItem(
   }
   const rows = await db
     .update(scheduleItems)
-    .set({ ...input, placeId: null })
+    .set({ ...columnsOf(input), placeId: null })
     .where(itemCondition(userId, tripId, itemId))
     .returning({ id: scheduleItems.id });
   return rows.length > 0;
