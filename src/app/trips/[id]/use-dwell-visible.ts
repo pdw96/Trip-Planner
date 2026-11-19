@@ -15,7 +15,9 @@ export function useDwellVisible(
     if (!element) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const observer = new IntersectionObserver(
-      ([entry]) => {
+      (entries) => {
+        // 한 번에 여러 항목이 오면 마지막이 지금 상태다(빠르게 들어왔다 나감).
+        const entry = entries[entries.length - 1];
         if (timer) {
           clearTimeout(timer);
           timer = null;
