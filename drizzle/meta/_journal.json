@@ -29,6 +29,13 @@
       "when": 1795024589002,
       "tag": "0003_ancient_deathbird",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1795079421332,
+      "tag": "0004_striped_tenebrous",
+      "breakpoints": true
     }
   ]
 }

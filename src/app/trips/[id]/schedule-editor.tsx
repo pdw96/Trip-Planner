@@ -32,7 +32,8 @@ export type RowItem = {
   id: string;
   date: string;
   time: string;
-  title: string;
+  // 장소가 있으면 null 일 수 있다. 그때는 place 글자를 제목 자리에 보인다.
+  title: string | null;
   place: string | null;
   placeId: string | null;
   memo: string | null;
@@ -180,7 +181,7 @@ export function ScheduleItemRow({
           initialValues={{
             date: item.date,
             time: item.time,
-            title: item.title,
+            title: item.title ?? "",
             place: item.place ?? "",
             placeId: item.placeId ?? "",
             memo: item.memo ?? "",
@@ -207,6 +208,8 @@ export function ScheduleItemRow({
     : item.place
       ? mapsSearchUrl(item.place)
       : null;
+  // 제목이 없으면 장소 이름이 제목 자리에 온다(#35).
+  const name = item.title ?? item.place ?? "";
 
   return (
     <li className="flex items-start gap-3 py-2">
@@ -221,7 +224,7 @@ export function ScheduleItemRow({
           onClick={() => setOpenKey(key)}
           className={`self-start text-left font-medium break-words hover:underline ${done ? "line-through" : ""}`}
         >
-          {item.title}
+          {name}
         </button>
         {item.place && placeHref && (
           <a
@@ -230,7 +233,7 @@ export function ScheduleItemRow({
             rel="noopener noreferrer"
             className="self-start text-sm text-zinc-600 break-words hover:underline dark:text-zinc-400"
           >
-            📍 {item.place}
+            📍 {item.title === null ? "지도에서 보기" : item.place}
           </a>
         )}
         {item.memo && (
@@ -248,7 +251,7 @@ export function ScheduleItemRow({
         type="checkbox"
         checked={done}
         onChange={toggleDone}
-        aria-label={`${item.title} 완료`}
+        aria-label={`${name} 완료`}
         className="mt-1 size-5 shrink-0 accent-foreground"
       />
     </li>
