@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/session";
 import { formatLongRange, todayInSeoul } from "@/lib/trip-dates";
 import { DeleteTripButton } from "../delete-trip-button";
 import { secondaryButtonClass } from "../styles";
+import { DayRouteProvider } from "./day-route-store";
 import { MapSection } from "./map-section";
 import { ScheduleSection } from "./schedule-section";
 
@@ -60,13 +61,18 @@ async function TripDetail({
           </p>
         )}
       </header>
-      {/* 지도는 좌표 30일 갱신으로 Google 을 부를 수 있어 따로 기다린다(머리·일정이 먼저 보이게). */}
-      <Suspense
-        fallback={<p className="text-sm text-zinc-500">지도를 불러오는 중…</p>}
-      >
-        <MapSection userId={user.id} trip={trip} today={today} />
-      </Suspense>
-      <ScheduleSection userId={user.id} trip={trip} today={today} />
+      {/* 지도 N일차 탭과 일정표(#37)가 구간 이동 정보를 함께 쓴다. */}
+      <DayRouteProvider key={trip.id} tripId={trip.id}>
+        {/* 지도는 좌표 30일 갱신으로 Google 을 부를 수 있어 따로 기다린다(머리·일정이 먼저 보이게). */}
+        <Suspense
+          fallback={
+            <p className="text-sm text-zinc-500">지도를 불러오는 중…</p>
+          }
+        >
+          <MapSection userId={user.id} trip={trip} today={today} />
+        </Suspense>
+        <ScheduleSection userId={user.id} trip={trip} today={today} />
+      </DayRouteProvider>
       {/* 예산(#14)이 이 아래에 들어온다. */}
     </article>
   );
