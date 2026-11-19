@@ -308,8 +308,8 @@ function PlaceField({
           ) : (
             <>
               {/* 서버는 Google 장소가 있으면 placeId 를 쓰지 않는다. 오류로 돌아와 고른 장소를 지우면
-                  고르기 목록이 원래 이어졌던 장소로 돌아가도록 함께 보낸다. */}
-              <input type="hidden" name="placeId" value={initialPlaceId} />
+                  고르기 목록이 Google 장소를 고르기 전 선택으로 돌아가도록 함께 보낸다. */}
+              <input type="hidden" name="placeId" value={placeId} />
               <input
                 type="hidden"
                 name="googlePlaceId"
@@ -340,7 +340,9 @@ function PlaceField({
             <select
               id={selectId}
               name="placeId"
-              defaultValue={initialPlaceId}
+              // Google 장소를 고른 동안 select 는 빠졌다가 ✕ 로 다시 생긴다. 그때 화면 값이 chosenId(글자 칸 보이기)와
+              // 같도록 처음 값이 아니라 지금 선택으로 연다.
+              defaultValue={placeId}
               onChange={(event) => setChosenId(event.target.value)}
               aria-label={
                 searchEnabled ? "이 여행의 장소에서 고르기" : undefined
