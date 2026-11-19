@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { Fragment, useRef } from "react";
 import { legText, NOTICES } from "@/lib/leg-display";
 import { type LineLeg, placeTravelLines } from "@/lib/travel-lines";
 import { useDayRoute } from "./day-route-store";
@@ -25,7 +25,7 @@ export type DayTravel = {
   date: string;
   signature: string;
   legs: TravelSkeletonLeg[];
-  // 그날 동선의 장소 id → 이름표. 응답 구간의 출발지 문구에 쓴다.
+  // 여행 장소 id → 이름표. 응답 구간의 출발지 문구에 쓴다.
   labels: Record<string, string>;
 };
 
@@ -48,7 +48,6 @@ export function ScheduleDayItems({
   dateOptions: DateOption[];
   travel: DayTravel | null;
 }) {
-  // 날 칸에 늘 있는 감싸개를 지켜본다(빈 날에 첫 일정을 넣어도 그대로 지켜보도록).
   const dayRef = useRef<HTMLDivElement>(null);
   const wanted = useDwellVisible(dayRef);
   const { result, reload } = useDayRoute(
@@ -82,45 +81,42 @@ export function ScheduleDayItems({
     lines,
   );
 
-  if (items.length === 0) {
-    return (
-      <div ref={dayRef}>
-        <p className="py-2 text-sm text-zinc-500">아직 일정이 없어요</p>
-      </div>
-    );
-  }
-
+  // 감싸개는 하나로 늘 그린다(빈 날에 첫 일정을 넣어도 같은 요소를 계속 지켜보도록).
+  // 일정 줄은 일정 id 로 묶어(Fragment key) 앞에 일정이 들어오거나 빠져도 뒤 줄이 다시 마운트되지 않게 한다.
   return (
     <div ref={dayRef} className="flex flex-col gap-1">
-      <ul className="flex flex-col">
-        {items.map((item) => {
-          const line = placed.before.get(item.id);
-          return [
-            line && (
-              <TravelLine
-                key={`travel:${line.leg.key}`}
-                line={line.leg}
-                caption={line.caption}
-                onRetry={reload}
-              />
-            ),
-            <ScheduleItemRow
-              key={item.id}
-              tripId={tripId}
-              item={item}
-              dateOptions={dateOptions}
-            />,
-          ];
-        })}
-        {placed.after && (
-          <TravelLine
-            key={`travel:${placed.after.leg.key}`}
-            line={placed.after.leg}
-            caption={placed.after.caption}
-            onRetry={reload}
-          />
-        )}
-      </ul>
+      {items.length === 0 ? (
+        <p className="py-2 text-sm text-zinc-500">아직 일정이 없어요</p>
+      ) : (
+        <ul className="flex flex-col">
+          {items.map((item) => {
+            const line = placed.before.get(item.id);
+            return (
+              <Fragment key={item.id}>
+                {line && (
+                  <TravelLine
+                    line={line.leg}
+                    caption={line.caption}
+                    onRetry={reload}
+                  />
+                )}
+                <ScheduleItemRow
+                  tripId={tripId}
+                  item={item}
+                  dateOptions={dateOptions}
+                />
+              </Fragment>
+            );
+          })}
+          {placed.after && (
+            <TravelLine
+              line={placed.after.leg}
+              caption={placed.after.caption}
+              onRetry={reload}
+            />
+          )}
+        </ul>
+      )}
       {result?.ok &&
         result.notices.map((notice) => (
           <p

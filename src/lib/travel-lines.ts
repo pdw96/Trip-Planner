@@ -23,7 +23,8 @@ function from(label: string | null): string | null {
   return label ? `${label}에서` : null;
 }
 
-// 도착 일정이 줄 목록에 없으면(사이에 지워짐) 그 구간은 버린다. 같은 자리에 둘째 구간이 오면 첫 구간만 둔다.
+// 출발·도착 일정 중 하나라도 줄 목록에 없으면(사이에 지워짐, 다른 창에서 넣음) 그 구간은 버린다
+// (엉뚱한 줄에서 오는 이동처럼 보이지 않게). 같은 자리에 둘째 구간이 오면 첫 구간만 둔다.
 export function placeTravelLines<L extends LineLeg>(
   itemIds: string[],
   legs: L[],
@@ -33,6 +34,7 @@ export function placeTravelLines<L extends LineLeg>(
   let after: PlacedLine<L> | null = null;
 
   for (const leg of legs) {
+    if (leg.fromItemId !== null && !index.has(leg.fromItemId)) continue;
     if (leg.toItemId !== null) {
       const to = index.get(leg.toItemId);
       if (to === undefined || before.has(leg.toItemId)) continue;

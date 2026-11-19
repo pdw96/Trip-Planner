@@ -41,10 +41,15 @@ test("도착이 일정이면 그 줄 위 (기준점과 합친 끝 일정)", () =
   assert.equal(r.after, null);
 });
 
-test("없는 일정 id 의 구간은 버린다", () => {
-  const r = placeTravelLines(["a"], [leg("a", "gone"), leg("gone", null)]);
+test("도착 일정이 없는 구간은 버린다", () => {
+  const r = placeTravelLines(["a"], [leg("a", "gone")]);
   assert.equal(r.before.size, 0);
-  assert.equal(r.after.caption, "F에서 T까지");
+});
+
+test("출발 일정이 없는 구간은 버린다 (위·아래 모두)", () => {
+  const r = placeTravelLines(["a", "b"], [leg("gone", "b"), leg("gone", null)]);
+  assert.equal(r.before.size, 0);
+  assert.equal(r.after, null);
 });
 
 test("이름표를 모르면 출발지 없이", () => {

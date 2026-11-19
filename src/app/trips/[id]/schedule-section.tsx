@@ -22,16 +22,13 @@ import {
 } from "./schedule-editor";
 
 // 그날 동선 뼈대 → 일정표 이동 줄의 자리·서명(#37). 구간이 없으면 null.
+// labels 는 여행의 모든 장소(응답 구간이 뼈대에 없던 장소를 담아도 출발지 문구를 붙이도록).
 function dayTravel(
   date: string,
   route: DayRoute | undefined,
+  labels: Record<string, string>,
 ): DayTravel | null {
   if (!route || route.legs.length === 0) return null;
-  const labels: Record<string, string> = {};
-  for (const leg of route.legs) {
-    labels[leg.from.id] = leg.from.label;
-    labels[leg.to.id] = leg.to.label;
-  }
   return {
     date,
     signature: daySignature(route),
@@ -87,6 +84,7 @@ export async function ScheduleSection({
       },
     ]),
   );
+  const placeLabels = Object.fromEntries(placeRows.map((p) => [p.id, p.label]));
   const routes = routesByDate(
     days.map(({ day }) => day.date),
     items,
@@ -164,7 +162,7 @@ export async function ScheduleSection({
               tripId={trip.id}
               items={dayItems.map(rowItem)}
               dateOptions={dayOptions}
-              travel={dayTravel(day.date, routes.get(day.date))}
+              travel={dayTravel(day.date, routes.get(day.date), placeLabels)}
             />
             <AddScheduleItem tripId={trip.id} date={day.date} />
           </section>
