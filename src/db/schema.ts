@@ -176,7 +176,8 @@ export const scheduleItems = pgTable(
     date: date("date").notNull(),
     // 분 단위만 쓴다("HH:MM"). 읽으면 "HH:MM:SS" 로 온다.
     time: time("time"),
-    title: text("title").notNull(),
+    // 장소가 있으면 비울 수 있다(#35). 비면 화면에 place 글자를 제목 자리에 보인다.
+    title: text("title"),
     place: text("place"),
     placeId: uuid("place_id").references(() => places.id, {
       onDelete: "set null",

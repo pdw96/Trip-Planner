@@ -78,6 +78,27 @@ export async function countPlaces(
   return row?.n ?? 0;
 }
 
+// 이 사용자가 접근할 수 있는 여행 tripId 에 같은 Google 장소가 있으면 그 장소 id. 없거나 id 형식이 틀리면 null.
+// 일정 양식에서 고른 Google 장소가 이미 '가 볼 곳'에 있는지 볼 때 쓴다(#35, Google 을 부르기 전에).
+export async function findPlaceIdByGoogleId(
+  userId: string,
+  tripId: string,
+  googlePlaceId: string,
+): Promise<string | null> {
+  if (!validIds(tripId)) return null;
+  const [row] = await db
+    .select({ id: places.id })
+    .from(places)
+    .where(
+      and(
+        eq(places.googlePlaceId, googlePlaceId),
+        placeInAccessibleTrip(userId, tripId),
+      ),
+    )
+    .limit(1);
+  return row?.id ?? null;
+}
+
 // 접근할 수 있는 여행일 때만 넣는다. 좌표는 서버가 Google 에서 받은 값만 받는다.
 // 확인과 넣기 사이에 여행이 지워지면 FK 오류가 나고, 액션이 저장 실패로 처리한다.
 export async function createPlace(

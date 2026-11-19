@@ -1,6 +1,5 @@
 "use client";
 
-import { useMapsLibrary } from "@vis.gl/react-google-maps";
 import {
   useActionState,
   useEffect,
@@ -9,17 +8,13 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  guessCategory,
-  type PlaceFields,
-  type PlaceFormState,
-} from "@/lib/place-input";
-import { PLACE_NOT_FOUND } from "../messages";
+import type { PlaceFields, PlaceFormState } from "@/lib/place-input";
 import { createPlaceAction } from "../place-actions";
 import { primaryButtonClass, secondaryButtonClass } from "../styles";
+import { GooglePlaceSearch } from "./google-place-search";
 import { PlaceFieldInputs } from "./place-fields";
 
-// 장소 넣기(§5.2): Google 자동완성(Places API (New) 의 PlaceAutocompleteElement)으로 고르면
+// 장소 넣기(§5.2): Google 자동완성(google-place-search.tsx)으로 고르면
 // 브라우저가 이름·유형을 받아 이름 칸과 종류 칸을 미리 채운다(저장 전, 화면에만).
 // [넣기]는 Google 장소 id·이름표·종류·메모만 보낸다. 좌표는 서버가 서버 키로 직접 받는다.
 // APIProvider 안에서만 쓴다.
@@ -47,81 +42,31 @@ function PlaceSearch({
   tripId: string;
   onSaved: () => void;
 }) {
-  const placesLibrary = useMapsLibrary("places");
-  const containerRef = useRef<HTMLDivElement>(null);
-  const elementRef = useRef<google.maps.places.PlaceAutocompleteElement | null>(
-    null,
-  );
   const [picked, setPicked] = useState<Picked | null>(null);
   const [pickError, setPickError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!placesLibrary || !container) return;
-    let active = true;
-    let pickCount = 0;
-
-    // 세션 토큰은 이 요소가 알아서 쓴다(고른 뒤 첫 fetchFields 까지 한 세션).
-    const element = new placesLibrary.PlaceAutocompleteElement({
-      placeholder: "장소 검색 (Google)",
-      requestedLanguage: "ko",
-    });
-    element.style.width = "100%";
-    element.style.colorScheme = "light dark";
-    element.setAttribute("aria-label", "장소 검색");
-
-    async function onSelect(
-      event: google.maps.places.PlacePredictionSelectEvent,
-    ) {
-      const prediction = event.placePrediction;
-      const pick = ++pickCount;
-      setPickError(null);
-      try {
-        const place = prediction.toPlace();
-        await place.fetchFields({
-          fields: ["displayName", "primaryType", "types"],
-        });
-        if (!active || pick !== pickCount) return;
-        setPicked({
-          pick,
-          googlePlaceId: place.id,
-          label: place.displayName ?? prediction.mainText?.text ?? "",
-          category: guessCategory(place.primaryType ?? null, place.types ?? []),
-          memo: "",
-        });
-      } catch {
-        if (!active || pick !== pickCount) return;
-        setPicked(null);
-        setPickError(PLACE_NOT_FOUND);
-      }
-    }
-
-    element.addEventListener("gmp-select", onSelect);
-    container.append(element);
-    elementRef.current = element;
-    return () => {
-      active = false;
-      element.removeEventListener("gmp-select", onSelect);
-      element.remove();
-      elementRef.current = null;
-    };
-  }, [placesLibrary]);
+  // 취소하면 검색칸을 새로 만들어 비운다.
+  const [searchKey, setSearchKey] = useState(0);
+  const pickCount = useRef(0);
 
   function cancel() {
     setPicked(null);
     setPickError(null);
-    if (elementRef.current) elementRef.current.value = "";
+    setSearchKey((k) => k + 1);
   }
 
   return (
     <div className="flex flex-col gap-3">
-      <div ref={containerRef} className="min-h-11">
-        {!placesLibrary && (
-          <p className="py-2.5 text-sm text-zinc-500">
-            장소 검색을 불러오는 중…
-          </p>
-        )}
-      </div>
+      <GooglePlaceSearch
+        key={searchKey}
+        onPick={(pick) => {
+          setPickError(null);
+          setPicked({ ...pick, memo: "", pick: ++pickCount.current });
+        }}
+        onError={(message) => {
+          setPicked(null);
+          setPickError(message);
+        }}
+      />
       {pickError && (
         <p role="alert" className="text-sm text-red-600">
           {pickError}

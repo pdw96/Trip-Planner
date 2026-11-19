@@ -1,5 +1,6 @@
 "use client";
 
+import { APIProvider } from "@vis.gl/react-google-maps";
 import {
   createContext,
   use,
@@ -32,7 +33,8 @@ export type RowItem = {
   id: string;
   date: string;
   time: string;
-  title: string;
+  // 장소가 있으면 null 일 수 있다. 그때는 place 글자를 제목 자리에 보인다.
+  title: string | null;
   place: string | null;
   placeId: string | null;
   memo: string | null;
@@ -43,10 +45,12 @@ const ERROR_VISIBLE_MS = 4000;
 
 // 입력칸은 화면 전체에서 하나만 열린다. 키: "add:<날짜>" 또는 "edit:<일정 id>".
 // places: 이 여행의 장소(숙소 먼저). 양식의 장소 고르기와 이어진 장소의 링크에 쓴다.
+// searchEnabled: 장소 칸에서 Google 검색을 보일지(브라우저 키가 있을 때, #35).
 type OpenState = {
   openKey: string | null;
   setOpenKey: React.Dispatch<React.SetStateAction<string | null>>;
   places: PlaceOption[];
+  searchEnabled: boolean;
 };
 
 const OpenContext = createContext<OpenState | null>(null);
@@ -59,19 +63,36 @@ function useOpen(): OpenState {
 
 // Next 는 지나온 화면을 숨겨 보관(Activity)하므로, 화면을 떠날 때 열린 입력칸을 닫는다.
 // (그대로 두면 다음 방문에 쓰다 만 입력칸이나 지난 오류 문구가 남는다.)
+// 브라우저 키가 있으면 일정 칸도 APIProvider 로 감싼다. 지도 칸과 같은 설정이어야 한다
+// (Maps 스크립트는 페이지에 한 번만 불러오고, 다른 설정으로 다시 부르면 무시된다).
 export function ScheduleEditorProvider({
   places,
+  browserKey,
   children,
 }: {
   places: PlaceOption[];
+  browserKey: string | null;
   children: React.ReactNode;
 }) {
   const [openKey, setOpenKey] = useState<string | null>(null);
   useLayoutEffect(() => () => setOpenKey(null), []);
-  return (
-    <OpenContext value={{ openKey, setOpenKey, places }}>
+  const body = (
+    <OpenContext
+      value={{
+        openKey,
+        setOpenKey,
+        places,
+        searchEnabled: browserKey !== null,
+      }}
+    >
       {children}
     </OpenContext>
+  );
+  if (!browserKey) return body;
+  return (
+    <APIProvider apiKey={browserKey} language="ko">
+      {body}
+    </APIProvider>
   );
 }
 
@@ -82,7 +103,7 @@ export function AddScheduleItem({
   tripId: string;
   date: string;
 }) {
-  const { openKey, setOpenKey, places } = useOpen();
+  const { openKey, setOpenKey, places, searchEnabled } = useOpen();
   const key = `add:${date}`;
 
   if (openKey !== key) {
@@ -102,6 +123,7 @@ export function AddScheduleItem({
       action={createScheduleItemAction.bind(null, tripId, date)}
       initialValues={{ ...EMPTY_SCHEDULE_FIELDS, date }}
       places={places}
+      searchEnabled={searchEnabled}
       onClose={() => setOpenKey(null)}
     />
   );
@@ -116,7 +138,7 @@ export function ScheduleItemRow({
   item: RowItem;
   dateOptions: DateOption[];
 }) {
-  const { openKey, setOpenKey, places } = useOpen();
+  const { openKey, setOpenKey, places, searchEnabled } = useOpen();
   const key = `edit:${item.id}`;
   const [done, setOptimisticDone] = useOptimistic(item.done);
   const [error, setError] = useState<string | null>(null);
@@ -178,15 +200,17 @@ export function ScheduleItemRow({
           mode="edit"
           action={saveAndClose}
           initialValues={{
+            ...EMPTY_SCHEDULE_FIELDS,
             date: item.date,
             time: item.time,
-            title: item.title,
+            title: item.title ?? "",
             place: item.place ?? "",
             placeId: item.placeId ?? "",
             memo: item.memo ?? "",
           }}
           dateOptions={dateOptions}
           places={places}
+          searchEnabled={searchEnabled}
           onClose={() =>
             setOpenKey((current) => (current === key ? null : current))
           }
@@ -207,6 +231,8 @@ export function ScheduleItemRow({
     : item.place
       ? mapsSearchUrl(item.place)
       : null;
+  // 제목이 없으면 장소 이름이 제목 자리에 온다(#35).
+  const name = item.title ?? item.place ?? "";
 
   return (
     <li className="flex items-start gap-3 py-2">
@@ -221,7 +247,7 @@ export function ScheduleItemRow({
           onClick={() => setOpenKey(key)}
           className={`self-start text-left font-medium break-words hover:underline ${done ? "line-through" : ""}`}
         >
-          {item.title}
+          {name}
         </button>
         {item.place && placeHref && (
           <a
@@ -230,7 +256,7 @@ export function ScheduleItemRow({
             rel="noopener noreferrer"
             className="self-start text-sm text-zinc-600 break-words hover:underline dark:text-zinc-400"
           >
-            📍 {item.place}
+            📍 {item.title === null ? "지도에서 보기" : item.place}
           </a>
         )}
         {item.memo && (
@@ -248,7 +274,7 @@ export function ScheduleItemRow({
         type="checkbox"
         checked={done}
         onChange={toggleDone}
-        aria-label={`${item.title} 완료`}
+        aria-label={`${name} 완료`}
         className="mt-1 size-5 shrink-0 accent-foreground"
       />
     </li>

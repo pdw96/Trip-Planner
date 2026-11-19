@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { existingPlaceIdFor } from "@/lib/schedule";
 import type { ScheduleFields, ScheduleFormState } from "@/lib/schedule-input";
 import {
   dangerButtonClass,
@@ -15,6 +16,7 @@ import {
   primaryButtonClass,
   secondaryButtonClass,
 } from "../styles";
+import { GooglePlaceSearch } from "./google-place-search";
 import { CATEGORY_ICONS, type PlaceOption } from "./map-types";
 
 export type DateOption = { value: string; label: string };
@@ -29,6 +31,8 @@ type ScheduleItemFormProps = {
   dateOptions?: DateOption[];
   // 이 여행의 장소(숙소 먼저). 있으면 장소 칸에서 고를 수 있다.
   places: PlaceOption[];
+  // 장소 칸에 Google 검색을 보일지(브라우저 키가 있고 APIProvider 안일 때, #35).
+  searchEnabled: boolean;
   mode: "add" | "edit";
   onClose: () => void;
   // 고치기에서만 "삭제" 버튼.
@@ -56,6 +60,7 @@ function ScheduleItemFields({
   initialValues,
   dateOptions,
   places,
+  searchEnabled,
   mode,
   onClose,
   onDelete,
@@ -137,7 +142,12 @@ function ScheduleItemFields({
           />
         )}
       </Field>
-      <Field idPrefix={idPrefix} label="제목" name="title" error={errors.title}>
+      <Field
+        idPrefix={idPrefix}
+        label="제목 (장소가 있으면 선택)"
+        name="title"
+        error={errors.title}
+      >
         {(props) => (
           <input
             {...props}
@@ -148,31 +158,14 @@ function ScheduleItemFields({
           />
         )}
       </Field>
-      {places.length > 0 ? (
-        <PlaceField
-          key={resultKey(state)}
-          idPrefix={idPrefix}
-          places={places}
-          values={values}
-          error={errors.place}
-        />
-      ) : (
-        <Field
-          idPrefix={idPrefix}
-          label="장소 (선택)"
-          name="place"
-          error={errors.place}
-        >
-          {(props) => (
-            <input
-              {...props}
-              type="text"
-              defaultValue={values.place}
-              className={inputClass}
-            />
-          )}
-        </Field>
-      )}
+      <PlaceField
+        key={resultKey(state)}
+        idPrefix={idPrefix}
+        places={places}
+        searchEnabled={searchEnabled}
+        values={values}
+        error={errors.place}
+      />
       <Field
         idPrefix={idPrefix}
         label="메모 (선택)"
@@ -228,69 +221,170 @@ function resultKey(state: object): number {
   return key;
 }
 
-// 장소 칸: 이 여행의 장소 중 고르기(맨 위 "직접 적기") + 직접 적기일 때만 보이는 글자 칸(§5.4).
+// 장소 칸(§5.4, #35): Google 검색(브라우저 키가 있을 때) + 이 여행의 장소 중 고르기(장소가 있을 때, 맨 위 "직접 적기")
+// + 직접 적기일 때만 보이는 글자 칸. Google 후보를 고르면 고르기·글자 칸 대신 고른 장소를 보이고 숨은 값으로 보낸다.
+// 고른 Google 장소가 이미 이 여행의 장소면 placeId 로 보낸다(서버도 같은 경우를 다시 확인한다).
+// 저장할 때만 '가 볼 곳'에 들어간다. 고르기만 하고 닫으면 아무것도 생기지 않는다.
 // 장소를 고르면 서버가 그 장소의 이름표를 place 글자로 저장하므로 글자 칸은 보내지 않는다.
 // select 는 제어하지 않는다(defaultValue). 제어하면 form.reset() 뒤 화면은 "직접 적기"로 돌아가는데
 // React 상태는 고른 장소로 남아 글자 칸이 숨은 채 placeId="" 가 제출된다. onChange 는 글자 칸 보이기만 바꾼다.
+type PickedPlace = { googlePlaceId: string; label: string; category: string };
+
 function PlaceField({
   idPrefix,
   places,
+  searchEnabled,
   values,
   error,
 }: {
   idPrefix: string;
   places: PlaceOption[];
+  searchEnabled: boolean;
   values: ScheduleFields;
   error: string | undefined;
 }) {
+  // 검증 오류로 돌아오면 고른 Google 장소를 그대로 보인다.
+  const [picked, setPicked] = useState<PickedPlace | null>(
+    values.googlePlaceId
+      ? {
+          googlePlaceId: values.googlePlaceId,
+          label: values.googleLabel,
+          category: values.googleCategory,
+        }
+      : null,
+  );
+  const [searchError, setSearchError] = useState<string | null>(null);
   // 이어졌던 장소가 그 사이 지워졌으면 직접 적기로 연다(글자는 그대로 남아 있다).
   const initialPlaceId = places.some((place) => place.id === values.placeId)
     ? values.placeId
     : "";
   const [chosenId, setChosenId] = useState(initialPlaceId);
+  // 직접 적은 글자. Google 장소를 고른 동안 글자 칸이 빠졌다가 ✕ 로 다시 생겨도 적던 글자가 남게 한다.
+  const [typedPlace, setTypedPlace] = useState(values.place);
   // 고른 장소가 다시 그린 목록에서 사라지면(다른 곳에서 지움) 브라우저 select 는 "직접 적기"로 돌아간다.
   // 보이기도 목록에 있는지로 정해, 화면·글자 칸·제출 값이 같은 "직접 적기"가 되게 한다(글자 칸은 일정의 장소 글자로 채움).
   const placeId = places.some((place) => place.id === chosenId) ? chosenId : "";
+  const hasSelect = places.length > 0;
   const selectId = `${idPrefix}-placeId`;
   const textId = `${idPrefix}-place`;
   const errorId = `${idPrefix}-place-error`;
+  const shownError = error ?? searchError;
+  const existingId = picked
+    ? existingPlaceIdFor(picked.googlePlaceId, places)
+    : null;
+
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={selectId} className="text-sm font-medium">
-        장소 (선택)
-      </label>
-      <select
-        id={selectId}
-        name="placeId"
-        defaultValue={initialPlaceId}
-        onChange={(event) => setChosenId(event.target.value)}
-        aria-invalid={Boolean(error) && placeId !== ""}
-        aria-describedby={error && placeId !== "" ? errorId : undefined}
-        className={inputClass}
-      >
-        <option value="">직접 적기</option>
-        {places.map((place) => (
-          <option key={place.id} value={place.id}>
-            {CATEGORY_ICONS[place.category]} {place.label}
-          </option>
-        ))}
-      </select>
-      {placeId === "" && (
-        <input
-          id={textId}
-          name="place"
-          type="text"
-          defaultValue={values.place}
-          aria-label="장소 직접 적기"
-          placeholder="장소 이름"
-          aria-invalid={Boolean(error)}
-          aria-describedby={error ? errorId : undefined}
-          className={inputClass}
-        />
+      {picked || searchEnabled ? (
+        <span className="text-sm font-medium">장소 (선택)</span>
+      ) : (
+        <label
+          htmlFor={hasSelect ? selectId : textId}
+          className="text-sm font-medium"
+        >
+          장소 (선택)
+        </label>
       )}
-      {error && (
+      {picked ? (
+        <div className="flex items-center gap-2 rounded-xl border border-black/[.08] px-3 py-2 dark:border-white/[.145]">
+          <p className="min-w-0 flex-1 break-words">
+            📍 {picked.label}{" "}
+            <span className="text-sm text-zinc-500">
+              · {existingId ? "가 볼 곳에 있는 장소" : "가 볼 곳에 새로 넣어요"}
+            </span>
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setPicked(null);
+              setSearchError(null);
+            }}
+            aria-label="고른 장소 지우기"
+            aria-describedby={shownError ? errorId : undefined}
+            className="shrink-0 rounded-full px-2 py-1 text-zinc-500 hover:bg-black/[.04] dark:hover:bg-white/[.06]"
+          >
+            ✕
+          </button>
+          {existingId ? (
+            <input type="hidden" name="placeId" value={existingId} />
+          ) : (
+            <>
+              {/* 서버는 Google 장소가 있으면 placeId 를 쓰지 않는다. 오류로 돌아와 고른 장소를 지우면
+                  고르기 목록이 Google 장소를 고르기 전 선택으로 돌아가도록 함께 보낸다. */}
+              <input type="hidden" name="placeId" value={placeId} />
+              <input type="hidden" name="place" value={typedPlace} />
+              <input
+                type="hidden"
+                name="googlePlaceId"
+                value={picked.googlePlaceId}
+              />
+              <input type="hidden" name="googleLabel" value={picked.label} />
+              <input
+                type="hidden"
+                name="googleCategory"
+                value={picked.category}
+              />
+            </>
+          )}
+        </div>
+      ) : (
+        <>
+          {searchEnabled && (
+            <GooglePlaceSearch
+              ariaLabel="장소 검색 (Google)"
+              onPick={(pick) => {
+                setSearchError(null);
+                setPicked(pick);
+              }}
+              onError={setSearchError}
+            />
+          )}
+          {hasSelect && (
+            <select
+              id={selectId}
+              name="placeId"
+              // Google 장소를 고른 동안 select 는 빠졌다가 ✕ 로 다시 생긴다. 그때 화면 값이 chosenId(글자 칸 보이기)와
+              // 같도록 처음 값이 아니라 지금 선택으로 연다.
+              defaultValue={placeId}
+              onChange={(event) => setChosenId(event.target.value)}
+              aria-label={
+                searchEnabled ? "이 여행의 장소에서 고르기" : undefined
+              }
+              aria-invalid={Boolean(shownError) && placeId !== ""}
+              aria-describedby={
+                shownError && placeId !== "" ? errorId : undefined
+              }
+              className={inputClass}
+            >
+              <option value="">직접 적기</option>
+              {places.map((place) => (
+                <option key={place.id} value={place.id}>
+                  {CATEGORY_ICONS[place.category]} {place.label}
+                </option>
+              ))}
+            </select>
+          )}
+          {placeId === "" && (
+            <input
+              id={textId}
+              name="place"
+              type="text"
+              defaultValue={typedPlace}
+              onChange={(event) => setTypedPlace(event.target.value)}
+              aria-label={
+                hasSelect || searchEnabled ? "장소 직접 적기" : undefined
+              }
+              placeholder={hasSelect || searchEnabled ? "장소 이름" : undefined}
+              aria-invalid={Boolean(shownError)}
+              aria-describedby={shownError ? errorId : undefined}
+              className={inputClass}
+            />
+          )}
+        </>
+      )}
+      {shownError && (
         <p id={errorId} role="alert" className="text-sm text-red-600">
-          {error}
+          {shownError}
         </p>
       )}
     </div>
