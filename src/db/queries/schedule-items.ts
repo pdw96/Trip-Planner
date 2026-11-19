@@ -4,7 +4,7 @@ import { cache } from "react";
 import { db } from "@/db";
 import { places, type ScheduleItem, scheduleItems, trips } from "@/db/schema";
 import { isUuid } from "@/lib/ids";
-import type { ScheduleInput } from "@/lib/schedule-input";
+import type { GooglePlacePick, ScheduleInput } from "@/lib/schedule-input";
 import { accessibleTrips } from "./trips";
 
 // 일정 쿼리. 여행 접근은 trips.ts 의 accessibleTrips 조건 하나로만 판단한다(공유 #15 가 그것만 바꾸도록).
@@ -135,6 +135,126 @@ export async function createScheduleItem(
     .values({ ...columnsOf(input), placeId: null, tripId: trip.id })
     .returning({ id: scheduleItems.id });
   return row.id;
+}
+
+// --- Google 장소 경로 (#35) ---
+// 일정 양식에서 고른 Google 장소를 '가 볼 곳'에 넣고 그 장소로 일정을 잇는다. 둘을 데이터를 바꾸는 CTE 한 문으로 묶어
+// 함께 되거나 함께 안 되게 한다(장소만 남지 않게). 같은 여행에 같은 Google 장소가 이미 있으면 그 장소로 잇는다.
+// 한 문 안의 CTE 들은 같은 스냅숏을 보므로, 새로 넣은 행은 new_place 로, 이미 있던 행은 places 조회로 고른다.
+
+type Coords = { lat: number; lng: number };
+type GoogleScheduleInput = ScheduleInput & { google: GooglePlacePick };
+
+// 이 사용자가 접근할 수 있는 여행 tripId 에 같은 Google 장소가 있으면 그 장소 id. 없거나 id 형식이 틀리면 null.
+export async function findPlaceIdByGoogleId(
+  userId: string,
+  tripId: string,
+  googlePlaceId: string,
+): Promise<string | null> {
+  if (!validIds(tripId)) return null;
+  const [row] = await db
+    .select({ id: places.id })
+    .from(places)
+    .where(
+      and(
+        eq(places.googlePlaceId, googlePlaceId),
+        eq(places.tripId, tripId),
+        inArray(
+          places.tripId,
+          db
+            .select({ id: trips.id })
+            .from(trips)
+            .where(accessibleTrips(userId)),
+        ),
+      ),
+    )
+    .limit(1);
+  return row?.id ?? null;
+}
+
+// t(여행 하나 또는 없음)에서 장소를 넣거나 이미 있는 것을 골라 chosen(id, label) 한 행으로.
+function chosenPlaceCtes(
+  tripRows: SQL,
+  google: GooglePlacePick,
+  coords: Coords,
+) {
+  return sql`t AS (${tripRows}),
+    new_place AS (
+      INSERT INTO places (trip_id, google_place_id, label, category, memo, lat, lng, coords_fetched_at)
+      SELECT t.id, ${google.googlePlaceId}::text, ${google.label}::text, ${google.category}::text, NULL,
+        ${coords.lat}::double precision, ${coords.lng}::double precision, now()
+      FROM t
+      ON CONFLICT (trip_id, google_place_id) DO NOTHING
+      RETURNING id, label
+    ),
+    chosen AS (
+      SELECT id, label FROM new_place
+      UNION ALL
+      SELECT p.id, p.label FROM places p JOIN t ON p.trip_id = t.id
+      WHERE p.google_place_id = ${google.googlePlaceId}::text
+      LIMIT 1
+    )`;
+}
+
+// 장소 넣기(같은 Google 장소가 이미 있으면 그것) + 일정 넣기. 접근할 수 없는 여행이면 아무것도 넣지 않고 null.
+// 좌표는 서버가 Google 에서 받은 값만 받는다.
+export async function createScheduleItemWithNewPlace(
+  userId: string,
+  tripId: string,
+  input: GoogleScheduleInput,
+  coords: Coords,
+): Promise<string | null> {
+  if (!validIds(tripId)) return null;
+  const tripRows = db
+    .select({ id: trips.id })
+    .from(trips)
+    .where(and(eq(trips.id, tripId), accessibleTrips(userId)))
+    .getSQL();
+  const result = await db.execute<{ id: string }>(sql`
+    WITH ${chosenPlaceCtes(tripRows, input.google, coords)}
+    INSERT INTO schedule_items (trip_id, date, time, title, place, place_id, memo)
+    SELECT ${tripId}::uuid, ${input.date}::date, ${input.time}::time, ${input.title}::text,
+      chosen.label, chosen.id, ${input.memo}::text
+    FROM chosen
+    RETURNING id`);
+  return result.rows[0]?.id ?? null;
+}
+
+// 장소 넣기(같은 것이 있으면 그것) + 일정 고치기. t 에 "이 일정이 이 여행에 있음"을 넣어, 일정이 조건에 안 맞으면
+// 장소도 들어가지 않는다. 바뀐 행이 없으면 false.
+export async function updateScheduleItemWithNewPlace(
+  userId: string,
+  tripId: string,
+  itemId: string,
+  input: GoogleScheduleInput,
+  coords: Coords,
+): Promise<boolean> {
+  if (!validIds(tripId, itemId)) return false;
+  const tripRows = db
+    .select({ id: trips.id })
+    .from(trips)
+    .where(
+      and(
+        eq(trips.id, tripId),
+        accessibleTrips(userId),
+        sql`exists (select 1 from ${scheduleItems} where ${scheduleItems.id} = ${itemId}::uuid and ${scheduleItems.tripId} = ${trips.id})`,
+      ),
+    )
+    .getSQL();
+  const result = await db.execute<{ id: string }>(sql`
+    WITH ${chosenPlaceCtes(tripRows, input.google, coords)}
+    UPDATE schedule_items SET
+      date = ${input.date}::date,
+      time = ${input.time}::time,
+      title = ${input.title}::text,
+      memo = ${input.memo}::text,
+      place = chosen.label,
+      place_id = chosen.id,
+      updated_at = now()
+    FROM chosen
+    WHERE schedule_items.id = ${itemId}::uuid AND schedule_items.trip_id = ${tripId}::uuid
+    RETURNING schedule_items.id`);
+  return result.rows.length > 0;
 }
 
 // 바뀐 행이 없으면(없거나 남의 것이거나 id 형식이 틀림, 이을 장소가 조건에 안 맞음) false.
