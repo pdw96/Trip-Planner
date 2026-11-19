@@ -1,6 +1,6 @@
 # 지금 상태
 
-2026-11-19 기준. 이슈 하나가 끝날 때마다(PR 머지, 배포 확인) 고친다. 새 세션은 이 파일부터 읽는다(`CLAUDE.md` '작업 흐름').
+2026-11-19 기준(#37 반영). 이슈 하나가 끝날 때마다(PR 머지, 배포 확인) 고친다. 새 세션은 이 파일부터 읽는다(`CLAUDE.md` '작업 흐름').
 
 ## 끝나서 배포된 것
 
@@ -14,15 +14,18 @@
 | #12 | #27 | 여행별 날짜 일정표(`schedule_items`, 마이그레이션 0002). 시각·제목·장소(글자, Google 지도 검색 새 탭)·메모·완료, 그 자리 추가·고치기, 여행 기간 밖 일정 따로 모음. 설계 `docs/superpowers/specs/2026-11-18-trip-schedule-design.md` |
 | #13 | #31 | 가 볼 장소·지도·동선(`places`·`trip_bases`·`schedule_items.place_id`, 마이그레이션 0003). Google 지도([전체]+N일차), Places (New) 자동완성으로 장소 넣기, 날마다 기준점, N일차 동선(Routes API 대중교통 → 도보·직선 + 국내·일본 안내, Google 길찾기 링크), 일정에서 장소 고르기. 설계 `docs/superpowers/specs/2026-11-18-trip-places-map-design.md` |
 | #35 | #38 | 일정 장소 칸에서 Google 장소 검색(저장할 때만 '가 볼 곳'에도 넣음, 이미 있으면 그 장소로), 장소가 있으면 제목은 선택(마이그레이션 0004: `schedule_items.title` nullable). 장소+일정은 데이터를 바꾸는 CTE 한 문. 설계 `docs/superpowers/specs/2026-11-19-schedule-place-search-design.md` |
+| #37 | #42 | 일정표의 일정 사이(도착 일정 줄 위)에 예상 이동 시간 한 줄, 기준점 구간 포함. 화면에 0.5초 머문 날만 묻고, 지도 N일차 탭과 결과를 페이지 저장소(`day-route-store.tsx`)로 함께 씀. DB 변경 없음. 설계 `docs/superpowers/specs/2026-11-19-schedule-travel-time-design.md` |
 
 ## 다음 할 일
 
 사용자가 열린 이슈에서 고른다.
 
-- 기능: #14 예산·지출, #15 지인과 공유, #37 일정 사이 예상 이동 시간(예약 시각은 고정)
+- 기능: #14 예산·지출, #15 지인과 공유, #41 일정 순서 직접 바꾸기(시각 없는 일정이 그날 맨 뒤로 가는 문제, #37 에서 나눔), #36 구간 경로 후보 2–3개
 - 개선: #22 단위 시험을 CI 에서, #23 달력 키보드 이동, #24 자잘한 개선 모음
 
 #14 는 새 테이블이 필요해 마이그레이션 PR 규칙을 따른다. 여행 접근 조건은 `src/db/queries/trips.ts` 의 `accessibleTrips(userId)` 하나다(#15 공유가 그 조건만 바꾸도록). 하위 데이터 쿼리는 `schedule-items.ts`·`places.ts` 처럼 이 조건을 같은 SQL 문 안에 넣는다(하위 id 와 여행 id 를 함께 묶어 섞어 보내기를 막는다). 여러 테이블을 함께 쓰려면 neon-http 에 트랜잭션이 없으므로 데이터를 바꾸는 CTE 한 문으로 한다(`updatePlace`, `createScheduleItemWithNewPlace`).
+
+#41 은 `schedule_items` 에 순서 칸이 필요해 마이그레이션 PR 이다. 일정 순서는 `listScheduleItems` 정렬 하나를 일정표·동선(`routesByDate`)·이동 시간이 함께 따르므로, 정렬만 바꾸면 #37 이동 줄도 따라간다.
 
 ## 알아 둘 것
 
@@ -43,10 +46,18 @@
   - Routes API: 한국은 대중교통만(도보·자동차 빈 응답), 일본은 대중교통이 오지 않는다. 과거 시각은 받고 약 100일 뒤부터 빈 응답 → 요청 시각 상한 90일. Places Details 는 풀 수 없는 id 에 400 `INVALID_ARGUMENT`.
   - 하루 동선은 Server Action 이 아니라 Route Handler(`GET /trips/[id]/day-route?date=`)로 받는다. Next 는 Server Action 을 하나씩 돌려, 느린 Google 호출 동안 다른 저장이 기다렸다(#31 브라우저 확인).
 - **Google 장소 검색칸(#35)**: '가 볼 곳'과 일정 장소 칸이 `google-place-search.tsx` 를 같이 쓴다. 일정 칸도 `APIProvider` 로 감싼다(지도 칸과 같은 `apiKey`·`language` 여야 한다. 스크립트는 페이지에 한 번만 불러온다). 휴대폰 너비에서는 Google 이 전체 화면 고르기로 연다. Playwright 로는 `gmp-place-autocomplete` 를 클릭하고 글자를 친 뒤 ArrowDown·Enter 로 고른다.
+- **하루 동선·이동 시간(#37)**: 날짜별 동선 뼈대는 `src/lib/day-route.ts` 의 `routesByDate` 하나를 지도 칸·일정 칸·`loadDayRoute` 가 같이 쓴다. 구간 결과는 `src/app/trips/[id]/day-route-store.tsx`(키 `날짜|daySignature`, 서명에 일정 id 포함)에 두고 지도 탭·일정표가 `useDayRoute` 로 읽는다. 일정표 이동 줄 자리는 응답 구간의 `fromItemId`·`toItemId` 로 정한다(`src/lib/travel-lines.ts`, 출발·도착 일정이 줄 목록에 없으면 버림).
+- **목록 key**: `items.map` 에서 `[이동 줄, 일정 줄]` 배열을 돌려주면 안쪽 key 가 칸 순서로만 맞춰져, 앞에 일정이 들어오면 뒤 줄이 모두 다시 마운트된다(열린 입력칸·완료 낙관 상태가 날아감). `<Fragment key={item.id}>` 로 묶는다(#37 리뷰).
+- **Playwright 와 Google 지도**: 지도 타일 요청이 끊이지 않아 `waitUntil: "networkidle"` 은 끝나지 않는다. `domcontentloaded` 뒤 마지막 날 칸을 `waitFor` 한다. 헤드리스 Chromium 의 "Vector Map … Falling back to Raster" 콘솔 오류는 WebGL 탓이고 앱 문제가 아니다(dev 오버레이 "1 Issue" 가 이것).
+- **테스트 데이터에 일정 넣기**: 장소가 이어진 일정은 `place_id` 와 함께 `place`(장소 글자)도 넣는다. 앱은 둘 다 저장하며, `place` 가 비면 제목 없는 일정의 이름이 빈칸으로 보인다. 장소의 Google id·좌표는 클라우드 프록시로 Places Text Search(`places.googleapis.com/v1/places:searchText`)에서 얻는다.
+- **자동 머지**: 모든 검사가 이미 통과한 PR 은 GitHub 가 자동 머지 켜기를 거절한다("clean status"). 그때는 리뷰 종료 기준을 채웠으면 바로 squash 머지한다(#42).
 - **Codex 리뷰**: PR 을 draft 에서 바꾸면 자동으로 돌고, 다시 받으려면 PR 에 `@codex review` 댓글. 막는 지적을 고친 뒤에는 마지막 커밋 기준으로 다시 받는다.
 - **공휴일**: Vercel 환경 변수 `DATA_GO_KR_SERVICE_KEY`(Production·Preview). 이 세션에서는 `apis.data.go.kr` 접속이 막혀 있다. 실패하면 Vercel 로그에 `[holidays]` 한 줄(키는 가림)이 남는다.
 
 ## 남은 확인
+
+- #37 프로덕션 확인: 실제 Google 로그인으로 일정표를 스크롤해 이동 줄이 뜨는지, 지도 N일차 탭과 같은 날을 두 번 묻지 않는지(Vercel 로그의 `day-route` 요청 수).
+- #37 남은 지적(PR #42 본문): 좌표 30일 갱신 순간 지도·일정표 서명이 달라 한 번 더 물을 수 있음(설계 §4.5), 지도 로딩 자리가 짧아 처음에 1–2일 미리 물을 수 있음, 저장소가 옛 서명 결과를 지우지 않음, 탭을 넘겨도 진행 중 요청을 끊지 않음, 아직 묻지 않은 날도 "불러오는 중…", 쓰지 않는 대비 코드 2곳.
 
 - #35 프로덕션 확인: 일정 장소 칸에서 Google 장소 검색·저장, 제목 없이 저장. (할당량은 확인함: 자동완성이 막힐 걱정은 없다. 위 'Google 지도 플랫폼' 참고)
 - #35 남은 지적(PR #38 본문): 같은 새 장소를 거의 동시에 저장하면 늦은 쪽은 "장소를 다시 골라 주세요", 브라우저 키 없을 때 검색칸 숨김은 띄워 보지 않음.
