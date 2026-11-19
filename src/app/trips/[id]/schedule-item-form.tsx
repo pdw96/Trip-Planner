@@ -273,7 +273,7 @@ function PlaceField({
 
   return (
     <div className="flex flex-col gap-1.5">
-      {picked || (!hasSelect && searchEnabled) ? (
+      {picked || searchEnabled ? (
         <span className="text-sm font-medium">장소 (선택)</span>
       ) : (
         <label
@@ -298,6 +298,7 @@ function PlaceField({
               setSearchError(null);
             }}
             aria-label="고른 장소 지우기"
+            aria-describedby={shownError ? errorId : undefined}
             className="shrink-0 rounded-full px-2 py-1 text-zinc-500 hover:bg-black/[.04] dark:hover:bg-white/[.06]"
           >
             ✕
@@ -306,6 +307,9 @@ function PlaceField({
             <input type="hidden" name="placeId" value={existingId} />
           ) : (
             <>
+              {/* 서버는 Google 장소가 있으면 placeId 를 쓰지 않는다. 오류로 돌아와 고른 장소를 지우면
+                  고르기 목록이 원래 이어졌던 장소로 돌아가도록 함께 보낸다. */}
+              <input type="hidden" name="placeId" value={initialPlaceId} />
               <input
                 type="hidden"
                 name="googlePlaceId"

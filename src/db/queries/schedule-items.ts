@@ -145,33 +145,6 @@ export async function createScheduleItem(
 type Coords = { lat: number; lng: number };
 type GoogleScheduleInput = ScheduleInput & { google: GooglePlacePick };
 
-// 이 사용자가 접근할 수 있는 여행 tripId 에 같은 Google 장소가 있으면 그 장소 id. 없거나 id 형식이 틀리면 null.
-export async function findPlaceIdByGoogleId(
-  userId: string,
-  tripId: string,
-  googlePlaceId: string,
-): Promise<string | null> {
-  if (!validIds(tripId)) return null;
-  const [row] = await db
-    .select({ id: places.id })
-    .from(places)
-    .where(
-      and(
-        eq(places.googlePlaceId, googlePlaceId),
-        eq(places.tripId, tripId),
-        inArray(
-          places.tripId,
-          db
-            .select({ id: trips.id })
-            .from(trips)
-            .where(accessibleTrips(userId)),
-        ),
-      ),
-    )
-    .limit(1);
-  return row?.id ?? null;
-}
-
 // t(여행 하나 또는 없음)에서 장소를 넣거나 이미 있는 것을 골라 chosen(id, label) 한 행으로.
 function chosenPlaceCtes(
   tripRows: SQL,

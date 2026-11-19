@@ -2,12 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
-import { countPlaces, MAX_PLACES_PER_TRIP } from "@/db/queries/places";
+import {
+  countPlaces,
+  findPlaceIdByGoogleId,
+  MAX_PLACES_PER_TRIP,
+} from "@/db/queries/places";
 import {
   createScheduleItem,
   createScheduleItemWithNewPlace,
   deleteScheduleItem,
-  findPlaceIdByGoogleId,
   getScheduleItem,
   setScheduleItemDone,
   updateScheduleItem,

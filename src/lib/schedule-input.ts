@@ -82,8 +82,8 @@ const TITLE_MAX = 100;
 const PLACE_MAX = 200;
 const MEMO_MAX = 2000;
 // place-input.ts 의 이름표 상한·Google 장소 id 형식과 같다.
-const GOOGLE_LABEL_MAX = 100;
-const GOOGLE_PLACE_ID_PATTERN = /^[A-Za-z0-9_-]{1,300}$/;
+export const SCHEDULE_GOOGLE_LABEL_MAX = 100;
+export const SCHEDULE_GOOGLE_PLACE_ID_PATTERN = /^[A-Za-z0-9_-]{1,300}$/;
 const GOOGLE_PICK_INVALID = "장소를 찾지 못했어요. 다시 검색해 주세요.";
 // ids.ts 의 isUuid 와 같은 형식. 순수 모듈 규칙 때문에 import 하지 않고 여기 둔다.
 const UUID_PATTERN =
@@ -184,8 +184,8 @@ function parseGooglePick(
   label: string,
   category: string,
 ): GooglePlacePick | null {
-  if (!GOOGLE_PLACE_ID_PATTERN.test(googlePlaceId)) return null;
-  if (label === "" || length(label) > GOOGLE_LABEL_MAX) return null;
+  if (!SCHEDULE_GOOGLE_PLACE_ID_PATTERN.test(googlePlaceId)) return null;
+  if (label === "" || length(label) > SCHEDULE_GOOGLE_LABEL_MAX) return null;
   if (!isSchedulePlaceCategory(category)) return null;
   return { googlePlaceId, label, category };
 }

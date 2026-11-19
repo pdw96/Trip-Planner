@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { PLACE_CATEGORIES } from "./place-input.ts";
+import {
+  GOOGLE_PLACE_ID_PATTERN,
+  PLACE_CATEGORIES,
+  PLACE_LABEL_MAX,
+} from "./place-input.ts";
 import {
   EMPTY_SCHEDULE_FIELDS,
   parseScheduleInput,
+  SCHEDULE_GOOGLE_LABEL_MAX,
+  SCHEDULE_GOOGLE_PLACE_ID_PATTERN,
   SCHEDULE_PLACE_CATEGORIES,
 } from "./schedule-input.ts";
 
@@ -137,8 +143,13 @@ test("rejects a bad google pick", () => {
   }
 });
 
-test("categories match place-input", () => {
+test("google place rules match place-input", () => {
   assert.deepEqual([...SCHEDULE_PLACE_CATEGORIES], [...PLACE_CATEGORIES]);
+  assert.equal(SCHEDULE_GOOGLE_LABEL_MAX, PLACE_LABEL_MAX);
+  assert.equal(
+    SCHEDULE_GOOGLE_PLACE_ID_PATTERN.source,
+    GOOGLE_PLACE_ID_PATTERN.source,
+  );
 });
 
 test("limits lengths", () => {

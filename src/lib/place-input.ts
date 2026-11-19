@@ -43,9 +43,10 @@ export type PlaceFormState = {
   savedAt: number | null;
 };
 
-const LABEL_MAX = 100;
+// schedule-input.ts 가 같은 값을 따로 둔다(시험이 같은지 확인한다).
+export const PLACE_LABEL_MAX = 100;
 const MEMO_MAX = 200;
-const GOOGLE_PLACE_ID_PATTERN = /^[A-Za-z0-9_-]{1,300}$/;
+export const GOOGLE_PLACE_ID_PATTERN = /^[A-Za-z0-9_-]{1,300}$/;
 
 // 종류 짐작 규칙. Google 의 place type 을 다섯 종류로 묶는다.
 const FOOD_TYPES = new Set([
@@ -128,7 +129,7 @@ function parseSharedFields(
 
   const errors: PlaceFieldErrors = {};
   const labelError =
-    label === "" ? "이름을 입력해 주세요." : tooLong(label, LABEL_MAX);
+    label === "" ? "이름을 입력해 주세요." : tooLong(label, PLACE_LABEL_MAX);
   if (labelError) errors.label = labelError;
   if (!isPlaceCategory(category)) errors.category = "종류를 골라 주세요.";
   const memoError = tooLong(memo, MEMO_MAX);
