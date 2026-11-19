@@ -1,5 +1,7 @@
 // 날의 기준점(숙소)과 하루 동선. 서버에서 쓰고 node --test 로 시험하므로 다른 모듈을 import 하지 않는다.
 // 거리는 호출하는 쪽이 넘긴다(geo.ts 의 distanceMeters).
+// routesByDate: 지도 칸·일정 칸·loadDayRoute 가 같은 규칙으로 날짜별 뼈대를 만든다(#37).
+// daySignature: 구간 결과 저장소의 키. 동선 모양·시각·일정 id 가 바뀌면 달라진다(#37).
 
 export type RoutePlace = {
   id: string;
@@ -13,7 +15,15 @@ export type LatLng = { lat: number; lng: number };
 
 export type BaseRow = { startDate: string; placeId: string | null };
 
-export type DayStop = { placeId: string; time: string | null };
+export type DayStop = { itemId: string; placeId: string; time: string | null };
+
+// 일정 행에서 동선에 쓰는 값. time 은 DB 값("09:30:00") 또는 "09:30".
+export type ScheduleRow = {
+  id: string;
+  date: string;
+  placeId: string | null;
+  time: string | null;
+};
 
 export type LegTiming =
   | { kind: "arrival"; time: string }
@@ -24,6 +34,9 @@ export type DayLeg = {
   to: RoutePlace;
   fromIsBase: boolean;
   toIsBase: boolean;
+  // 이 구간의 출발·도착 일정(#37). 기준점과 합쳐진 점은 일정 id, 일정 없이 기준점만인 점은 null.
+  fromItemId: string | null;
+  toItemId: string | null;
   timing: LegTiming;
   straightMeters: number;
 };
@@ -59,6 +72,9 @@ type Point = {
   // 이 점에 도착하는 구간에 쓰는 시각(합친 stop 중 처음 시각)과 떠나는 구간에 쓰는 시각(마지막 시각).
   arriveTime: string | null;
   departTime: string | null;
+  // 시각과 같은 규칙: 도착 구간은 합친 stop 중 처음 일정, 출발 구간은 마지막 일정.
+  arriveItemId: string | null;
+  departItemId: string | null;
 };
 
 type Located = { place: RoutePlace; coords: LatLng };
@@ -87,6 +103,8 @@ export function buildDayRoute(
       isBase: true,
       arriveTime: null,
       departTime: null,
+      arriveItemId: null,
+      departItemId: null,
     });
   for (const stop of stops) {
     const found = locate(stop.placeId, places);
@@ -96,6 +114,8 @@ export function buildDayRoute(
         isBase: false,
         arriveTime: stop.time,
         departTime: stop.time,
+        arriveItemId: stop.itemId,
+        departItemId: stop.itemId,
       });
     }
   }
@@ -105,6 +125,8 @@ export function buildDayRoute(
       isBase: true,
       arriveTime: null,
       departTime: null,
+      arriveItemId: null,
+      departItemId: null,
     });
 
   // 연달아 같은 장소는 한 점으로 합친다. 도착 시각은 처음 시각, 출발 시각은 마지막 시각을 남긴다(기준점은 시각이 없다).
@@ -115,6 +137,8 @@ export function buildDayRoute(
       last.isBase = last.isBase || point.isBase;
       last.arriveTime = last.arriveTime ?? point.arriveTime;
       last.departTime = point.departTime ?? last.departTime;
+      last.arriveItemId = last.arriveItemId ?? point.arriveItemId;
+      last.departItemId = point.departItemId ?? last.departItemId;
     } else {
       points.push({ ...point });
     }
@@ -144,12 +168,50 @@ export function buildDayRoute(
       to: to.place,
       fromIsBase: from.isBase,
       toIsBase: to.isBase,
+      fromItemId: from.departItemId,
+      toItemId: to.arriveItemId,
       timing,
       straightMeters: distance(from.coords, to.coords),
     });
   }
 
   return { base: base ? base.place : null, stops: numbered, legs };
+}
+
+// 날짜마다 그날 장소가 이어진 일정(items 순서 그대로, listScheduleItems 정렬)으로 뼈대를 만든다.
+export function routesByDate(
+  dates: string[],
+  items: ScheduleRow[],
+  bases: BaseRow[],
+  places: Map<string, RoutePlace>,
+  distance: (a: LatLng, b: LatLng) => number,
+): Map<string, DayRoute> {
+  const stopsByDate = new Map<string, DayStop[]>(dates.map((d) => [d, []]));
+  for (const item of items) {
+    const stops = stopsByDate.get(item.date);
+    if (!stops || item.placeId === null) continue;
+    stops.push({
+      itemId: item.id,
+      placeId: item.placeId,
+      time: item.time === null ? null : item.time.slice(0, 5),
+    });
+  }
+  const routes = new Map<string, DayRoute>();
+  for (const [date, stops] of stopsByDate) {
+    routes.set(
+      date,
+      buildDayRoute(stops, baseForDate(bases, date), places, distance),
+    );
+  }
+  return routes;
+}
+
+export function daySignature(route: DayRoute): string {
+  const legs = route.legs.map(
+    (l) =>
+      `${l.from.id}>${l.to.id}@${l.timing.kind} ${l.timing.time}#${l.fromItemId ?? "-"}>${l.toItemId ?? "-"}`,
+  );
+  return `${route.base?.id ?? "-"}|${legs.join(",")}`;
 }
 
 // 좌표는 30일(30×24h)을 넘기면 다시 불러온다.

@@ -4,10 +4,10 @@ import { listTripBases } from "@/db/queries/trip-bases";
 import type { Place, Trip } from "@/db/schema";
 import {
   baseForDate,
-  buildDayRoute,
-  type DayStop,
+  daySignature,
   needsCoordsRefresh,
   type RoutePlace,
+  routesByDate,
 } from "@/lib/day-route";
 import { distanceMeters, formatDistance } from "@/lib/geo";
 import { fetchPlaceCoords } from "@/lib/google-maps-server";
@@ -72,28 +72,37 @@ export async function MapSection({
     ]),
   );
 
-  // 동선 순서는 #12 정렬(listScheduleItems 순서) 그대로. day-route-loader 와 같은 규칙이다.
+  // 동선 순서는 #12 정렬(listScheduleItems 순서) 그대로. day-route-loader·일정 칸과 같은 함수다.
+  const routes = routesByDate(
+    days.map((d) => d.date),
+    itemRows,
+    baseRows,
+    routePlaces,
+    distanceMeters,
+  );
   const panelDays: PanelDay[] = days.map((day) => {
-    const stops: DayStop[] = itemRows
-      .filter((item) => item.date === day.date && item.placeId !== null)
-      .map((item) => ({
-        placeId: item.placeId as string,
-        time: item.time === null ? null : item.time.slice(0, 5),
-      }));
+    const dayItems = itemRows.filter(
+      (item) => item.date === day.date && item.placeId !== null,
+    );
     const baseId = baseForDate(baseRows, day.date);
-    const route = buildDayRoute(stops, baseId, routePlaces, distanceMeters);
+    const route = routes.get(day.date) ?? {
+      base: null,
+      stops: [],
+      legs: [],
+    };
     return {
       date: day.date,
       dayNumber: day.dayNumber,
       label: day.label,
       baseId: baseId !== null && routePlaces.has(baseId) ? baseId : null,
       routeBaseId: route.base?.id ?? null,
+      signature: daySignature(route),
       stops: route.stops.map((s) => ({
         placeId: s.place.id,
         number: s.number,
       })),
-      unlocatedCount: stops.filter((stop) => {
-        const place = routePlaces.get(stop.placeId);
+      unlocatedCount: dayItems.filter((item) => {
+        const place = routePlaces.get(item.placeId as string);
         return !place || place.lat === null || place.lng === null;
       }).length,
       legs: route.legs.map((leg) => ({
