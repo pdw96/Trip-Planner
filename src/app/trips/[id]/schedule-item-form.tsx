@@ -259,6 +259,8 @@ function PlaceField({
     ? values.placeId
     : "";
   const [chosenId, setChosenId] = useState(initialPlaceId);
+  // 직접 적은 글자. Google 장소를 고른 동안 글자 칸이 빠졌다가 ✕ 로 다시 생겨도 적던 글자가 남게 한다.
+  const [typedPlace, setTypedPlace] = useState(values.place);
   // 고른 장소가 다시 그린 목록에서 사라지면(다른 곳에서 지움) 브라우저 select 는 "직접 적기"로 돌아간다.
   // 보이기도 목록에 있는지로 정해, 화면·글자 칸·제출 값이 같은 "직접 적기"가 되게 한다(글자 칸은 일정의 장소 글자로 채움).
   const placeId = places.some((place) => place.id === chosenId) ? chosenId : "";
@@ -310,6 +312,7 @@ function PlaceField({
               {/* 서버는 Google 장소가 있으면 placeId 를 쓰지 않는다. 오류로 돌아와 고른 장소를 지우면
                   고르기 목록이 Google 장소를 고르기 전 선택으로 돌아가도록 함께 보낸다. */}
               <input type="hidden" name="placeId" value={placeId} />
+              <input type="hidden" name="place" value={typedPlace} />
               <input
                 type="hidden"
                 name="googlePlaceId"
@@ -366,7 +369,8 @@ function PlaceField({
               id={textId}
               name="place"
               type="text"
-              defaultValue={values.place}
+              defaultValue={typedPlace}
+              onChange={(event) => setTypedPlace(event.target.value)}
               aria-label={
                 hasSelect || searchEnabled ? "장소 직접 적기" : undefined
               }
