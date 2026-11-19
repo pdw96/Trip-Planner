@@ -4,6 +4,7 @@ import {
   compareScheduleItems,
   dateLabel,
   displayTime,
+  existingPlaceIdFor,
   groupSchedule,
   mapsSearchUrl,
   tripDays,
@@ -135,4 +136,13 @@ test("tripDays ends at the last representable year", () => {
     tripDays("9999-12-30", "9999-12-31").map((d) => d.date),
     ["9999-12-30", "9999-12-31"],
   );
+});
+
+test("existingPlaceIdFor finds a trip place by google id", () => {
+  const places = [
+    { id: "a", googlePlaceId: "G1" },
+    { id: "b", googlePlaceId: "G2" },
+  ];
+  assert.equal(existingPlaceIdFor("G2", places), "b");
+  assert.equal(existingPlaceIdFor("G3", places), null);
 });

@@ -110,3 +110,11 @@ export function displayTime(time: string | null): string {
 export function mapsSearchUrl(place: string): string {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}`;
 }
+
+// 일정 양식에서 고른 Google 장소가 이미 이 여행의 장소면 그 장소 id(#35). 없으면 null.
+export function existingPlaceIdFor(
+  googlePlaceId: string,
+  places: { id: string; googlePlaceId: string }[],
+): string | null {
+  return places.find((p) => p.googlePlaceId === googlePlaceId)?.id ?? null;
+}

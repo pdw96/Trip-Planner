@@ -41,6 +41,8 @@ export async function ScheduleSection({
     label: day.label,
   }));
   const todayInTrip = today >= trip.startDate && today <= trip.endDate;
+  // 장소 칸 Google 검색(#35). 브라우저 키는 공개 값(웹사이트 제한)이다. 자동완성에는 지도 ID 가 필요 없다.
+  const browserKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY || null;
 
   function row(item: ScheduleItem, dateOptions: DateOption[]) {
     const rowItem: RowItem = {
@@ -78,7 +80,7 @@ export async function ScheduleSection({
           </a>
         )}
       </div>
-      <ScheduleEditorProvider places={placeOptions}>
+      <ScheduleEditorProvider places={placeOptions} browserKey={browserKey}>
         {days.map(({ day, items: dayItems }) => (
           <section
             key={day.date}
