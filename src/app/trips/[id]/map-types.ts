@@ -41,6 +41,8 @@ export type PanelDay = {
   baseId: string | null;
   // 동선에 들어간 기준점(좌표가 있을 때만).
   routeBaseId: string | null;
+  // 구간 결과 저장소 키(daySignature). 바뀌면 다시 묻는다(#37).
+  signature: string;
   stops: { placeId: string; number: number }[];
   // 그날 장소가 이어진 일정 중 좌표가 없어 동선에서 빠진 것의 수.
   unlocatedCount: number;

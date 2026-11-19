@@ -3,13 +3,7 @@ import { listPlaces } from "@/db/queries/places";
 import { listScheduleItems } from "@/db/queries/schedule-items";
 import { listTripBases } from "@/db/queries/trip-bases";
 import { getTrip } from "@/db/queries/trips";
-import {
-  baseForDate,
-  buildDayRoute,
-  type DayLeg,
-  type DayStop,
-  type RoutePlace,
-} from "@/lib/day-route";
+import { type DayLeg, type RoutePlace, routesByDate } from "@/lib/day-route";
 import { distanceMeters, formatDistance, type LatLng } from "@/lib/geo";
 import {
   fetchPlaceRegion,
@@ -39,6 +33,9 @@ import { isValidIsoDate } from "@/lib/trip-input";
 export type LegView = {
   fromId: string;
   toId: string;
+  // 출발·도착 일정 id(기준점만이면 null). 일정표가 이동 줄 자리를 정한다(#37).
+  fromItemId: string | null;
+  toItemId: string | null;
   result: LegResult;
   text: string;
   straightMeters: number;
@@ -157,22 +154,15 @@ export async function loadDayRoute(
       },
     ]),
   );
-  // 그날 장소가 이어진 일정만, #12 정렬(listScheduleItems 순서) 그대로. DB 의 time 은 "09:30:00" 으로 온다.
-  const stops: DayStop[] = [];
-  for (const item of itemRows) {
-    if (item.date === date && item.placeId !== null) {
-      stops.push({
-        placeId: item.placeId,
-        time: item.time === null ? null : item.time.slice(0, 5),
-      });
-    }
-  }
-  const route = buildDayRoute(
-    stops,
-    baseForDate(baseRows, date),
+  // 그날 장소가 이어진 일정만, #12 정렬(listScheduleItems 순서) 그대로. 지도 칸·일정 칸과 같은 함수다.
+  const route = routesByDate(
+    [date],
+    itemRows,
+    baseRows,
     placesById,
     distanceMeters,
-  );
+  ).get(date);
+  if (!route) return { ok: false };
 
   // 구간에 나오는 장소마다 나라·시간대를 한 번씩, 병렬로 묻는다(이 요청 안에서만 쓴다).
   const askedLegs = route.legs.slice(0, MAX_LEGS_PER_DAY);
@@ -208,6 +198,8 @@ export async function loadDayRoute(
   const legs: LegView[] = route.legs.map((leg, i) => ({
     fromId: leg.from.id,
     toId: leg.to.id,
+    fromItemId: leg.fromItemId,
+    toItemId: leg.toItemId,
     result: results[i],
     text: legText(results[i]),
     straightMeters: leg.straightMeters,
