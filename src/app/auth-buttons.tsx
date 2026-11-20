@@ -6,7 +6,12 @@ import { authClient } from "@/lib/auth-client";
 const buttonClass =
   "flex h-12 items-center justify-center rounded-full border border-solid border-black/[.08] px-5 font-medium transition-colors hover:bg-black/[.04] disabled:opacity-50 dark:border-white/[.145] dark:hover:bg-[#1a1a1a]";
 
-export function GoogleSignInButton() {
+// callbackURL 은 이 앱 안 상대 경로만 넘긴다(초대 화면이 서버에서 만든 `/invite/<비밀값>`, #15).
+export function GoogleSignInButton({
+  callbackURL = "/",
+}: {
+  callbackURL?: string;
+}) {
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
 
@@ -15,7 +20,7 @@ export function GoogleSignInButton() {
     setFailed(false);
     const { error } = await authClient.signIn.social({
       provider: "google",
-      callbackURL: "/",
+      callbackURL,
     });
     // 성공하면 Google 로 이동하므로 여기까지 오는 것은 실패한 경우뿐입니다.
     if (error) {
