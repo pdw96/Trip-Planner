@@ -37,9 +37,7 @@ export function InAppBrowserNotice() {
   }
 
   return (
-    <div
-      className="flex max-w-sm flex-col items-center gap-3 rounded-2xl bg-amber-500/10 px-5 py-4 text-sm text-amber-900 dark:text-amber-200"
-    >
+    <div className="flex max-w-sm flex-col items-center gap-3 rounded-2xl bg-amber-500/10 px-5 py-4 text-sm text-amber-900 dark:text-amber-200">
       <p>
         {kind === "kakaotalk"
           ? "브라우저에서 열었어요. 열리지 않으면 아래 버튼을 눌러 주세요."
