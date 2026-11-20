@@ -6,6 +6,7 @@ import {
   splitTrips,
   todayInSeoul,
   tripCountdown,
+  tripDayCount,
 } from "./trip-dates.ts";
 
 test("todayInSeoul crosses midnight in Seoul", () => {
@@ -111,4 +112,11 @@ test("tripCountdown", () => {
     "여행 중",
   );
   assert.equal(tripCountdown("2026-12-05", "2026-12-07", "2026-12-08"), null);
+});
+
+test("tripDayCount counts days without expanding them", () => {
+  assert.equal(tripDayCount("2026-12-05", "2026-12-07"), 3);
+  assert.equal(tripDayCount("2026-12-05", "2026-12-05"), 1);
+  assert.equal(tripDayCount("2026-12-30", "2027-01-02"), 4);
+  assert.equal(tripDayCount("2026-01-01", "3026-01-01"), 365243);
 });
