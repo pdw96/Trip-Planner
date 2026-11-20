@@ -3,6 +3,8 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /* 고르기 목록·날짜 칸 같은 브라우저 기본 칸도 다크 모드를 따르게(#44) */
+  color-scheme: light dark;
 }
 
 @theme inline {
