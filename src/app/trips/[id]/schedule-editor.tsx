@@ -9,16 +9,21 @@ import {
   useEffect,
   useLayoutEffect,
   useOptimistic,
+  useRef,
   useState,
   useTransition,
 } from "react";
-import type { ActualMoney, Money } from "@/lib/budget";
+import { type ActualMoney, formatMoney, type Money } from "@/lib/budget";
 import { placeUrl } from "@/lib/leg-display";
 import { mapsSearchUrl } from "@/lib/schedule";
 import {
   EMPTY_SCHEDULE_FIELDS,
   type ScheduleFormState,
 } from "@/lib/schedule-input";
+import {
+  setScheduleItemActualAction,
+  undoScheduleItemWithActualAction,
+} from "../budget-actions";
 import { SAVE_FAILED } from "../messages";
 import {
   createScheduleItemAction,
@@ -26,11 +31,13 @@ import {
   setScheduleItemDoneAction,
   updateScheduleItemAction,
 } from "../schedule-actions";
+import { inputClass } from "../styles";
 import type { PlaceOption } from "./map-types";
 import {
   actualDetailValues,
   amountFieldValues,
   type BudgetCurrencies,
+  currencyLabel,
 } from "./money-fields";
 import { type DateOption, ScheduleItemForm } from "./schedule-item-form";
 
@@ -161,6 +168,9 @@ export function ScheduleItemRow({
   const { openKey, setOpenKey, places, searchEnabled, budget } = useOpen();
   const key = `edit:${item.id}`;
   const editing = openKey === key;
+  // 완료 체크칸을 켜면 열리는 실제 지출 칸(#14 §5.7.3).
+  const actualKey = `actual:${item.id}`;
+  const enteringActual = budget !== null && openKey === actualKey;
   // 입력칸으로 열린 줄은 끌지 않는다. 다른 줄이 움직일 때 자리를 비켜 주도록 노드는 늘 등록한다.
   const {
     attributes,
@@ -191,9 +201,37 @@ export function ScheduleItemRow({
     return () => clearTimeout(timer);
   }, [error]);
 
+  function closeActual() {
+    setOpenKey((current) => (current === actualKey ? null : current));
+  }
+
   // 누르면 바로 화면에 반영하고 저장한다. 실패하면 전환이 끝날 때 서버 값으로 돌아가고 문구를 보인다.
+  // 예산이 있으면 켤 때 실제 지출 칸을 연다. 실제를 적은 일정을 끄면 확인 뒤 완료 해제와 실제 삭제를 한 번에 한다.
   function toggleDone() {
     const next = !done;
+    if (!next && item.actual) {
+      const spent = formatMoney(item.actual.amount, item.actual.currency);
+      if (
+        !window.confirm(
+          `완료를 풀면 적어 둔 실제 지출 ${spent}도 지워져요. 계속할까요?`,
+        )
+      ) {
+        return;
+      }
+      setError(null);
+      closeActual();
+      startToggle(async () => {
+        setOptimisticDone(false);
+        const ok = await undoScheduleItemWithActualAction(tripId, item.id).then(
+          (result) => result.ok,
+          () => false,
+        );
+        if (!ok) setError(SAVE_FAILED);
+      });
+      return;
+    }
+    if (next && budget) setOpenKey(actualKey);
+    else closeActual();
     setError(null);
     startToggle(async () => {
       setOptimisticDone(next);
@@ -334,6 +372,14 @@ export function ScheduleItemRow({
             {item.memo}
           </p>
         )}
+        {enteringActual && budget && (
+          <ActualEntry
+            tripId={tripId}
+            item={item}
+            budget={budget}
+            onClose={closeActual}
+          />
+        )}
         {error && (
           <p role="alert" className="text-sm text-red-600">
             {error}
@@ -348,5 +394,103 @@ export function ScheduleItemRow({
         className="mt-1 size-5 shrink-0 accent-foreground"
       />
     </li>
+  );
+}
+
+// 완료 체크칸을 켠 뒤 그 줄 아래에 열리는 실제 지출 칸 하나(§5.7.3). 처음 값은 적어 둔 실제 → 예상 → 빈칸.
+// 저장하면 닫히고, 건너뛰기(돈을 안 쓴 일정)는 실제를 쓰지 않고 닫는다. 빈칸으로 저장하면 실제를 지운다.
+function ActualEntry({
+  tripId,
+  item,
+  budget,
+  onClose,
+}: {
+  tripId: string;
+  item: RowItem;
+  budget: BudgetCurrencies;
+  onClose: () => void;
+}) {
+  const initial = amountFieldValues(item.actual ?? item.estimate, budget);
+  const [amount, setAmount] = useState(initial.amount);
+  const [currency, setCurrency] = useState(initial.currency);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, startSave] = useTransition();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const inputId = `actual-${item.id}`;
+
+  useLayoutEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  function save(event: React.FormEvent) {
+    event.preventDefault();
+    setError(null);
+    startSave(async () => {
+      const result = await setScheduleItemActualAction(
+        tripId,
+        item.id,
+        amount,
+        currency,
+      ).catch(() => ({ ok: false as const, error: SAVE_FAILED }));
+      if (result.ok) onClose();
+      else setError(result.error);
+    });
+  }
+
+  const choices = budget.localCurrency
+    ? [budget.localCurrency, budget.currency]
+    : null;
+  return (
+    <form onSubmit={save} noValidate className="mt-1 flex flex-col gap-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <label htmlFor={inputId} className="text-sm font-medium">
+          실제 지출
+        </label>
+        <input
+          ref={inputRef}
+          id={inputId}
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          inputMode="decimal"
+          autoComplete="off"
+          aria-invalid={error ? true : undefined}
+          className={`${inputClass} w-32 py-1.5`}
+        />
+        {choices && (
+          <select
+            value={currency}
+            onChange={(e) => setCurrency(e.target.value)}
+            aria-label="실제 지출 통화"
+            className={`${inputClass} w-auto py-1.5`}
+          >
+            {choices.map((code) => (
+              <option key={code} value={code}>
+                {currencyLabel(code)}
+              </option>
+            ))}
+          </select>
+        )}
+        <button
+          type="submit"
+          disabled={saving}
+          className="rounded-full bg-foreground px-3 py-1.5 text-sm font-medium text-background disabled:opacity-50"
+        >
+          {saving ? "저장하는 중…" : "저장"}
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={saving}
+          className="rounded-full px-3 py-1.5 text-sm text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
+        >
+          건너뛰기
+        </button>
+      </div>
+      {error && (
+        <p role="alert" className="text-sm text-red-600">
+          {error}
+        </p>
+      )}
+    </form>
   );
 }
