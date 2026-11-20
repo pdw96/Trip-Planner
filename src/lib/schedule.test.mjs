@@ -37,11 +37,12 @@ test("dateLabel", () => {
 });
 
 const at = (ms) => new Date(ms);
-const item = (id, date, time, createdAt = at(0)) => ({
+const item = (id, date, time, createdAt = at(0), position = null) => ({
   id,
   date,
   time,
   createdAt,
+  position,
 });
 
 function sorted(items) {
@@ -73,6 +74,25 @@ test("compareScheduleItems breaks ties by createdAt then id", () => {
       item("a", "2026-12-04", "10:00:00", at(1)),
     ]),
     ["a", "b"],
+  );
+});
+
+const D = "2026-12-04";
+
+test("compareScheduleItems uses position before time", () => {
+  assert.deepEqual(
+    sorted([item("t", D, "09:00:00", at(0), 1), item("u", D, null, at(0), 0)]),
+    ["u", "t"],
+  );
+});
+
+test("compareScheduleItems puts null position last within a day", () => {
+  assert.deepEqual(
+    sorted([
+      item("n", D, "08:00:00", at(0), null),
+      item("p", D, null, at(0), 0),
+    ]),
+    ["p", "n"],
   );
 });
 
