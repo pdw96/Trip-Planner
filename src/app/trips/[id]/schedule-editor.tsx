@@ -347,31 +347,32 @@ export function ScheduleItemRow({
       <span className="w-12 shrink-0 pt-0.5 text-sm tabular-nums text-zinc-500">
         {item.time}
       </span>
-      <div
-        className={`flex min-w-0 flex-1 flex-col gap-0.5 ${done ? "opacity-50" : ""}`}
-      >
-        <button
-          type="button"
-          onClick={() => setOpenKey(key)}
-          className={`self-start text-left font-medium break-words hover:underline ${done ? "line-through" : ""}`}
-        >
-          {name}
-        </button>
-        {item.place && placeHref && (
-          <a
-            href={placeHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="self-start text-sm text-zinc-600 break-words hover:underline dark:text-zinc-400"
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        {/* 완료된 일정은 흐리게. 완료 뒤에 여는 실제 지출 칸은 흐리지 않는다(#14 리뷰). */}
+        <div className={`flex flex-col gap-0.5 ${done ? "opacity-50" : ""}`}>
+          <button
+            type="button"
+            onClick={() => setOpenKey(key)}
+            className={`self-start text-left font-medium break-words hover:underline ${done ? "line-through" : ""}`}
           >
-            📍 {item.title === null ? "지도에서 보기" : item.place}
-          </a>
-        )}
-        {item.memo && (
-          <p className="text-sm whitespace-pre-wrap break-words text-zinc-600 dark:text-zinc-400">
-            {item.memo}
-          </p>
-        )}
+            {name}
+          </button>
+          {item.place && placeHref && (
+            <a
+              href={placeHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="self-start text-sm text-zinc-600 break-words hover:underline dark:text-zinc-400"
+            >
+              📍 {item.title === null ? "지도에서 보기" : item.place}
+            </a>
+          )}
+          {item.memo && (
+            <p className="text-sm whitespace-pre-wrap break-words text-zinc-600 dark:text-zinc-400">
+              {item.memo}
+            </p>
+          )}
+        </div>
         {enteringActual && budget && (
           <ActualEntry
             tripId={tripId}

@@ -9,6 +9,7 @@ import {
   type PeriodTotal,
   toBudgetMinor,
 } from "@/lib/budget";
+import { dateLabel } from "@/lib/schedule";
 import { secondaryButtonClass } from "../styles";
 import {
   BudgetSettingsForm,
@@ -84,6 +85,33 @@ function CardBody({ tripId, budget, tab, days, onSelectTab }: Props) {
   const extras = budget.extras.filter((e) =>
     day ? e.date === day.date : e.date === null,
   );
+  // 여행 날짜를 줄여 기간 밖으로 밀려난 일정 밖 항목. [전체]에서 고치거나 지울 수 있게 따로 보인다(#14 리뷰).
+  const tripDates = new Set(days.map((d) => d.date));
+  const outsideExtras = budget.extras.filter(
+    (e) => e.date !== null && !tripDates.has(e.date),
+  );
+
+  // 고치는 항목의 날짜가 기간 밖이면 그 날짜도 고를 수 있게 둔다(저장해도 그대로 남도록).
+  const renderForm = (item: PanelExtra | null) => (
+    <ExtraItemForm
+      tripId={tripId}
+      currencies={currencies}
+      item={item}
+      defaultDate={day?.date ?? ""}
+      dates={
+        item?.date && !tripDates.has(item.date)
+          ? [
+              ...dateChoices,
+              {
+                value: item.date,
+                label: `${dateLabel(item.date, true)} (여행 기간 밖)`,
+              },
+            ]
+          : dateChoices
+      }
+      onClose={close}
+    />
+  );
 
   const extraList = (
     <ExtraList
@@ -92,16 +120,7 @@ function CardBody({ tripId, budget, tab, days, onSelectTab }: Props) {
       open={open}
       setOpen={setOpen}
       addLabel={day ? "+ 지출 추가" : "+ 항목 추가"}
-      renderForm={(item) => (
-        <ExtraItemForm
-          tripId={tripId}
-          currencies={currencies}
-          item={item}
-          defaultDate={day?.date ?? ""}
-          dates={dateChoices}
-          onClose={close}
-        />
-      )}
+      renderForm={renderForm}
     />
   );
 
@@ -145,6 +164,19 @@ function CardBody({ tripId, budget, tab, days, onSelectTab }: Props) {
       <DayTable budget={budget} days={days} onSelectTab={onSelectTab} />
       <h4 className="text-sm font-medium">여행 전체 항목</h4>
       {extraList}
+      {outsideExtras.length > 0 && (
+        <>
+          <h4 className="text-sm font-medium">여행 기간 밖 항목</h4>
+          <ExtraList
+            extras={outsideExtras}
+            settings={settings}
+            open={open}
+            setOpen={setOpen}
+            addLabel={null}
+            renderForm={renderForm}
+          />
+        </>
+      )}
     </section>
   );
 }
@@ -405,7 +437,8 @@ function ExtraList({
   settings: BudgetSettings;
   open: string | null;
   setOpen: (key: string | null) => void;
-  addLabel: string;
+  // null 이면 추가 버튼 없음.
+  addLabel: string | null;
   renderForm: (item: PanelExtra | null) => React.ReactNode;
 }) {
   return (
@@ -446,7 +479,7 @@ function ExtraList({
           )}
         </ul>
       )}
-      {open === "add" ? (
+      {addLabel === null ? null : open === "add" ? (
         renderForm(null)
       ) : (
         <button
