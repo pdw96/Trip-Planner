@@ -10,3 +10,7 @@ export const PLACE_LIMIT = "장소는 한 여행에 100개까지 넣을 수 있�
 
 export const PLACE_SEARCH_UNAVAILABLE =
   "지금은 장소를 검색할 수 없어요. 직접 적거나 잠시 뒤 다시 해 주세요.";
+
+export const ORDER_SAVE_FAILED = "순서를 저장하지 못했어요. 다시 해 주세요.";
+
+export const ORDER_TIME_RULE = "시각 순서대로만 옮길 수 있어요";

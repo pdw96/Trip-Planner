@@ -12,12 +12,15 @@ import {
   createScheduleItemWithNewPlace,
   deleteScheduleItem,
   getScheduleItem,
+  listDayOrder,
   setScheduleItemDone,
   updateScheduleItem,
   updateScheduleItemWithNewPlace,
+  writeDayOrder,
 } from "@/db/queries/schedule-items";
 import { getTrip } from "@/db/queries/trips";
 import { fetchPlaceCoords } from "@/lib/google-maps-server";
+import { isUuid } from "@/lib/ids";
 import {
   EMPTY_SCHEDULE_FIELDS,
   type GooglePlacePick,
@@ -26,7 +29,14 @@ import {
   type ScheduleFormState,
   type ScheduleInput,
 } from "@/lib/schedule-input";
+import {
+  isReorderOf,
+  keepsTimeOrder,
+  type OrderItem,
+  orderWithItem,
+} from "@/lib/schedule-order";
 import { getCurrentUser } from "@/lib/session";
+import { isValidIsoDate } from "@/lib/trip-input";
 import { PLACE_LIMIT, PLACE_NOT_FOUND, SAVE_FAILED } from "./messages";
 
 // tripId·itemId·date 는 bind 로 오지만 클라이언트가 바꿀 수 있는 값이다.
@@ -66,6 +76,45 @@ function tripPath(tripId: string): string {
 // 고른 Google 장소 값을 비운다(장소를 다시 고르게 할 때).
 function withoutGoogle(values: ScheduleFields): ScheduleFields {
   return { ...values, googlePlaceId: "", googleLabel: "", googleCategory: "" };
+}
+
+// --- 그날 순서 (#41) ---
+
+// 한 번에 저장하는 하루 일정 수 상한(요청 크기 상한).
+const MAX_ITEMS_PER_DAY = 200;
+
+// 쓰기 전 그날 순서. 읽지 못하면 null(자리 정하기를 건너뛴다. 일정 저장은 그대로 한다).
+async function dayOrderBeforeWrite(
+  userId: string,
+  tripId: string,
+  date: string,
+): Promise<OrderItem[] | null> {
+  try {
+    return await listDayOrder(userId, tripId, date);
+  } catch {
+    return null;
+  }
+}
+
+// 넣기·고치기가 성공한 뒤 그날 순서를 규칙대로 다시 쓴다(설계 §5.2). 실패해도 일정은 저장됐으므로 오류로
+// 돌려주지 않는다. 그 줄은 맨 뒤나 옛 자리에 보일 수 있고, 끌어 옮기면 다시 맞춰진다.
+async function settleDayOrder(
+  userId: string,
+  tripId: string,
+  date: string,
+  before: OrderItem[] | null,
+  item: OrderItem,
+): Promise<void> {
+  if (before === null) return;
+  const ids = orderWithItem(before, item);
+  if (ids === null) return;
+  try {
+    if (!(await writeDayOrder(userId, tripId, date, ids))) {
+      console.warn("[schedule-order] 그날 순서를 모두 쓰지 못했어요.");
+    }
+  } catch {
+    console.warn("[schedule-order] 그날 순서를 쓰지 못했어요.");
+  }
 }
 
 type GoogleResolution =
@@ -171,15 +220,26 @@ export async function createScheduleItemAction(
     };
   }
 
+  const before = await dayOrderBeforeWrite(user.id, tripId, parsed.value.date);
+  // 콜백 안에서 새 일정 id 를 받아 둔다(그 뒤 그날 순서에 넣는다).
+  const created: { id: string | null } = { id: null };
   const outcome = await writeWithPlace(
     user.id,
     tripId,
     parsed.value,
-    async (input) =>
-      (await createScheduleItem(user.id, tripId, input)) !== null,
-    async (input, coords) =>
-      (await createScheduleItemWithNewPlace(user.id, tripId, input, coords)) !==
-      null,
+    async (input) => {
+      created.id = await createScheduleItem(user.id, tripId, input);
+      return created.id !== null;
+    },
+    async (input, coords) => {
+      created.id = await createScheduleItemWithNewPlace(
+        user.id,
+        tripId,
+        input,
+        coords,
+      );
+      return created.id !== null;
+    },
   );
   if (outcome.kind === "error") {
     return {
@@ -205,6 +265,12 @@ export async function createScheduleItemAction(
     notFound();
   }
 
+  if (created.id !== null) {
+    await settleDayOrder(user.id, tripId, parsed.value.date, before, {
+      id: created.id,
+      time: parsed.value.time,
+    });
+  }
   revalidatePath(tripPath(tripId));
   return {
     values: { ...EMPTY_SCHEDULE_FIELDS, date },
@@ -243,6 +309,8 @@ export async function updateScheduleItemAction(
     };
   }
 
+  // 옮겨 갈(또는 그대로인) 날의 고치기 전 순서. 같은 날이면 이 일정의 고치기 전 자리가 들어 있다.
+  const before = await dayOrderBeforeWrite(user.id, tripId, parsed.value.date);
   const outcome = await writeWithPlace(
     user.id,
     tripId,
@@ -281,8 +349,59 @@ export async function updateScheduleItemAction(
     notFound();
   }
 
+  await settleDayOrder(user.id, tripId, parsed.value.date, before, {
+    id: itemId,
+    time: parsed.value.time,
+  });
   revalidatePath(tripPath(tripId));
   return { values, errors: {}, formError: null, savedAt: Date.now() };
+}
+
+// 끌어 놓은 그날 순서를 저장한다(#41). 완료 체크처럼 대상 없음·검증 실패·저장 실패를 똑같이 { ok: false } 로
+// 돌려준다(남의 일정이 있는지 드러나지 않게). 보낸 목록이 그날 지금 일정과 다르면(그 사이 다른 창에서 넣거나
+// 지움) 저장하지 않는다.
+export async function reorderScheduleItemsAction(
+  tripId: string,
+  date: string,
+  orderedIds: string[],
+): Promise<{ ok: boolean }> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/");
+  if (
+    typeof tripId !== "string" ||
+    typeof date !== "string" ||
+    !isValidIsoDate(date) ||
+    !Array.isArray(orderedIds) ||
+    orderedIds.length === 0 ||
+    orderedIds.length > MAX_ITEMS_PER_DAY ||
+    !orderedIds.every((id) => typeof id === "string" && isUuid(id)) ||
+    new Set(orderedIds).size !== orderedIds.length
+  ) {
+    return { ok: false };
+  }
+
+  try {
+    const current = await listDayOrder(user.id, tripId, date);
+    const byId = new Map(current.map((item) => [item.id, item]));
+    if (
+      !isReorderOf(
+        orderedIds,
+        current.map((item) => item.id),
+      )
+    ) {
+      return { ok: false };
+    }
+    const next = orderedIds.map((id) => byId.get(id) as OrderItem);
+    if (!keepsTimeOrder(next)) return { ok: false };
+    if (!(await writeDayOrder(user.id, tripId, date, orderedIds))) {
+      return { ok: false };
+    }
+  } catch {
+    return { ok: false };
+  }
+
+  revalidatePath(tripPath(tripId));
+  return { ok: true };
 }
 
 // 줄에서 바로 부르는 낙관적 갱신이라, 대상 없음과 저장 실패를 똑같이 { ok: false } 로 돌려준다
