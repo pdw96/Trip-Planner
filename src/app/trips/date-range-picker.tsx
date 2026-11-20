@@ -1,7 +1,11 @@
 "use client";
 
 import { Suspense, use, useEffect, useMemo, useRef, useState } from "react";
-import { errorTextClass, primaryButtonClass } from "@/app/ui/styles";
+import {
+  errorTextClass,
+  fieldClass,
+  primaryButtonClass,
+} from "@/app/ui/styles";
 import {
   type CalendarRange,
   formatSelection,
@@ -62,7 +66,7 @@ export function DateRangePicker({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor="trip-dates" className="text-sm font-medium">
+      <label htmlFor="trip-dates" className="text-[13px] font-semibold">
         여행 날짜
       </label>
       <button
@@ -72,7 +76,7 @@ export function DateRangePicker({
         aria-haspopup="dialog"
         aria-invalid={Boolean(error)}
         aria-describedby={error ? errorId : undefined}
-        className="w-full rounded-xl border border-field-line px-4 py-2.5 text-left aria-[invalid=true]:border-danger"
+        className={`w-full ${fieldClass} text-left`}
       >
         {summary || <span className="text-sub">날짜를 선택해 주세요</span>}
       </button>
@@ -145,14 +149,14 @@ function PickerSheet({
     <>
       <div className="flex flex-col gap-3 border-b border-rule px-5 pt-5 pb-3">
         <div className="flex items-center justify-between">
-          <h2 id="trip-dates-title" className="text-lg font-semibold">
+          <h2 id="trip-dates-title" className="text-lg font-bold">
             여행 날짜 선택
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="닫기"
-            className="flex size-9 items-center justify-center rounded-full text-xl hover:bg-surface"
+            className="flex size-9 items-center justify-center rounded-[8px] text-xl hover:bg-surface"
           >
             ✕
           </button>
@@ -308,7 +312,7 @@ function DayButton({
         onClick={() => onPick(date)}
         aria-label={label}
         aria-pressed={selected}
-        className={`flex h-14 w-12 flex-col items-center justify-center rounded-xl ${
+        className={`flex h-14 w-12 flex-col items-center justify-center rounded-[10px] ${
           selected ? "bg-foreground text-on-ink" : red ? "text-danger" : ""
         } ${date === today ? "font-bold underline underline-offset-4" : ""}`}
       >

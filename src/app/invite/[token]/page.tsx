@@ -23,7 +23,7 @@ export const metadata: Metadata = {
 export default function InvitePage({ params }: PageProps<"/invite/[token]">) {
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-8 px-6 py-24 text-center">
-      <h1 className="text-3xl font-semibold tracking-tight">Trip Planner</h1>
+      <h1 className="text-3xl font-bold">Trip Planner</h1>
       <Suspense fallback={<p className="text-sub">불러오는 중…</p>}>
         <Invite params={params} />
       </Suspense>

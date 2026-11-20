@@ -49,7 +49,7 @@ function TripFormFields({
   const { values, errors } = state;
 
   return (
-    <form action={formAction} noValidate className="flex flex-col gap-5">
+    <form action={formAction} noValidate className="flex flex-col gap-3.5">
       {state.formError && (
         <p
           role="alert"
@@ -96,7 +96,7 @@ function TripFormFields({
           />
         )}
       </Field>
-      <div className="flex gap-2">
+      <div className="flex gap-2 pt-1">
         <button type="submit" disabled={pending} className={primaryButtonClass}>
           {pending ? "저장하는 중…" : submitLabel}
         </button>
@@ -130,7 +130,7 @@ function Field({
   const errorId = `${id}-error`;
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="text-sm font-medium">
+      <label htmlFor={id} className="text-[13px] font-semibold">
         {label}
       </label>
       {children({

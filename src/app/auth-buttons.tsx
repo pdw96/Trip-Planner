@@ -1,11 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { errorTextClass } from "@/app/ui/styles";
+import {
+  errorTextClass,
+  quietButtonClass,
+  secondaryButtonClass,
+} from "@/app/ui/styles";
 import { authClient } from "@/lib/auth-client";
 
-const buttonClass =
-  "flex h-12 items-center justify-center rounded-full border border-solid border-rule px-5 font-medium transition-colors hover:bg-surface disabled:opacity-50";
+// 로그인 버튼은 첫 화면의 유일한 할 일이라 한 단계 크게(48px).
+const signInClass = secondaryButtonClass.replace(
+  "h-10 px-4 text-sm",
+  "h-12 px-5",
+);
 
 // callbackURL 은 이 앱 안 상대 경로만 넘긴다(초대 화면이 서버에서 만든 `/invite/<비밀값>`, #15).
 export function GoogleSignInButton({
@@ -34,7 +41,7 @@ export function GoogleSignInButton({
     <div className="flex flex-col items-center gap-2">
       <button
         type="button"
-        className={buttonClass}
+        className={signInClass}
         onClick={signIn}
         disabled={pending}
       >
@@ -70,7 +77,7 @@ export function SignOutButton() {
     <div className="flex flex-col items-end gap-1">
       <button
         type="button"
-        className={buttonClass}
+        className={quietButtonClass}
         onClick={signOut}
         disabled={pending}
       >
