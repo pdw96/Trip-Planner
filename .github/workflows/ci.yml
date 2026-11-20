@@ -1,4 +1,4 @@
-# PR 마다 lint · typecheck · 게이트 스크립트 테스트 · build 를 돌립니다. main ruleset 의 필수 검사(`check`)입니다.
+# PR 마다 lint · typecheck · 게이트 스크립트 테스트 · 단위 시험 · build 를 돌립니다. main ruleset 의 필수 검사(`check`)입니다.
 # build 는 작업 브랜치의 Vercel 프리뷰를 끈 뒤(#29, vercel.json) 여기서 확인합니다.
 name: CI
 
@@ -22,12 +22,14 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: 22
+          # Vercel 프로젝트(nodeVersion 26.x)와 맞춘다.
+          node-version: 26
           cache: npm
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
       - run: node --test '.github/scripts/*.test.mjs'
+      - run: npm test
       # 빌드만 확인한다. 아래 값은 시크릿이 아닌 가짜 값이다(ci.invalid 는 연결되지 않는 주소). 빌드 중 DB 에 접속하지 않는다.
       - run: npm run build
         env:

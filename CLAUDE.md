@@ -18,6 +18,7 @@
 ## 명령
 - `npm run dev` / `npm run build`
 - `npm run lint` · `npm run typecheck` — 커밋 전 둘 다 통과 (CI 의 `check` 가 다시 확인)
+- `npm test` — `src/**/*.test.mjs` 단위 시험 (CI `check` 에서도 돈다)
 - `node --test '.github/scripts/*.test.mjs'` — 사람 승인 게이트(`human-gate`) 스크립트 테스트
 - `npm run db:generate` — schema.ts 변경 후 마이그레이션 생성
 - `npm run db:migrate` — 마이그레이션 적용 (사람 승인 뒤에만, 아래 '작업 흐름')
