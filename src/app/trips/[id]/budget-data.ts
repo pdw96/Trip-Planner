@@ -6,7 +6,7 @@ import {
   listBudgetItems,
 } from "@/db/queries/budget";
 import { listScheduleItems } from "@/db/queries/schedule-items";
-import type { Trip } from "@/db/schema";
+import type { TripRow as Trip } from "@/db/queries/trips";
 import {
   type BudgetLine,
   type BudgetSettings,

@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
-import { listTrips } from "@/db/queries/trips";
-import type { Trip } from "@/db/schema";
+import { listTrips, type TripListItem } from "@/db/queries/trips";
 import { getCurrentUser } from "@/lib/session";
 import { formatShortRange, splitTrips, todayInSeoul } from "@/lib/trip-dates";
 import { SignOutButton } from "../auth-buttons";
@@ -65,7 +64,7 @@ function TripSection({
   today,
 }: {
   title: string;
-  trips: Trip[];
+  trips: TripListItem[];
   today: string;
 }) {
   return (
@@ -83,6 +82,11 @@ function TripSection({
                 {trip.destination} ·{" "}
                 {formatShortRange(trip.startDate, trip.endDate, today)}
               </span>
+              {!trip.isOwner && (
+                <span className="text-sm text-zinc-500 break-words">
+                  {trip.ownerName}님의 여행
+                </span>
+              )}
             </Link>
           </li>
         ))}

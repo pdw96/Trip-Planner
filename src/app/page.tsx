@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { getCurrentUser } from "@/lib/session";
 import { GoogleSignInButton } from "./auth-buttons";
+import { InAppBrowserNotice } from "./in-app-browser-notice";
 
 export default function Home() {
   return (
@@ -23,6 +24,7 @@ async function AuthStatus() {
         <p className="text-zinc-600 dark:text-zinc-400">
           여행 계획을 만들려면 로그인하세요.
         </p>
+        <InAppBrowserNotice />
         <GoogleSignInButton />
       </>
     );

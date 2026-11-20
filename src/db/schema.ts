@@ -110,6 +110,11 @@ export const trips = pgTable(
     startDate: date("start_date").notNull(),
     endDate: date("end_date").notNull(),
     notes: text("notes"),
+    // 초대 링크(#15). 비밀값 원문은 저장하지 않고 SHA-256 hex 만 둔다. null 이면 링크가 꺼져 있다.
+    inviteTokenHash: text("invite_token_hash").unique(),
+    inviteTokenCreatedAt: timestamp("invite_token_created_at", {
+      withTimezone: true,
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -126,6 +131,30 @@ export const trips = pgTable(
 
 export type Trip = typeof trips.$inferSelect;
 export type NewTrip = typeof trips.$inferInsert;
+
+// --- 함께하는 사람 (#15) ---
+// 주인은 trips.user_id 이고 여기에는 주인이 아닌 사람만 넣는다.
+
+export const tripMembers = pgTable(
+  "trip_members",
+  {
+    tripId: uuid("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    joinedAt: timestamp("joined_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.tripId, t.userId] }),
+    index("trip_members_user_id_idx").on(t.userId),
+  ],
+);
+
+export type TripMember = typeof tripMembers.$inferSelect;
 
 // --- 장소 ---
 // Google 값은 google_place_id(무기한)와 lat·lng(30일, coords_fetched_at 기준)만 저장한다. label 은 사용자가 확인한 이름표다.

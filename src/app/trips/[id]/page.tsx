@@ -8,6 +8,7 @@ import { DeleteTripButton } from "../delete-trip-button";
 import { secondaryButtonClass } from "../styles";
 import { DayRouteProvider } from "./day-route-store";
 import { MapSection } from "./map-section";
+import { MembersSection } from "./members-section";
 import { ScheduleSection } from "./schedule-section";
 
 export default function TripPage({ params }: PageProps<"/trips/[id]">) {
@@ -49,7 +50,7 @@ async function TripDetail({
             >
               고치기
             </Link>
-            <DeleteTripButton tripId={trip.id} />
+            {trip.isOwner && <DeleteTripButton tripId={trip.id} />}
           </div>
         </div>
         <p className="text-zinc-600 break-words dark:text-zinc-400">
@@ -60,6 +61,9 @@ async function TripDetail({
             {trip.notes}
           </p>
         )}
+        <Suspense fallback={null}>
+          <MembersSection userId={user.id} trip={trip} />
+        </Suspense>
       </header>
       {/* 지도 N일차 탭과 일정표(#37)가 구간 이동 정보를 함께 쓴다. */}
       <DayRouteProvider key={trip.id} tripId={trip.id}>
