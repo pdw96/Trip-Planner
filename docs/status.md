@@ -1,6 +1,6 @@
 # 지금 상태
 
-2026-11-19 기준(#37 반영). 이슈 하나가 끝날 때마다(PR 머지, 배포 확인) 고친다. 새 세션은 이 파일부터 읽는다(`CLAUDE.md` '작업 흐름').
+2026-11-20 기준(#41 반영). 이슈 하나가 끝날 때마다(PR 머지, 배포 확인) 고친다. 새 세션은 이 파일부터 읽는다(`CLAUDE.md` '작업 흐름').
 
 ## 끝나서 배포된 것
 
@@ -16,19 +16,22 @@
 | #35 | #38 | 일정 장소 칸에서 Google 장소 검색(저장할 때만 '가 볼 곳'에도 넣음, 이미 있으면 그 장소로), 장소가 있으면 제목은 선택(마이그레이션 0004: `schedule_items.title` nullable). 장소+일정은 데이터를 바꾸는 CTE 한 문. 설계 `docs/superpowers/specs/2026-11-19-schedule-place-search-design.md` |
 | #37 | #42 | 일정표의 일정 사이(도착 일정 줄 위)에 예상 이동 시간 한 줄, 기준점 구간 포함. 화면에 0.5초 머문 날만 묻고, 지도 N일차 탭과 결과를 페이지 저장소(`day-route-store.tsx`)로 함께 씀. DB 변경 없음. 설계 `docs/superpowers/specs/2026-11-19-schedule-travel-time-design.md` |
 | #44 | #45 | 다크 모드에서 고르기 목록이 흰 바탕에 밝은 글자로 안 보이던 것(`color-scheme: light dark`), [전체] 탭 칸 이름 "기준점" → "가까운 순 기준"(일정 동선 기준점과 헷갈림, 부산 여행 제보) |
+| #41 | #47 | 일정 줄 손잡이 ⠿ 로 끌어 하루 안 순서 바꾸기(마우스·터치·키보드, `@dnd-kit`). 시각 있는 일정끼리는 늘 시각 순, 시각 없는 일정은 어디든. `schedule_items.position`(마이그레이션 0005, nullable — 비면 시각 순). 설계 `docs/superpowers/specs/2026-11-20-schedule-reorder-design.md` |
 
 ## 다음 할 일
 
 사용자가 열린 이슈에서 고른다.
 
-- 기능: #14 예산·지출, #15 지인과 공유, #41 일정 순서 직접 바꾸기(시각 없는 일정이 그날 맨 뒤로 가는 문제, #37 에서 나눔), #36 구간 경로 후보 2–3개
+- 기능: #14 예산·지출, #15 지인과 공유, #36 구간 경로 후보 2–3개
 - 개선: #22 단위 시험을 CI 에서, #23 달력 키보드 이동, #24 자잘한 개선 모음
 
 #14 는 새 테이블이 필요해 마이그레이션 PR 규칙을 따른다. 여행 접근 조건은 `src/db/queries/trips.ts` 의 `accessibleTrips(userId)` 하나다(#15 공유가 그 조건만 바꾸도록). 하위 데이터 쿼리는 `schedule-items.ts`·`places.ts` 처럼 이 조건을 같은 SQL 문 안에 넣는다(하위 id 와 여행 id 를 함께 묶어 섞어 보내기를 막는다). 여러 테이블을 함께 쓰려면 neon-http 에 트랜잭션이 없으므로 데이터를 바꾸는 CTE 한 문으로 한다(`updatePlace`, `createScheduleItemWithNewPlace`).
 
-#41 은 `schedule_items` 에 순서 칸이 필요해 마이그레이션 PR 이다. 일정 순서는 `listScheduleItems` 정렬 하나를 일정표·동선(`routesByDate`)·이동 시간이 함께 따르므로, 정렬만 바꾸면 #37 이동 줄도 따라간다.
-
 ## 알아 둘 것
+
+- **일정 순서(#41)**: 정렬은 `date, position NULLS LAST, time NULLS LAST, created_at, id` 하나를 `listScheduleItems`(SQL)와 `compareScheduleItems`(`src/lib/schedule.ts`)가 같이 쓴다. 규칙은 `src/lib/schedule-order.ts`(`keepsTimeOrder`·`insertByTime`·`orderWithItem`) 하나. 순서에 영향을 주는 쓰기(끌어 놓기, 넣기, 날짜·시각 고치기)는 그날 전체 position 을 0..n-1 로 한 문(`writeDayOrder`)에 다시 쓴다. 손대지 않은 날은 모두 NULL 이라 예전 시각 순과 같다. 넣기·고치기는 쓰기 **전에** `listDayOrder` 로 그날 순서를 읽어 둔다(같은 날 시각 지우기는 "그 자리" 유지).
+- **useOptimistic 과 router.refresh**: 낙관 갱신 전환 안에서 `router.refresh()` 를 부르면 새로 고침이 끝날 때까지 낙관 값이 남는다(실패한 순서가 1–2초 그대로 보임). 되돌린 뒤 effect 에서 부른다(`schedule-day-items.tsx`, #41 브라우저 확인).
+- **Playwright 로 끌기**: 손잡이를 `scrollIntoViewIfNeeded` 한 뒤 `mouse.down` → 몇 px 이동(PointerSensor 4px) → 대상으로 `steps` 이동 → `mouse.up`. 화면 밖 좌표는 아무 일도 안 일어난다. 터치는 CDP `Input.dispatchTouchEvent`(iPhone 13 흉내)로 확인했다. 일정 추가 양식은 저장 뒤에도 열려 있다(연달아 넣기) — 줄 수로 저장 완료를 기다린다.
 
 - **로그인한 화면의 브라우저 확인**: 클라우드 세션에는 Google 로그인용 키가 없고 `DATABASE_URL` 은 프로덕션 DB 다. 사용자 승인을 받아 임시 테스트 계정(`user`·`session` 행, id 접두어 `e2e-test-`, 이메일 `@example.invalid`)을 넣고, 끝나면 지운다(넣기·지우기 전 SQL 전문을 보이고 각각 확인). 쿠키:
   - `npm run dev`: 이름 `better-auth.session_token`, 값 `encodeURIComponent(token + "." + base64(HMAC-SHA256("better-auth-secret-12345678901234567890", token)))`
@@ -57,6 +60,9 @@
 - **공휴일**: Vercel 환경 변수 `DATA_GO_KR_SERVICE_KEY`(Production·Preview). 이 세션에서는 `apis.data.go.kr` 접속이 막혀 있다. 실패하면 Vercel 로그에 `[holidays]` 한 줄(키는 가림)이 남는다.
 
 ## 남은 확인
+
+- #41 프로덕션: 휴대폰에서 실제 터치로 끌기(손잡이 크기·스크롤과 구분), 지도 N일차 동선 번호가 바꾼 순서를 따르는지(로컬은 지도 키가 없어 일정표·이동 줄만 확인).
+- #41 남은 지적(PR #47 본문): 저장된 순서가 이미 시각 순과 어긋나면(두 창 동시 고치기) 그날 끌기가 모두 거절됨 — 시각을 한 번 고치면 풀림. 넣기·고치기 뒤 순서 쓰기만 실패하면 그 줄이 맨 뒤·옛 자리에 보임(로그 `[schedule-order]`).
 
 - #37 프로덕션: 사용자가 이동 줄이 뜨는 것을 확인함(부산 여행). 남은 것: 지도 N일차 탭과 같은 날을 두 번 묻지 않는지(Vercel 로그의 `day-route` 요청 수).
 - 도착·출발일 동선: 도착하는 날은 숙소가 아니라 첫 일정에서 시작하는 게 자연스럽다(지금은 N일차 기준점을 "없음"으로, 다음 날을 숙소로 두 번 바꿔야 함). #44 때 이슈로 정리할지 물었으나 사용자가 고르지 않음(필요해지면 사용자가 요청).
