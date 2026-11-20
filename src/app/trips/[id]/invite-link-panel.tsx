@@ -2,10 +2,14 @@
 
 import { useRef, useState, useTransition } from "react";
 import {
+  errorTextClass,
+  fieldClass,
+  secondaryButtonClass,
+} from "@/app/ui/styles";
+import {
   createInviteLinkAction,
   turnOffInviteLinkAction,
 } from "../member-actions";
-import { inputClass, secondaryButtonClass } from "../styles";
 
 // 초대 링크(#15 설계 §5.3·§5.4). 원문은 만든 직후 이 화면에서만 보인다(DB 에는 해시만).
 export function InviteLinkPanel({
@@ -64,7 +68,7 @@ export function InviteLinkPanel({
   const on = link !== null || createdAt !== null;
 
   return (
-    <div className="flex flex-col gap-2 border-t border-black/[.08] pt-3 dark:border-white/[.145]">
+    <div className="flex flex-col gap-2 border-t border-rule pt-3">
       {link ? (
         <>
           <div className="flex gap-2">
@@ -74,7 +78,7 @@ export function InviteLinkPanel({
               value={link}
               aria-label="초대 링크"
               onFocus={(e) => e.currentTarget.select()}
-              className={`${inputClass} min-w-0 text-sm`}
+              className={`w-full ${fieldClass} min-w-0 text-sm`}
             />
             <button
               type="button"
@@ -84,14 +88,14 @@ export function InviteLinkPanel({
               {copied ? "복사했어요" : "복사"}
             </button>
           </div>
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-sub">
             이 링크는 지금만 보여요. 다시 보내려면 새 링크를 만드세요.
           </p>
         </>
       ) : (
         on &&
         createdAt && (
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          <p className="text-sm text-sub">
             초대 링크가 켜져 있어요 ({formatMadeOn(createdAt)} 만듦)
           </p>
         )
@@ -117,7 +121,7 @@ export function InviteLinkPanel({
         )}
       </div>
       {error && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className={errorTextClass}>
           {error}
         </p>
       )}

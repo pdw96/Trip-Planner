@@ -1,3 +1,4 @@
+import { cardClass } from "@/app/ui/styles";
 import { listPlaces } from "@/db/queries/places";
 import { listScheduleItems } from "@/db/queries/schedule-items";
 import { listTripBases } from "@/db/queries/trip-bases";
@@ -126,7 +127,7 @@ export async function ScheduleSection({
         {todayInTrip && (
           <a
             href={`#day-${today}`}
-            className="text-sm text-zinc-600 hover:underline dark:text-zinc-400"
+            className="text-sm text-sub hover:underline"
           >
             오늘 일정으로 ↓
           </a>
@@ -157,7 +158,7 @@ export async function ScheduleSection({
             >
               {day.label}
               {day.date === today && (
-                <span className="rounded-full bg-foreground px-2 py-0.5 text-xs font-medium text-background">
+                <span className="rounded-full bg-foreground px-2 py-0.5 text-xs font-semibold text-on-ink">
                   오늘
                 </span>
               )}
@@ -175,13 +176,13 @@ export async function ScheduleSection({
         {outside.length > 0 && (
           <section
             aria-labelledby="schedule-outside-heading"
-            className="flex flex-col gap-3 rounded-2xl bg-black/[.04] px-5 py-4 dark:bg-white/[.06]"
+            className={`flex flex-col gap-3 ${cardClass}`}
           >
             <div className="flex flex-col gap-1">
               <h3 id="schedule-outside-heading" className="font-semibold">
                 여행 기간 밖 일정
               </h3>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              <p className="text-sm text-sub">
                 여행 날짜를 바꿔 기간 밖에 남은 일정이에요. 눌러서 날짜를
                 옮기거나 지울 수 있어요.
               </p>

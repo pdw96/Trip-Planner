@@ -1,11 +1,11 @@
 import type { Ref } from "react";
+import { errorTextClass, fieldClass } from "@/app/ui/styles";
 import {
   CATEGORY_LABELS,
   PLACE_CATEGORIES,
   type PlaceFieldErrors,
   type PlaceFields,
 } from "@/lib/place-input";
-import { inputClass } from "../styles";
 
 // 장소 넣기·고치기 양식이 같이 쓰는 입력칸: 이름표·종류·메모. 검증은 서버(place-input.ts)가 한다.
 export function PlaceFieldInputs({
@@ -28,7 +28,7 @@ export function PlaceFieldInputs({
             ref={labelRef}
             type="text"
             defaultValue={values.label}
-            className={inputClass}
+            className={`w-full ${fieldClass}`}
           />
         )}
       </Field>
@@ -42,7 +42,7 @@ export function PlaceFieldInputs({
           <select
             {...props}
             defaultValue={values.category}
-            className={inputClass}
+            className={`w-full ${fieldClass}`}
           >
             {PLACE_CATEGORIES.map((category) => (
               <option key={category} value={category}>
@@ -63,7 +63,7 @@ export function PlaceFieldInputs({
             {...props}
             type="text"
             defaultValue={values.memo}
-            className={inputClass}
+            className={`w-full ${fieldClass}`}
           />
         )}
       </Field>
@@ -105,7 +105,7 @@ function Field({
         "aria-describedby": error ? errorId : undefined,
       })}
       {error && (
-        <p id={errorId} role="alert" className="text-sm text-red-600">
+        <p id={errorId} role="alert" className={errorTextClass}>
           {error}
         </p>
       )}

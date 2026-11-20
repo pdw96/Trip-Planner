@@ -90,7 +90,7 @@ export function GooglePlaceSearch({
   return (
     <div ref={containerRef} className="min-h-11">
       {!placesLibrary && (
-        <p className="py-2.5 text-sm text-zinc-500">장소 검색을 불러오는 중…</p>
+        <p className="py-2.5 text-sm text-sub">장소 검색을 불러오는 중…</p>
       )}
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { secondaryButtonClass } from "./trips/styles";
+import { secondaryButtonClass } from "@/app/ui/styles";
 
 // 예상하지 못한 오류(DB 연결 실패 등)에서 영어 기본 화면 대신 보이는 한국어 화면.
 
@@ -10,9 +10,7 @@ export default function ErrorPage({ retry }: { retry: () => void }) {
       <h1 className="text-2xl font-semibold tracking-tight">
         문제가 생겼어요.
       </h1>
-      <p className="text-zinc-600 dark:text-zinc-400">
-        잠시 후 다시 시도해 주세요.
-      </p>
+      <p className="text-sub">잠시 후 다시 시도해 주세요.</p>
       <button
         type="button"
         onClick={() => retry()}

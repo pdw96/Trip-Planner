@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { errorTextClass, fieldClass } from "@/app/ui/styles";
 import {
   type ActualMoney,
   amountInputValue,
@@ -9,7 +10,6 @@ import {
   type RateSource,
   rateInputValue,
 } from "@/lib/budget";
-import { inputBaseClass, inputClass } from "../styles";
 
 // 예산 카드와 일정 양식이 같이 쓰는 금액 칸(#14). 통화는 그 여행의 예산·현지 통화 둘 중 하나만 고른다.
 
@@ -109,7 +109,7 @@ export function MoneyField({
           autoComplete="off"
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? errorId : undefined}
-          className={`${inputBaseClass} min-w-0 flex-1`}
+          className={`${fieldClass} min-w-0 flex-1`}
         />
         {choices ? (
           <select
@@ -117,7 +117,7 @@ export function MoneyField({
             defaultValue={currency}
             aria-label={`${label} 통화`}
             onChange={(e) => onCurrencyChange?.(e.target.value)}
-            className={`${inputBaseClass} w-auto shrink-0`}
+            className={`${fieldClass} w-auto shrink-0`}
           >
             {choices.map((code) => (
               <option key={code} value={code}>
@@ -134,7 +134,7 @@ export function MoneyField({
         )}
       </div>
       {error && (
-        <p id={errorId} className="text-sm text-red-600">
+        <p id={errorId} className={errorTextClass}>
           {error}
         </p>
       )}
@@ -163,10 +163,7 @@ export function ActualRateFields({
   return (
     <div className="flex flex-wrap gap-3 text-sm">
       <div className="flex flex-col gap-1">
-        <label
-          htmlFor={`${idPrefix}-paid-on`}
-          className="text-zinc-600 dark:text-zinc-400"
-        >
+        <label htmlFor={`${idPrefix}-paid-on`} className="text-sub">
           결제일
         </label>
         <input
@@ -175,17 +172,14 @@ export function ActualRateFields({
           name="actualPaidOn"
           defaultValue={paidOn}
           aria-invalid={errors.actualPaidOn ? true : undefined}
-          className={`${inputBaseClass} w-auto py-1.5`}
+          className={`${fieldClass} h-8 w-auto`}
         />
         {errors.actualPaidOn && (
-          <p className="text-red-600">{errors.actualPaidOn}</p>
+          <p className="text-danger">{errors.actualPaidOn}</p>
         )}
       </div>
       <div className="flex flex-col gap-1">
-        <label
-          htmlFor={`${idPrefix}-rate`}
-          className="text-zinc-600 dark:text-zinc-400"
-        >
+        <label htmlFor={`${idPrefix}-rate`} className="text-sub">
           환율 {rateUnitLabel(localCurrency, budgetCurrency)}
           {rateSource && rate !== "" && ` (${RATE_SOURCE_LABELS[rateSource]})`}
         </label>
@@ -197,10 +191,10 @@ export function ActualRateFields({
           autoComplete="off"
           placeholder="결제일 기준환율로 자동"
           aria-invalid={errors.actualRate ? true : undefined}
-          className={`${inputBaseClass} w-48 py-1.5`}
+          className={`${fieldClass} h-8 w-48`}
         />
         {errors.actualRate && (
-          <p className="text-red-600">{errors.actualRate}</p>
+          <p className="text-danger">{errors.actualRate}</p>
         )}
       </div>
     </div>

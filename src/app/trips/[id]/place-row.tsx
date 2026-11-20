@@ -9,10 +9,14 @@ import {
   useState,
   useTransition,
 } from "react";
+import {
+  cardClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from "@/app/ui/styles";
 import { placeUrl } from "@/lib/leg-display";
 import type { PlaceFormState } from "@/lib/place-input";
 import { deletePlaceAction, updatePlaceAction } from "../place-actions";
-import { primaryButtonClass, secondaryButtonClass } from "../styles";
 import {
   CATEGORY_ICONS,
   categoryLabel,
@@ -66,9 +70,9 @@ export function PlaceRow({
 
   return (
     <li
-      className={`flex items-start gap-3 rounded-xl px-2 py-2 ${highlighted ? "bg-amber-400/15" : ""} ${deleting ? "opacity-50" : ""}`}
+      className={`flex items-start gap-3 rounded-[10px] px-2 py-2 ${highlighted ? "bg-warn-surface" : ""} ${deleting ? "opacity-50" : ""}`}
     >
-      <span className="w-9 shrink-0 pt-0.5 text-sm text-zinc-500">
+      <span className="w-9 shrink-0 pt-0.5 text-sm text-sub">
         {categoryLabel(place.category)}
       </span>
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -81,17 +85,15 @@ export function PlaceRow({
           {CATEGORY_ICONS[place.category]} {place.label}
         </a>
         {place.memo && (
-          <p className="text-sm break-words text-zinc-600 dark:text-zinc-400">
-            “{place.memo}”
-          </p>
+          <p className="text-sm break-words text-sub">“{place.memo}”</p>
         )}
         {(days || distance) && (
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-sub">
             {[distance, days].filter(Boolean).join(" · ")}
           </p>
         )}
         {!located && (
-          <p className="text-sm text-amber-700 dark:text-amber-400">
+          <p className="text-sm text-warn">
             위치 정보를 다시 불러오지 못했어요.
           </p>
         )}
@@ -101,7 +103,7 @@ export function PlaceRow({
           type="button"
           onClick={onShowOnMap}
           aria-label={`${place.label} 지도에서 보기`}
-          className="shrink-0 rounded-full px-2 py-1 text-sm text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
+          className="shrink-0 rounded-[8px] px-2 py-1 text-sm text-sub hover:bg-surface hover:text-foreground"
         >
           지도
         </button>
@@ -150,8 +152,7 @@ function RowMenu({
     };
   }, [open]);
 
-  const itemClass =
-    "block w-full px-4 py-2 text-left text-sm hover:bg-black/[.04] dark:hover:bg-white/[.06]";
+  const itemClass = "block w-full px-4 py-2 text-left text-sm hover:bg-surface";
 
   return (
     <div ref={rootRef} className="relative shrink-0">
@@ -162,14 +163,14 @@ function RowMenu({
         aria-label={`${label} 메뉴`}
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        className="rounded-full px-2 py-1 text-zinc-600 hover:bg-black/[.04] disabled:opacity-50 dark:text-zinc-400 dark:hover:bg-white/[.06]"
+        className="rounded-[8px] px-2 py-1 text-sub hover:bg-surface hover:text-foreground disabled:opacity-50"
       >
         ⋯
       </button>
       {open && (
         <div
           id={menuId}
-          className="absolute right-0 z-10 mt-1 w-28 overflow-hidden rounded-xl border border-black/[.08] bg-background py-1 shadow-lg dark:border-white/[.145]"
+          className="absolute right-0 z-10 mt-1 w-28 overflow-hidden rounded-[10px] border border-rule bg-background py-1 shadow-lg"
         >
           <button
             type="button"
@@ -187,7 +188,7 @@ function RowMenu({
               setOpen(false);
               onDelete();
             }}
-            className={`${itemClass} text-red-600`}
+            className={`${itemClass} text-danger`}
           >
             삭제
           </button>
@@ -238,12 +239,12 @@ function PlaceEditForm({
     <form
       action={formAction}
       noValidate
-      className="flex flex-col gap-4 rounded-2xl border border-black/[.08] p-4 dark:border-white/[.145]"
+      className={`flex flex-col gap-4 ${cardClass}`}
     >
       {state.formError && (
         <p
           role="alert"
-          className="rounded-xl bg-red-600/10 px-4 py-3 text-sm text-red-600"
+          className="rounded-[10px] bg-danger/10 px-4 py-3 text-sm text-danger"
         >
           {state.formError}
         </p>

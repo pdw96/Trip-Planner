@@ -1,8 +1,8 @@
 "use client";
 
 import { useTransition } from "react";
+import { dangerButtonClass } from "@/app/ui/styles";
 import { deleteTripAction } from "./actions";
-import { dangerButtonClass } from "./styles";
 
 export function DeleteTripButton({ tripId }: { tripId: string }) {
   const [pending, startTransition] = useTransition();

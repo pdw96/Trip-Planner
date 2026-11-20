@@ -2,6 +2,12 @@
 
 import { useState } from "react";
 import {
+  cardClass,
+  quietButtonClass,
+  secondaryButtonClass,
+  smallButton,
+} from "@/app/ui/styles";
+import {
   type ActualMoney,
   type BudgetSettings,
   formatMoney,
@@ -10,7 +16,6 @@ import {
   toBudgetMinor,
 } from "@/lib/budget";
 import { dateLabel } from "@/lib/schedule";
-import { secondaryButtonClass } from "../styles";
 import {
   BudgetSettingsForm,
   type DateChoice,
@@ -22,12 +27,10 @@ import { RATE_SOURCE_LABELS } from "./money-fields";
 // 지도 칸 탭 아래의 예산 카드(#14 설계 §5.7.1). [전체]는 총 예산·예상 총지출·날짜별 표·여행 전체 항목·설정,
 // [N일차]는 그날 예상·실제와 일정 밖 지출. 숫자는 서버가 계산해 넘긴다. 금액은 일정 줄에 보이지 않는다.
 
-const cardClass =
-  "flex flex-col gap-3 rounded-2xl bg-black/[.04] px-5 py-4 dark:bg-white/[.06]";
-const linkButtonClass =
-  "self-start rounded-full px-3 py-1.5 text-sm text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]";
-const OVER = "text-red-600";
-const UNDER = "text-emerald-700 dark:text-emerald-500";
+const budgetCardClass = `flex flex-col gap-3 ${cardClass}`;
+const linkButtonClass = `self-start ${smallButton(quietButtonClass)}`;
+const OVER = "text-danger";
+const UNDER = "text-ok";
 
 type Props = {
   tripId: string;
@@ -51,12 +54,12 @@ function CardBody({ tripId, budget, tab, days, onSelectTab }: Props) {
   if (!budget) {
     if (tab !== "all") return null;
     return (
-      <section aria-label="예산" className={cardClass}>
+      <section aria-label="예산" className={budgetCardClass}>
         {open === "settings" ? (
           <BudgetSettingsForm tripId={tripId} settings={null} onClose={close} />
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            <p className="text-sm text-sub">
               예산을 정하면 일정마다 예상 비용과 실제 지출을 적을 수 있어요.
             </p>
             <button
@@ -126,7 +129,10 @@ function CardBody({ tripId, budget, tab, days, onSelectTab }: Props) {
 
   if (day) {
     return (
-      <section aria-label={`${day.dayNumber}일차 예산`} className={cardClass}>
+      <section
+        aria-label={`${day.dayNumber}일차 예산`}
+        className={budgetCardClass}
+      >
         <h3 className="font-semibold">{day.dayNumber}일차 예산</h3>
         <PeriodLine
           total={budget.periods.byDate[day.date]}
@@ -139,7 +145,7 @@ function CardBody({ tripId, budget, tab, days, onSelectTab }: Props) {
   }
 
   return (
-    <section aria-label="예산" className={cardClass}>
+    <section aria-label="예산" className={budgetCardClass}>
       <div className="flex items-center justify-between gap-2">
         <h3 className="font-semibold">예산</h3>
         {open !== "settings" && (
@@ -248,7 +254,7 @@ function Summary({ budget }: { budget: NonNullable<PanelBudget> }) {
         {money(s.projected, settings)} ·{" "}
         <BalanceText balance={s.balance} settings={settings} />
       </Row>
-      <p className="text-sm text-zinc-600 dark:text-zinc-400">
+      <p className="text-sm text-sub">
         실제 적은 것 {money(s.actual, settings)} ({overText}
         {s.unplanned > 0 &&
           ` · 계획에 없던 지출 ${money(s.unplanned, settings)} 포함`}
@@ -277,7 +283,7 @@ function DayTable({
   return (
     <table className="w-full text-sm tabular-nums">
       <thead>
-        <tr className="text-zinc-600 dark:text-zinc-400">
+        <tr className="text-sub">
           <th className="text-left font-medium">날짜별</th>
           <th className="text-right font-medium">예상</th>
           <th className="text-right font-medium">실제</th>
@@ -352,7 +358,7 @@ function PeriodLine({
 }) {
   if (!total) {
     return (
-      <p className="text-sm text-zinc-600 dark:text-zinc-400">
+      <p className="text-sm text-sub">
         이날 적은 금액이 없어요. 일정의 예상 비용이나 일정 밖 지출을 적어
         보세요.
       </p>
@@ -385,7 +391,7 @@ function PeriodLine({
         )}
       </p>
       {native && native.currency !== settings.currency && (
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="text-sm text-sub">
           ≈ 예상 {money(total.estimate, settings)}
           {total.diff !== null && ` · 실제 ${money(total.actual, settings)}`}
         </p>
@@ -403,7 +409,7 @@ function MoneyCell({
   settings: BudgetSettings;
   rate: string | null;
 }) {
-  if (!value) return <span className="text-zinc-500">—</span>;
+  if (!value) return <span className="text-sub">—</span>;
   const text = formatMoney(value.amount, value.currency);
   if (value.currency === settings.currency) return <span>{text}</span>;
   const converted = money(
@@ -417,7 +423,7 @@ function MoneyCell({
   return (
     <span>
       {text}{" "}
-      <span className="text-zinc-500">
+      <span className="text-sub">
         (≈{converted}
         {source})
       </span>
@@ -461,13 +467,13 @@ function ExtraList({
                   {item.title}
                 </button>
                 <span className="tabular-nums">
-                  <span className="text-zinc-500">예상 </span>
+                  <span className="text-sub">예상 </span>
                   <MoneyCell
                     value={item.estimate}
                     settings={settings}
                     rate={settings.plannedRate}
                   />
-                  <span className="text-zinc-500"> · 실제 </span>
+                  <span className="text-sub"> · 실제 </span>
                   <MoneyCell
                     value={item.actual}
                     settings={settings}

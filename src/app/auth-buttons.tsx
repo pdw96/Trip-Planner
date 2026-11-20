@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { errorTextClass } from "@/app/ui/styles";
 import { authClient } from "@/lib/auth-client";
 
 const buttonClass =
-  "flex h-12 items-center justify-center rounded-full border border-solid border-black/[.08] px-5 font-medium transition-colors hover:bg-black/[.04] disabled:opacity-50 dark:border-white/[.145] dark:hover:bg-[#1a1a1a]";
+  "flex h-12 items-center justify-center rounded-full border border-solid border-rule px-5 font-medium transition-colors hover:bg-surface disabled:opacity-50";
 
 // callbackURL 은 이 앱 안 상대 경로만 넘긴다(초대 화면이 서버에서 만든 `/invite/<비밀값>`, #15).
 export function GoogleSignInButton({
@@ -40,7 +41,7 @@ export function GoogleSignInButton({
         Google 계정으로 로그인
       </button>
       {failed && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className={errorTextClass}>
           로그인을 시작하지 못했습니다. 잠시 후 다시 시도해 주세요.
         </p>
       )}
@@ -76,7 +77,7 @@ export function SignOutButton() {
         로그아웃
       </button>
       {failed && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className={errorTextClass}>
           로그아웃하지 못했어요. 다시 시도해 주세요.
         </p>
       )}

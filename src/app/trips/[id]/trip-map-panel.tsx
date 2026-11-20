@@ -2,12 +2,12 @@
 
 import { APIProvider } from "@vis.gl/react-google-maps";
 import { useEffect, useId, useLayoutEffect, useMemo, useState } from "react";
+import { errorTextClass, fieldClass } from "@/app/ui/styles";
 import { formatDistance, sortByDistance } from "@/lib/geo";
 import { directionsUrl, legText } from "@/lib/leg-display";
 import type { DayRouteResult } from "../day-route-loader";
 import { SAVE_FAILED } from "../messages";
 import { setTripBaseAction } from "../place-actions";
-import { inputClass } from "../styles";
 import { BudgetCard } from "./budget-card";
 import { DayLegs, type LegRow } from "./day-legs";
 import { useDayRoute } from "./day-route-store";
@@ -236,7 +236,7 @@ function PanelBody({
             <GoogleTermsLine />
           </div>
         ) : (
-          <p className="text-sm text-zinc-500">지도를 쓸 수 없어요.</p>
+          <p className="text-sm text-sub">지도를 쓸 수 없어요.</p>
         )}
         {day ? (
           <div className="flex flex-col gap-3">
@@ -258,7 +258,7 @@ function PanelBody({
             {/* 위치 정보 문구는 좌표가 없어 빠진 장소가 있을 때만. 기준점만 이어진 날도 번호 장소가 없으므로
                 아래 문구가 보인다(지도에는 기준점이 보인다). */}
             {day.stops.length === 0 ? (
-              <p className="text-sm text-zinc-500">
+              <p className="text-sm text-sub">
                 {day.unlocatedCount > 0
                   ? "고른 장소의 위치 정보가 없어요"
                   : "이 날 일정에 고른 장소가 없어요"}
@@ -311,7 +311,7 @@ function PanelBody({
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-zinc-500">아직 넣은 장소가 없어요</p>
+          <p className="text-sm text-sub">아직 넣은 장소가 없어요</p>
         )}
       </section>
     </>
@@ -509,8 +509,8 @@ function DayTabs({
             title={t.title}
             className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
               active
-                ? "bg-foreground text-background"
-                : "border border-black/[.08] hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-white/[.06]"
+                ? "bg-foreground text-on-ink"
+                : "border border-rule hover:bg-surface"
             }`}
           >
             {t.label}
@@ -522,9 +522,9 @@ function DayTabs({
 }
 
 function GoogleTermsLine() {
-  const linkClass = "underline hover:text-zinc-700 dark:hover:text-zinc-300";
+  const linkClass = "underline hover:text-foreground";
   return (
-    <p className="text-xs text-zinc-500">
+    <p className="text-xs text-sub">
       지도·장소·길찾기 정보: Google 지도 ·{" "}
       <a
         href="https://maps.google.com/help/terms_maps/"
@@ -547,7 +547,7 @@ function GoogleTermsLine() {
   );
 }
 
-const selectClass = `${inputClass} w-auto max-w-full py-1.5 text-sm`;
+const selectClass = `${fieldClass} h-8 w-auto max-w-full text-sm`;
 
 // N일차 기준점. 고른 값·저장 중·실패 문구는 패널이 날짜별로 가진다(chooseBase).
 function DayBasePicker({
@@ -587,10 +587,10 @@ function DayBasePicker({
             </option>
           ))}
         </select>
-        <span className="text-xs text-zinc-500">이 날부터 바뀌어요</span>
+        <span className="text-xs text-sub">이 날부터 바뀌어요</span>
       </div>
       {error && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className={errorTextClass}>
           {error}
         </p>
       )}
@@ -627,7 +627,7 @@ function OverviewBasePicker({
           </option>
         ))}
       </select>
-      <span className="text-xs text-zinc-500">
+      <span className="text-xs text-sub">
         고르면 가까운 순으로 보여요. 일정 동선의 기준점은 N일차 탭에서 정해요.
       </span>
     </div>

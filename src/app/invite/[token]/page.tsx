@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
+import { secondaryButtonClass } from "@/app/ui/styles";
 import { findInvite } from "@/db/queries/trip-members";
 import { getTrip } from "@/db/queries/trips";
 import { hashInviteToken, isInviteToken } from "@/lib/invite-token";
@@ -10,7 +11,6 @@ import { formatLongRange } from "@/lib/trip-dates";
 import { GoogleSignInButton } from "../../auth-buttons";
 import { InAppBrowserNotice } from "../../in-app-browser-notice";
 import { INVITE_INVALID } from "../../trips/messages";
-import { secondaryButtonClass } from "../../trips/styles";
 import { JoinButton } from "./join-button";
 
 // 초대 화면(#15 설계 §5.3 의 3). 그리기만 해서는 아무것도 쓰지 않는다(미리 불러오기로 참여되지 않게).
@@ -24,7 +24,7 @@ export default function InvitePage({ params }: PageProps<"/invite/[token]">) {
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-8 px-6 py-24 text-center">
       <h1 className="text-3xl font-semibold tracking-tight">Trip Planner</h1>
-      <Suspense fallback={<p className="text-zinc-500">불러오는 중…</p>}>
+      <Suspense fallback={<p className="text-sub">불러오는 중…</p>}>
         <Invite params={params} />
       </Suspense>
     </main>
@@ -43,9 +43,7 @@ async function Invite({
   if (!user) {
     return (
       <>
-        <p className="text-zinc-600 dark:text-zinc-400">
-          초대받은 여행에 참여하려면 로그인하세요.
-        </p>
+        <p className="text-sub">초대받은 여행에 참여하려면 로그인하세요.</p>
         <InAppBrowserNotice />
         <GoogleSignInButton callbackURL={`/invite/${token}`} />
       </>
@@ -62,11 +60,11 @@ async function Invite({
     <>
       <p className="max-w-md break-words text-lg">
         {invite.ownerName}님의 ‘{invite.title}’ 여행
-        <span className="block text-base text-zinc-600 dark:text-zinc-400">
+        <span className="block text-base text-sub">
           {formatLongRange(invite.startDate, invite.endDate)}
         </span>
       </p>
-      <p className="text-zinc-600 dark:text-zinc-400">함께할까요?</p>
+      <p className="text-sub">함께할까요?</p>
       <JoinButton token={token} />
     </>
   );
@@ -75,9 +73,7 @@ async function Invite({
 function InvalidInvite({ signedIn }: { signedIn: boolean }) {
   return (
     <>
-      <p className="max-w-md text-zinc-600 dark:text-zinc-400">
-        {INVITE_INVALID}
-      </p>
+      <p className="max-w-md text-sub">{INVITE_INVALID}</p>
       <Link href={signedIn ? "/trips" : "/"} className={secondaryButtonClass}>
         {signedIn ? "내 여행으로" : "처음으로"}
       </Link>

@@ -21,9 +21,9 @@ export async function MembersSection({
   return (
     <section
       aria-labelledby="members-heading"
-      className="flex flex-col gap-3 rounded-2xl border border-black/[.08] p-4 dark:border-white/[.145]"
+      className="flex flex-col gap-3 rounded-[14px] border border-rule p-4"
     >
-      <h2 id="members-heading" className="text-sm font-medium text-zinc-500">
+      <h2 id="members-heading" className="text-sm font-medium text-sub">
         함께하는 사람
       </h2>
       <ul className="flex flex-col gap-2">
@@ -35,9 +35,9 @@ export async function MembersSection({
               <span className="min-w-0 flex-1 break-words">
                 {person.name}
                 {person.isOwner && (
-                  <span className="text-sm text-zinc-500"> · 주인</span>
+                  <span className="text-sm text-sub"> · 주인</span>
                 )}
-                {isMe && <span className="text-sm text-zinc-500"> (나)</span>}
+                {isMe && <span className="text-sm text-sub"> (나)</span>}
               </span>
               {trip.isOwner && !person.isOwner && (
                 <RemoveMemberButton
@@ -79,7 +79,7 @@ function Avatar({ name, image }: { name: string; image: string | null }) {
   return (
     <span
       aria-hidden
-      className="flex size-8 shrink-0 items-center justify-center rounded-full bg-black/[.06] text-sm dark:bg-white/[.1]"
+      className="flex size-8 shrink-0 items-center justify-center rounded-full bg-surface text-sm"
     >
       {name.slice(0, 1)}
     </span>
