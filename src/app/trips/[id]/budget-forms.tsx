@@ -65,12 +65,17 @@ function resultKey(state: object): number {
   return key;
 }
 
-function useCloseOnSave(savedAt: number | null, onSaved: () => void) {
-  const ref = useRef(onSaved);
-  ref.current = onSaved;
-  useEffect(() => {
-    if (savedAt !== null) ref.current();
-  }, [savedAt]);
+// 저장에 성공하면 같은 전환 안에서 닫는다. 저장으로 카드 모양이 바뀌면(예산 없음 → 있음, 항목 날짜 옮기기)
+// 양식이 다른 자리에서 새로 그려져 effect 로는 닫히지 않는다(schedule-editor.tsx 의 saveAndClose 와 같은 이유).
+function closingOnSave<S extends { savedAt: number | null }>(
+  action: (prev: S, formData: FormData) => Promise<S>,
+  onClose: () => void,
+): (prev: S, formData: FormData) => Promise<S> {
+  return async (prev, formData) => {
+    const next = await action(prev, formData);
+    if (next.savedAt !== prev.savedAt) onClose();
+    return next;
+  };
 }
 
 function FormError({ message }: { message: string | null }) {
@@ -121,13 +126,12 @@ export function BudgetSettingsForm({
   const [state, formAction, pending] = useActionState<
     BudgetSettingsFormState,
     FormData
-  >(saveBudgetSettingsAction.bind(null, tripId), {
+  >(closingOnSave(saveBudgetSettingsAction.bind(null, tripId), onClose), {
     values: settingsFields(settings),
     errors: {},
     formError: null,
     savedAt: null,
   });
-  useCloseOnSave(state.savedAt, onClose);
   return (
     <form action={formAction} noValidate className={formClass}>
       <FormError message={state.formError} />
@@ -285,14 +289,13 @@ export function ExtraItemForm({
   const [state, formAction, pending] = useActionState<
     ExtraItemFormState,
     FormData
-  >(action, {
+  >(closingOnSave(action, onClose), {
     values: extraFields(item, currencies, defaultDate),
     errors: {},
     formError: null,
     savedAt: null,
   });
   const [deleting, startDelete] = useTransition();
-  useCloseOnSave(state.savedAt, onClose);
 
   function onDelete() {
     if (!item || !window.confirm("이 항목을 삭제할까요?")) return;
