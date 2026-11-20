@@ -13,12 +13,11 @@ export function MiniLine({
   size?: "sm" | "lg";
 }) {
   const { shown, hidden } = miniLineDots(dayCount, MAX_DOTS);
-  const dot =
-    size === "lg" ? "size-[18px] border-4 mr-4" : "size-3 border-[3px] mr-2.5";
+  const dot = size === "lg" ? "size-[18px] border-4" : "size-3 border-[3px]";
   return (
     <span
       aria-hidden
-      className={`relative flex items-center ${dim ? "opacity-55" : ""}`}
+      className={`relative flex w-fit items-center ${size === "lg" ? "gap-4" : "gap-2.5"} ${dim ? "opacity-55" : ""}`}
     >
       <span
         className={`absolute inset-x-1.5 rounded bg-rule ${size === "lg" ? "h-1.5" : "h-1"}`}
