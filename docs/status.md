@@ -1,6 +1,6 @@
 # 지금 상태
 
-2026-11-21 기준(#53 PR 1 배포, PR 2 남음). 이슈 하나가 끝날 때마다(PR 머지, 배포 확인) 고친다. 새 세션은 이 파일부터 읽는다(`CLAUDE.md` '작업 흐름').
+2026-11-21 기준(#53 끝). 이슈 하나가 끝날 때마다(PR 머지, 배포 확인) 고친다. 새 세션은 이 파일부터 읽는다(`CLAUDE.md` '작업 흐름').
 
 ## 끝나서 배포된 것
 
@@ -19,20 +19,13 @@
 | #41 | #47 | (프로덕션 확인: 휴대폰 터치 끌기, 지도 N일차 번호) 일정 줄 손잡이 ⠿ 로 끌어 하루 안 순서 바꾸기(마우스·터치·키보드, `@dnd-kit`). 시각 있는 일정끼리는 늘 시각 순, 시각 없는 일정은 어디든. `schedule_items.position`(마이그레이션 0005, nullable — 비면 시각 순). 설계 `docs/superpowers/specs/2026-11-20-schedule-reorder-design.md` |
 | #14 | #50 | 여행별 예산·지출(`trip_budgets`·`budget_items`, 마이그레이션 0006). 총 예산 + 예산 통화(+ 현지 통화·예정 환율), 예상은 일정 양식, 실제는 완료 체크칸을 켜면 열리는 칸(현지 통화는 결제일 유럽중앙은행 기준환율, Frankfurter), 지도 [전체]·[N일차] 탭 예산 카드(예상 총지출 = 실제 + 남은 예상, 초과·여유, 날짜별 표, 일정 밖 항목). 일정 줄에는 금액 없음. 설계 `docs/superpowers/specs/2026-11-20-trip-budget-design.md` |
 | #15 | #54 | 지인과 여행 함께 보기·고치기(`trip_members`, `trips.invite_token_hash`, 마이그레이션 0007). 주인이 초대 링크(`/invite/<비밀값>`, DB 에는 SHA-256 만)를 만들고, 받은 사람이 로그인 뒤 [참여]. 함께하는 사람은 주인과 똑같이 고치고, 삭제·링크·내보내기는 주인만, 본인은 나가기. 카톡 앱 안 브라우저는 바깥 브라우저로 넘김. 설계 `docs/superpowers/specs/2026-11-20-trip-sharing-design.md` |
-
-## 진행 중: #53 전체 화면 디자인 정리 (노선도)
-
-설계 승인됨: `docs/superpowers/specs/2026-11-20-design-refresh-design.md`(시안 링크 3개가 맨 위에). PR 두 번으로 나눴다.
-- **PR 1 (#57, 배포됨)**: 색·글꼴 토큰, 공용 조각, 여행 목록·홈·양식·달력·초대 화면. 계획 `docs/superpowers/plans/2026-11-20-design-refresh-pr1.md`. Codex 지적(목록이 날 수를 세려고 여행의 모든 날을 펼침)은 후속 PR 에서 `tripDayCount` 로 고침.
-- **PR 2 (다음 세션)**: 여행 화면 — 설계 §5.4(머리·함께하는 사람 접기·날짜 동그라미·지도 선/핀 색·가 볼 곳은 [전체] 에서만·노선 일정·역 동그라미 = 완료 체크칸·손잡이 오른쪽), §5.4.1(날짜 고르기가 지도·예산·일정을 함께 거름, 숨긴 날은 그리되 감춤), §5.4.2(위: 내리면 제목 한 줄+날짜 줄 고정 / 아래: 휴대폰에서만 예산 줄 늘 떠 있음 + [+ 지출] 시트), §5.5(예산 카드: 탑승권식 막대 머리를 더하고 기존 숫자는 모두 유지), §5.6(지도 선 색). `Closes #53`.
-  - 시작: superpowers `writing-plans` 로 PR 2 계획을 `docs/superpowers/plans/2026-11-21-design-refresh-pr2.md` 에 쓰고, 사용자가 실행 방식을 고른다(PR 1 은 '직접 실행' + 마지막 `/code-review`).
-  - PR 1 에서 남긴 것: 예산 양식 판은 카드 안이라 테두리 판(PR 2 에서 카드와 함께), 함께하는 사람 칸은 테두리 판 그대로(PR 2 에서 접는 한 줄), `trip-map-canvas.tsx` 의 `LINE_COLOR`·`bg-blue-600`·`ring-amber-400` 은 그대로(PR 2 에서 날짜 색).
+| #53 | #57·#58·#60 | 전체 화면 디자인 정리(노선도). 색·글꼴 토큰, 공용 조각, 여행 목록 짧은 노선(PR 1). 여행 화면(PR 2): 위에 붙는 날짜 줄이 지도·예산·일정·가 볼 곳을 함께 거름, 노선 일정(레일·역 동그라미 = 완료, 손잡이 오른쪽), 지도 선·핀 날짜 색, 예산 카드 머리, 휴대폰 아래 예산 줄 + [+ 지출] 시트, 함께하는 사람 한 줄 접기. DB 변경 없음. 설계 `docs/superpowers/specs/2026-11-20-design-refresh-design.md` |
 
 ## 다음 할 일
 
 사용자가 열린 이슈에서 고른다.
 
-- #53 PR 2 를 먼저 끝낸다(위). #36·#22–#24 는 그 틀에 맞춰 넣는다.
+- #36·#22–#24 는 노선도 틀(#53)에 맞춰 넣는다.
 - 기능: #36 구간 경로 후보 2–3개
 - 개선: #22 단위 시험을 CI 에서, #23 달력 키보드 이동, #24 자잘한 개선 모음
 
@@ -46,6 +39,10 @@
   - 날짜 색은 `src/lib/day-line.ts` 의 `lineClass(dayNumber, "bg"|"text"|"border")` — Tailwind 가 찾도록 클래스 이름을 표로 적어 두었다(문자열 조립 금지). 8색을 돌려 쓴다.
   - 글꼴 IBM Plex Sans KR(`next/font/google`, 가변 글꼴이 아니라 굵기 400–700 을 적음, 한글 조각은 빌드 때 받는다).
   - 짧은 노선 `src/app/ui/mini-line.tsx`(목록·홈). 남은 날 `tripCountdown`, 날 수 `tripDayCount`(`src/lib/trip-dates.ts`) — 여행 기간 상한이 없으니 날을 펼치는 `tripDays` 를 목록에서 쓰지 않는다.
+  - 여행 화면의 고른 날은 `src/app/trips/[id]/selected-day.tsx` 하나(`useSelectedDay()` → `selected`·`select`·`reselectCount`, 기간에서 사라진 날은 `resolveSelection` 이 "all" 로). 날짜 줄(`trip-day-bar.tsx`)·지도 칸·예산 카드·일정·아래 예산 줄이 같이 읽는다. 고르지 않은 날·[전체] 전용 칸은 `ShownWhen`(`<div hidden>`)으로 그리되 감춘다(열린 칸 유지, 숨긴 날은 IntersectionObserver 가 못 보니 이동 시간을 묻지 않음).
+  - 일정 노선 색은 날 묶음 `section` 의 `style={{"--line": lineVar(n)}}` 를 자식이 `bg-(--line)`·`border-(--line)` 으로 읽는다. **`lineVar` 는 `:root` 의 `--line-N` 을 가리킨다** — `@theme inline` 은 `--color-*` 를 CSS 변수로 내보내지 않아 `var(--color-line-N)` 은 비어 있다(#53 브라우저 확인). 노선 줄 칸은 `schedule-editor.tsx` 의 `ROW_GRID`·`RAIL`(일정 줄·이동 줄·일정 추가 줄이 같이 씀).
+  - 지도 선만 hex 가 필요해 `LINE_HEX`·`lineHex`(`src/lib/day-line.ts`)를 둔다. `globals.css` 와 어긋나면 `day-line.test.mjs` 가 실패한다. 노선 색은 글자에 쓰지 않는다(주황·노랑이 본문 대비 4.5:1 미만) — 이동 줄 글자는 본문 색, 색은 옆 레일.
+  - 날짜 줄 "붙음" 판정은 줄 자체를 `rootMargin: -1px` · `threshold: 1` IntersectionObserver 로 본다(제목으로 보면 줄이 제자리일 때도 작은 제목이 뜸). 휴대폰 아래 예산 줄(`budget-dock.tsx`)은 article 마지막의 `sticky bottom-0 sm:hidden`, 시트 `<dialog>` 는 그 줄 **밖**에 둔다(안에 두면 가로로 돌려 sm 이상이 될 때 보이지 않는 모달이 페이지를 막는다, #53 `/code-review`).
   - 브라우저 확인: dev 서버의 화면 갱신이 늦어 고친 직후 사진이 옛 모양일 수 있다. 이상하면 요소 크기를 직접 재 보고(`getBoundingClientRect`) 다시 찍는다(#53).
 
 - **공유(#15)**:
@@ -98,6 +95,9 @@
 - **공휴일**: Vercel 환경 변수 `DATA_GO_KR_SERVICE_KEY`(Production·Preview). 이 세션에서는 `apis.data.go.kr` 접속이 막혀 있다. 실패하면 Vercel 로그에 `[holidays]` 한 줄(키는 가림)이 남는다.
 
 ## 남은 확인
+
+- #53 프로덕션 확인: 사용자가 실제 휴대폰으로 여행 화면을 써 본다(날짜 줄 위 고정, 역 동그라미 완료, 끌기, 아래 예산 줄과 [+ 지출] 시트, 다크 모드). 클라우드에서는 dev 서버 + 테스트 계정으로만 확인했다.
+- #53 남은 지적(PR #60 본문): 실제 없이 예상만 있을 때 [전체] 예산 카드에 여유·초과 문구가 두 번(설계대로 둠), 예상 0원뿐인 날의 "—".
 
 - #15 프로덕션: 사용자가 실제 지인을 초대해 참여·접속까지 확인함(2026-11-20). 남은 것: 20명 상한 문구(계정 21개 필요), 카톡 앱 안 브라우저에서 바깥 브라우저로 넘어가는지(어느 경로로 열었는지는 기록 없음).
 - #15 남은 지적(PR #54 본문): 동시 참여로 20명을 조금 넘을 수 있음, 실시간 반영 없음(두 사람 동시 고치기 경쟁은 #41·#14 남은 지적과 같음).
