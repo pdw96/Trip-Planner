@@ -271,7 +271,7 @@ export function ScheduleItemRow({
           ref={setActivatorNodeRef}
           {...attributes}
           {...listeners}
-          aria-label={`${name} 순서 옮기기`}
+          aria-label={`${name || "일정"} 순서 옮기기`}
           className="-my-2 flex h-11 w-6 shrink-0 cursor-grab touch-none items-center justify-center rounded text-zinc-400 select-none hover:text-zinc-600 active:cursor-grabbing dark:hover:text-zinc-300"
         >
           ⠿

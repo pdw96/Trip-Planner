@@ -184,11 +184,11 @@ export function ScheduleDayItems({
     });
   }
 
-  // 끄는 동안과 저장이 끝나기 전(보이는 순서가 서버 순서와 다름)에는 이동 줄을 감춘다(어긋난 구간이 보이지 않게).
+  // 어긋난 구간이 보이지 않게 이동 줄을 감춘다. 끄는 동안은 자리는 남기고 보이지만 않게(줄이 빠지면 끄는 줄이
+  // 손가락에서 어긋난다), 놓은 뒤 저장이 끝나기 전(보이는 순서가 서버 순서와 다름)에는 뺀다.
   const reordering =
     ordered.map((item) => item.id).join() !==
     items.map((item) => item.id).join();
-  const hideTravel = dragging || reordering;
   const sortable = ordered.length > 1;
 
   const dayRef = useRef<HTMLDivElement>(null);
@@ -221,7 +221,7 @@ export function ScheduleDayItems({
   }
   const placed = placeTravelLines(
     ordered.map((item) => item.id),
-    hideTravel ? [] : lines,
+    reordering ? [] : lines,
   );
 
   // 감싸개는 하나로 늘 그린다(빈 날에 첫 일정을 넣어도 같은 요소를 계속 지켜보도록).
@@ -261,6 +261,7 @@ export function ScheduleDayItems({
                         line={line.leg}
                         caption={line.caption}
                         onRetry={reload}
+                        concealed={dragging}
                       />
                     )}
                     <ScheduleItemRow
@@ -277,6 +278,7 @@ export function ScheduleDayItems({
                   line={placed.after.leg}
                   caption={placed.after.caption}
                   onRetry={reload}
+                  concealed={dragging}
                 />
               )}
             </ul>
@@ -301,17 +303,23 @@ export function ScheduleDayItems({
   );
 }
 
+// concealed: 자리는 차지하되 보이지 않음(끄는 동안).
 function TravelLine({
   line,
   caption,
   onRetry,
+  concealed,
 }: {
   line: LineView;
   caption: string | null;
   onRetry: () => void;
+  concealed: boolean;
 }) {
   return (
-    <li className="flex items-baseline gap-3 py-0.5 text-sm text-zinc-500">
+    <li
+      aria-hidden={concealed || undefined}
+      className={`flex items-baseline gap-3 py-0.5 text-sm text-zinc-500 ${concealed ? "invisible" : ""}`}
+    >
       <span className="w-6 shrink-0" />
       <span className="w-12 shrink-0" />
       <span className="min-w-0 flex-1 break-words">
