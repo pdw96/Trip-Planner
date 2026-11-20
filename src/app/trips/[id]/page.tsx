@@ -73,7 +73,6 @@ async function TripDetail({
         </Suspense>
         <ScheduleSection userId={user.id} trip={trip} today={today} />
       </DayRouteProvider>
-      {/* 예산(#14)이 이 아래에 들어온다. */}
     </article>
   );
 }
