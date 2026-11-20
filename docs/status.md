@@ -1,6 +1,6 @@
 # 지금 상태
 
-2026-11-20 기준(#41 반영). 이슈 하나가 끝날 때마다(PR 머지, 배포 확인) 고친다. 새 세션은 이 파일부터 읽는다(`CLAUDE.md` '작업 흐름').
+2026-11-20 기준(#14 반영). 이슈 하나가 끝날 때마다(PR 머지, 배포 확인) 고친다. 새 세션은 이 파일부터 읽는다(`CLAUDE.md` '작업 흐름').
 
 ## 끝나서 배포된 것
 
@@ -17,17 +17,28 @@
 | #37 | #42 | 일정표의 일정 사이(도착 일정 줄 위)에 예상 이동 시간 한 줄, 기준점 구간 포함. 화면에 0.5초 머문 날만 묻고, 지도 N일차 탭과 결과를 페이지 저장소(`day-route-store.tsx`)로 함께 씀. DB 변경 없음. 설계 `docs/superpowers/specs/2026-11-19-schedule-travel-time-design.md` |
 | #44 | #45 | 다크 모드에서 고르기 목록이 흰 바탕에 밝은 글자로 안 보이던 것(`color-scheme: light dark`), [전체] 탭 칸 이름 "기준점" → "가까운 순 기준"(일정 동선 기준점과 헷갈림, 부산 여행 제보) |
 | #41 | #47 | (프로덕션 확인: 휴대폰 터치 끌기, 지도 N일차 번호) 일정 줄 손잡이 ⠿ 로 끌어 하루 안 순서 바꾸기(마우스·터치·키보드, `@dnd-kit`). 시각 있는 일정끼리는 늘 시각 순, 시각 없는 일정은 어디든. `schedule_items.position`(마이그레이션 0005, nullable — 비면 시각 순). 설계 `docs/superpowers/specs/2026-11-20-schedule-reorder-design.md` |
+| #14 | #50 | 여행별 예산·지출(`trip_budgets`·`budget_items`, 마이그레이션 0006). 총 예산 + 예산 통화(+ 현지 통화·예정 환율), 예상은 일정 양식, 실제는 완료 체크칸을 켜면 열리는 칸(현지 통화는 결제일 유럽중앙은행 기준환율, Frankfurter), 지도 [전체]·[N일차] 탭 예산 카드(예상 총지출 = 실제 + 남은 예상, 초과·여유, 날짜별 표, 일정 밖 항목). 일정 줄에는 금액 없음. 설계 `docs/superpowers/specs/2026-11-20-trip-budget-design.md` |
 
 ## 다음 할 일
 
 사용자가 열린 이슈에서 고른다.
 
-- 기능: #14 예산·지출, #15 지인과 공유, #36 구간 경로 후보 2–3개
+- 기능: #15 지인과 공유, #36 구간 경로 후보 2–3개
 - 개선: #22 단위 시험을 CI 에서, #23 달력 키보드 이동, #24 자잘한 개선 모음
 
-#14 는 새 테이블이 필요해 마이그레이션 PR 규칙을 따른다. 여행 접근 조건은 `src/db/queries/trips.ts` 의 `accessibleTrips(userId)` 하나다(#15 공유가 그 조건만 바꾸도록). 하위 데이터 쿼리는 `schedule-items.ts`·`places.ts` 처럼 이 조건을 같은 SQL 문 안에 넣는다(하위 id 와 여행 id 를 함께 묶어 섞어 보내기를 막는다). 여러 테이블을 함께 쓰려면 neon-http 에 트랜잭션이 없으므로 데이터를 바꾸는 CTE 한 문으로 한다(`updatePlace`, `createScheduleItemWithNewPlace`).
+#15 공유는 새 테이블이 필요해 마이그레이션 PR 규칙을 따른다. 여행 접근 조건은 `src/db/queries/trips.ts` 의 `accessibleTrips(userId)` 하나다(#15 공유가 그 조건만 바꾸도록). 하위 데이터 쿼리는 `schedule-items.ts`·`places.ts` ·`budget.ts` 처럼 이 조건을 같은 SQL 문 안에 넣는다(하위 id 와 여행 id 를 함께 묶어 섞어 보내기를 막는다). 여러 테이블을 함께 쓰려면 neon-http 에 트랜잭션이 없으므로 데이터를 바꾸는 CTE 한 문으로 한다(`updatePlace`, `createScheduleItemWithNewPlace`).
 
 ## 알아 둘 것
+
+- **예산(#14)**:
+  - 금액은 통화 최소 단위 정수(`bigint`, 10^12 미만), 환율은 `numeric(20,10)` "현지 1 = 예산 몇". 돈 계산은 `src/lib/budget.ts` 하나(환율 곱은 BigInt, 행마다 반올림). 통화 목록·자릿수·100 단위 표시(엔·동·루피아)도 거기. tsconfig 대상이 ES2017 이라 BigInt 글자(`10n`) 대신 `BigInt(10)`.
+  - 예상은 그 여행의 예정 환율, 실제는 행에 저장한 결제일 환율로 바꾼다. 환율 결정은 `decideRate`(예산 통화 → 없음, 직접 넣음 → manual, 같은 결제일의 ecb·manual → 유지, 미래·ECB 미지원(대만 달러·동) → 예정 환율, 그 밖 → 받기). 받기 실패는 예정 환율(`planned`)로 저장하고 다시 저장할 때 다시 받는다.
+  - 실제 지출은 완료된 일정에만 있다: 체크를 끄면 확인 뒤 `undoScheduleItemAndClearActual`(한 문), 서버는 실제가 있는 일정의 일반 완료 풀기와 미완료 일정의 실제 쓰기를 거절한다. 일정 고치기 양식의 실제 칸은 양식이 보낸 표시(`actualShown=1`) **와** 지금 DB 상태(완료 또는 실제 있음)가 모두 맞을 때만 읽는다(Codex 리뷰 두 번: 낡은 양식이 실제를 지우거나 되살림).
+  - 통화 바꾸기 규칙(설계 §5.2)은 `upsertTripBudget` 한 문 안에서 확인한다. 설정 저장과 금액 쓰기가 동시에 일어나는 경쟁은 막지 못한다(PR #50 남은 지적).
+  - 카드 양식은 저장 동작 안에서 닫는다(`budget-forms.tsx` 의 `closingOnSave`). 저장으로 카드 모양이 바뀌면(예산 없음 → 있음) 양식이 새 자리에서 다시 그려져 effect 로는 닫히지 않는다(#14 브라우저 확인).
+  - 지도 첫 탭은 여행 중이면 "오늘"이다. 예산이 없으면 N일차 탭에는 카드가 없어서 [전체] 를 눌러야 "예산 정하기" 가 보인다.
+  - 클라우드 환경 허용 호스트에 `api.frankfurter.dev` 를 더했다(2026-11-20). 응답 `{"date","rates":{"KRW":8.3572}}`.
+- **브라우저 확인 스크립트**: scratchpad 의 ESM 스크립트에서는 `import "playwright"` 가 안 된다 → `createRequire(import.meta.url)("playwright")`. DB 를 읽는 스크립트(`@neondatabase/serverless`)는 프로젝트 루트에 복사해 실행한다. 테스트 계정 넣기는 자동 권한 검사기가 막을 수 있다(#14: 사용자가 승인 창에서 허용).
 
 - **일정 순서(#41)**: 정렬은 `date, position NULLS LAST, time NULLS LAST, created_at, id` 하나를 `listScheduleItems`(SQL)와 `compareScheduleItems`(`src/lib/schedule.ts`)가 같이 쓴다. 규칙은 `src/lib/schedule-order.ts`(`keepsTimeOrder`·`insertByTime`·`orderWithItem`) 하나. 순서에 영향을 주는 쓰기(끌어 놓기, 넣기, 날짜·시각 고치기)는 그날 전체 position 을 0..n-1 로 한 문(`writeDayOrder`)에 다시 쓴다. 손대지 않은 날은 모두 NULL 이라 예전 시각 순과 같다. 넣기·고치기는 쓰기 **전에** `listDayOrder` 로 그날 순서를 읽어 둔다(같은 날 시각 지우기는 "그 자리" 유지).
 - **useOptimistic 과 router.refresh**: 낙관 갱신 전환 안에서 `router.refresh()` 를 부르면 새로 고침이 끝날 때까지 낙관 값이 남는다(실패한 순서가 1–2초 그대로 보임). 되돌린 뒤 effect 에서 부른다(`schedule-day-items.tsx`, #41 브라우저 확인).
@@ -60,6 +71,9 @@
 - **공휴일**: Vercel 환경 변수 `DATA_GO_KR_SERVICE_KEY`(Production·Preview). 이 세션에서는 `apis.data.go.kr` 접속이 막혀 있다. 실패하면 Vercel 로그에 `[holidays]` 한 줄(키는 가림)이 남는다.
 
 ## 남은 확인
+
+- #14 프로덕션 확인: 사용자가 실제 여행 하나에 예산 정하기 → 일정 예상 → 체크칸으로 실제(현지 통화면 결제일 기준환율이 들어가는지) → [전체]·[N일차] 카드. 클라우드에서 확인 못 한 것: 프로덕션 Vercel 에서 Frankfurter 호출(로그 `[fx]`), 실제 Google 로그인 화면.
+- #14 남은 지적(PR #50 본문): 설정·금액 동시 쓰기 경쟁, 300행 상한은 일정 밖 항목 넣기에서만, 오늘 결제의 환율이 전 영업일 값으로 캐시될 수 있음, 날짜 옮기며 금액만 실패하면 안내가 사라질 수 있음, 지워진 일정 밖 항목 지우기 → 찾을 수 없음 화면, 예상 0원뿐인 날은 "—", 환율 소수 초과 문구, 실패 로그 두 줄, 다른 탭 통화 변경 뒤 낡은 양식.
 
 - #41 남은 지적(PR #47 본문): 저장된 순서가 이미 시각 순과 어긋나면(두 창 동시 고치기) 그날 끌기가 모두 거절됨 — 시각을 한 번 고치면 풀림. 넣기·고치기 뒤 순서 쓰기만 실패하면 그 줄이 맨 뒤·옛 자리에 보임(로그 `[schedule-order]`).
 
