@@ -24,11 +24,9 @@ import { TripMapPanel } from "./trip-map-panel";
 export async function MapSection({
   userId,
   trip,
-  today,
 }: {
   userId: string;
   trip: Trip;
-  today: string;
 }) {
   const [placeRows, baseRows, itemRows, budget] = await Promise.all([
     listPlaces(userId, trip.id),
@@ -131,8 +129,6 @@ export async function MapSection({
     .map((p) => p.id);
   const firstDayBase = baseForDate(baseRows, trip.startDate);
 
-  const todayInTrip = today >= trip.startDate && today <= trip.endDate;
-
   // 브라우저 키와 지도 ID 는 공개 값이다(웹사이트 제한). 서버 키(GOOGLE_MAPS_SERVER_KEY)는 넘기지 않는다.
   // 번호 핀(Advanced Marker)에 지도 ID 가 필요하므로 둘 다 있어야 지도를 띄운다.
   const browserKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY ?? "";
@@ -144,7 +140,6 @@ export async function MapSection({
       tripId={trip.id}
       places={places}
       days={panelDays}
-      initialTab={todayInTrip ? today : "all"}
       overviewBaseIds={overviewBaseIds}
       defaultOverviewBaseId={
         firstDayBase !== null && overviewBaseIds.includes(firstDayBase)

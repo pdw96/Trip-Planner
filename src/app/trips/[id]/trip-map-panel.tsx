@@ -1,8 +1,20 @@
 "use client";
 
 import { APIProvider } from "@vis.gl/react-google-maps";
-import { useEffect, useId, useLayoutEffect, useMemo, useState } from "react";
-import { errorTextClass, fieldClass } from "@/app/ui/styles";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  emptyStateClass,
+  errorTextClass,
+  fieldClass,
+  sectionTitleClass,
+} from "@/app/ui/styles";
 import { formatDistance, sortByDistance } from "@/lib/geo";
 import { directionsUrl, legText } from "@/lib/leg-display";
 import type { DayRouteResult } from "../day-route-loader";
@@ -21,9 +33,10 @@ import {
 } from "./map-types";
 import { PlaceAddForm } from "./place-add-form";
 import { PlaceRow } from "./place-row";
+import { useSelectedDay } from "./selected-day";
 import { type MapLine, type MapPin, TripMapCanvas } from "./trip-map-canvas";
 
-// 여행 화면의 지도 칸과 "가 볼 곳"(§5.1). 탭([전체] + N일차), 기준점, 구간 목록, 장소 목록을 묶는다.
+// 여행 화면의 지도 칸과 "가 볼 곳"(§5.1). 고른 날([전체] + N일차, 날짜 줄이 정함 ./selected-day), 기준점, 구간 목록, 장소 목록을 묶는다.
 // 데이터는 map-section(서버)이 준비한다. 구간 이동 정보는 N일차 탭을 열 때만 페이지 저장소(./day-route-store)로 묻고
 // ([전체]·열지 않은 날은 묻지 않는다, §5.3), 기다리는 동안 서버가 넘긴 동선으로 직선 거리와 점선을 보인다.
 // Server Action 으로 묻지 않는 까닭: Server Action 은 하나씩 차례로 보내져 저장이 Google 응답을 기다린다(#39).
@@ -34,8 +47,6 @@ type Props = {
   tripId: string;
   places: PanelPlace[];
   days: PanelDay[];
-  // "all" 또는 날짜.
-  initialTab: string;
   overviewBaseIds: string[];
   defaultOverviewBaseId: string | null;
   // 없으면 지도·장소 검색 대신 "지도를 쓸 수 없어요"(§3.3).
@@ -63,13 +74,12 @@ function PanelBody({
   tripId,
   places,
   days,
-  initialTab,
   overviewBaseIds,
   defaultOverviewBaseId,
   maps,
   budget,
 }: Props) {
-  const [tab, setTab] = useState(initialTab);
+  const { selected, select, reselectCount } = useSelectedDay();
   const [overviewBaseId, setOverviewBaseId] = useState(defaultOverviewBaseId);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [focus, setFocus] = useState<{ placeId: string; seq: number } | null>(
@@ -142,8 +152,9 @@ function PanelBody({
     if (!ok) setBaseError({ date });
   }
 
-  // 여행 날짜가 바뀌어 열린 날이 사라졌으면 [전체]로 본다.
-  const day = tab === "all" ? null : (days.find((d) => d.date === tab) ?? null);
+  // 고른 날은 저장소가 여행 기간 안으로 맞춰 준다. 그날이 패널 데이터에 아직 없으면(서버 값이 늦음) [전체]로 그린다.
+  const day =
+    selected === "all" ? null : (days.find((d) => d.date === selected) ?? null);
   const { result: routeResult, reload } = useDayRoute(
     day?.date ?? null,
     day?.signature ?? "",
@@ -151,15 +162,18 @@ function PanelBody({
     day !== null,
   );
 
-  function selectTab(next: string) {
+  // 고른 날이 바뀌면 강조를 지운다.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 고른 날이 바뀔 때만 지운다
+  useEffect(() => {
     setHighlightedId(null);
-    if (next === tab) {
-      // 같은 탭을 다시 열면 다시 묻는다(구간 정보는 저장하지 않는다, §3.2).
-      if (next !== "all") reload();
-      return;
-    }
-    setTab(next);
-  }
+  }, [selected]);
+
+  // 같은 날을 다시 고르면 다시 묻는다(구간 정보는 저장하지 않는다, §3.2).
+  const reloadRef = useRef(reload);
+  reloadRef.current = reload;
+  useEffect(() => {
+    if (reselectCount > 0) reloadRef.current();
+  }, [reselectCount]);
 
   // [전체] 보기의 기준점(저장하지 않는 화면 상태). 후보에서 사라졌으면(장소 삭제) 없음으로 본다.
   const overviewBase =
@@ -182,13 +196,13 @@ function PanelBody({
       !view.pins.some((p) => p.placeId === placeId) &&
       positionOf(placesById.get(placeId)) !== null
     ) {
-      setTab("all");
+      select("all");
     }
     setHighlightedId(placeId);
     setFocus((f) => ({ placeId, seq: (f?.seq ?? 0) + 1 }));
   }
 
-  const fitKey = `${tab}|${view.pins.map((p) => p.key).join(",")}`;
+  const fitKey = `${day?.date ?? "all"}|${view.pins.map((p) => p.key).join(",")}`;
 
   // 전체 보기에서 기준점이 있으면 가까운 순과 거리, 아니면 넣은 순서.
   const listed: { place: PanelPlace; distance: string | null }[] =
@@ -207,20 +221,15 @@ function PanelBody({
   return (
     <>
       <section aria-labelledby="map-heading" className="flex flex-col gap-4">
-        <h2 id="map-heading" className="text-xl font-semibold">
+        <h2 id="map-heading" className={sectionTitleClass}>
           지도
         </h2>
-        <DayTabs
-          days={days}
-          selected={day?.date ?? "all"}
-          onSelect={selectTab}
-        />
         <BudgetCard
           tripId={tripId}
           budget={budget}
           tab={day?.date ?? "all"}
           days={days}
-          onSelectTab={selectTab}
+          onSelectTab={select}
         />
         {maps ? (
           <div className="flex flex-col gap-2">
@@ -285,13 +294,18 @@ function PanelBody({
         )}
       </section>
 
-      <section aria-labelledby="places-heading" className="flex flex-col gap-4">
-        <h2 id="places-heading" className="text-xl font-semibold">
+      {/* 가 볼 곳은 [전체]에서만(§5.4.1). 감출 때도 그려 열린 고치기 칸이 남게 한다. */}
+      <section
+        aria-labelledby="places-heading"
+        hidden={day !== null}
+        className="flex flex-col gap-4"
+      >
+        <h2 id="places-heading" className={sectionTitleClass}>
           가 볼 곳
         </h2>
         {maps && <PlaceAddForm tripId={tripId} />}
         {listed.length > 0 ? (
-          <ul className="flex flex-col">
+          <ul className="flex flex-col divide-y divide-rule">
             {listed.map(({ place, distance }) => (
               <PlaceRow
                 key={place.id}
@@ -311,7 +325,9 @@ function PanelBody({
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-sub">아직 넣은 장소가 없어요</p>
+          <div className={emptyStateClass}>
+            <p className="text-sm text-sub">아직 넣은 장소가 없어요</p>
+          </div>
         )}
       </section>
     </>
@@ -478,48 +494,6 @@ function legRows(
 }
 
 // --- 작은 조각 ---
-
-function DayTabs({
-  days,
-  selected,
-  onSelect,
-}: {
-  days: PanelDay[];
-  selected: string;
-  onSelect: (tab: string) => void;
-}) {
-  const tabs = [
-    { value: "all", label: "전체", title: "모든 장소" },
-    ...days.map((d) => ({
-      value: d.date,
-      label: `${d.dayNumber}일차`,
-      title: d.label,
-    })),
-  ];
-  return (
-    <div className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1">
-      {tabs.map((t) => {
-        const active = t.value === selected;
-        return (
-          <button
-            key={t.value}
-            type="button"
-            onClick={() => onSelect(t.value)}
-            aria-pressed={active}
-            title={t.title}
-            className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
-              active
-                ? "bg-foreground text-on-ink"
-                : "border border-rule hover:bg-surface"
-            }`}
-          >
-            {t.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 function GoogleTermsLine() {
   const linkClass = "underline hover:text-foreground";
