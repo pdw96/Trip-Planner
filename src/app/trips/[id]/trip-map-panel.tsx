@@ -8,12 +8,14 @@ import type { DayRouteResult } from "../day-route-loader";
 import { SAVE_FAILED } from "../messages";
 import { setTripBaseAction } from "../place-actions";
 import { inputClass } from "../styles";
+import { BudgetCard } from "./budget-card";
 import { DayLegs, type LegRow } from "./day-legs";
 import { useDayRoute } from "./day-route-store";
 import {
   CATEGORY_ICONS,
   circled,
   lodgingFirst,
+  type PanelBudget,
   type PanelDay,
   type PanelPlace,
 } from "./map-types";
@@ -38,6 +40,8 @@ type Props = {
   defaultOverviewBaseId: string | null;
   // 없으면 지도·장소 검색 대신 "지도를 쓸 수 없어요"(§3.3).
   maps: Maps | null;
+  // 예산 카드(#14). 예산 설정이 없으면 null.
+  budget: PanelBudget;
 };
 
 const ERROR_VISIBLE_MS = 4000;
@@ -63,6 +67,7 @@ function PanelBody({
   overviewBaseIds,
   defaultOverviewBaseId,
   maps,
+  budget,
 }: Props) {
   const [tab, setTab] = useState(initialTab);
   const [overviewBaseId, setOverviewBaseId] = useState(defaultOverviewBaseId);
@@ -209,6 +214,13 @@ function PanelBody({
           days={days}
           selected={day?.date ?? "all"}
           onSelect={selectTab}
+        />
+        <BudgetCard
+          tripId={tripId}
+          budget={budget}
+          tab={day?.date ?? "all"}
+          days={days}
+          onSelectTab={selectTab}
         />
         {maps ? (
           <div className="flex flex-col gap-2">

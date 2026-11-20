@@ -9,15 +9,21 @@ import {
   useEffect,
   useLayoutEffect,
   useOptimistic,
+  useRef,
   useState,
   useTransition,
 } from "react";
+import { type ActualMoney, formatMoney, type Money } from "@/lib/budget";
 import { placeUrl } from "@/lib/leg-display";
 import { mapsSearchUrl } from "@/lib/schedule";
 import {
   EMPTY_SCHEDULE_FIELDS,
   type ScheduleFormState,
 } from "@/lib/schedule-input";
+import {
+  setScheduleItemActualAction,
+  undoScheduleItemWithActualAction,
+} from "../budget-actions";
 import { SAVE_FAILED } from "../messages";
 import {
   createScheduleItemAction,
@@ -25,7 +31,14 @@ import {
   setScheduleItemDoneAction,
   updateScheduleItemAction,
 } from "../schedule-actions";
+import { inputClass } from "../styles";
 import type { PlaceOption } from "./map-types";
+import {
+  actualDetailValues,
+  amountFieldValues,
+  type BudgetCurrencies,
+  currencyLabel,
+} from "./money-fields";
 import { type DateOption, ScheduleItemForm } from "./schedule-item-form";
 
 export type { DateOption };
@@ -41,6 +54,9 @@ export type RowItem = {
   placeId: string | null;
   memo: string | null;
   done: boolean;
+  // 예산 금액(#14). 일정 줄에는 보이지 않고 양식·체크칸에서만 쓴다.
+  estimate: Money | null;
+  actual: ActualMoney | null;
 };
 
 const ERROR_VISIBLE_MS = 4000;
@@ -48,11 +64,13 @@ const ERROR_VISIBLE_MS = 4000;
 // 입력칸은 화면 전체에서 하나만 열린다. 키: "add:<날짜>" 또는 "edit:<일정 id>".
 // places: 이 여행의 장소(숙소 먼저). 양식의 장소 고르기와 이어진 장소의 링크에 쓴다.
 // searchEnabled: 장소 칸에서 Google 검색을 보일지(브라우저 키가 있을 때, #35).
+// budget: 예산 설정의 두 통화(#14). 없으면 null(금액 칸 대신 안내).
 type OpenState = {
   openKey: string | null;
   setOpenKey: React.Dispatch<React.SetStateAction<string | null>>;
   places: PlaceOption[];
   searchEnabled: boolean;
+  budget: BudgetCurrencies | null;
 };
 
 const OpenContext = createContext<OpenState | null>(null);
@@ -70,10 +88,12 @@ function useOpen(): OpenState {
 export function ScheduleEditorProvider({
   places,
   browserKey,
+  budget,
   children,
 }: {
   places: PlaceOption[];
   browserKey: string | null;
+  budget: BudgetCurrencies | null;
   children: React.ReactNode;
 }) {
   const [openKey, setOpenKey] = useState<string | null>(null);
@@ -85,6 +105,7 @@ export function ScheduleEditorProvider({
         setOpenKey,
         places,
         searchEnabled: browserKey !== null,
+        budget,
       }}
     >
       {children}
@@ -105,7 +126,7 @@ export function AddScheduleItem({
   tripId: string;
   date: string;
 }) {
-  const { openKey, setOpenKey, places, searchEnabled } = useOpen();
+  const { openKey, setOpenKey, places, searchEnabled, budget } = useOpen();
   const key = `add:${date}`;
 
   if (openKey !== key) {
@@ -126,6 +147,7 @@ export function AddScheduleItem({
       initialValues={{ ...EMPTY_SCHEDULE_FIELDS, date }}
       places={places}
       searchEnabled={searchEnabled}
+      budget={budget}
       onClose={() => setOpenKey(null)}
     />
   );
@@ -143,9 +165,12 @@ export function ScheduleItemRow({
   dateOptions: DateOption[];
   sortable: boolean;
 }) {
-  const { openKey, setOpenKey, places, searchEnabled } = useOpen();
+  const { openKey, setOpenKey, places, searchEnabled, budget } = useOpen();
   const key = `edit:${item.id}`;
   const editing = openKey === key;
+  // 완료 체크칸을 켜면 열리는 실제 지출 칸(#14 §5.7.3).
+  const actualKey = `actual:${item.id}`;
+  const enteringActual = budget !== null && openKey === actualKey;
   // 입력칸으로 열린 줄은 끌지 않는다. 다른 줄이 움직일 때 자리를 비켜 주도록 노드는 늘 등록한다.
   const {
     attributes,
@@ -176,9 +201,37 @@ export function ScheduleItemRow({
     return () => clearTimeout(timer);
   }, [error]);
 
+  function closeActual() {
+    setOpenKey((current) => (current === actualKey ? null : current));
+  }
+
   // 누르면 바로 화면에 반영하고 저장한다. 실패하면 전환이 끝날 때 서버 값으로 돌아가고 문구를 보인다.
+  // 예산이 있으면 켤 때 실제 지출 칸을 연다. 실제를 적은 일정을 끄면 확인 뒤 완료 해제와 실제 삭제를 한 번에 한다.
   function toggleDone() {
     const next = !done;
+    if (!next && item.actual) {
+      const spent = formatMoney(item.actual.amount, item.actual.currency);
+      if (
+        !window.confirm(
+          `완료를 풀면 적어 둔 실제 지출 ${spent}도 지워져요. 계속할까요?`,
+        )
+      ) {
+        return;
+      }
+      setError(null);
+      closeActual();
+      startToggle(async () => {
+        setOptimisticDone(false);
+        const ok = await undoScheduleItemWithActualAction(tripId, item.id).then(
+          (result) => result.ok,
+          () => false,
+        );
+        if (!ok) setError(SAVE_FAILED);
+      });
+      return;
+    }
+    if (next && budget) setOpenKey(actualKey);
+    else closeActual();
     setError(null);
     startToggle(async () => {
       setOptimisticDone(next);
@@ -187,7 +240,11 @@ export function ScheduleItemRow({
         (result) => result.ok,
         () => false,
       );
-      if (!ok) setError(SAVE_FAILED);
+      if (!ok) {
+        setError(SAVE_FAILED);
+        // 완료가 되돌아갔으니 실제 지출 칸도 닫는다(#14 리뷰).
+        closeActual();
+      }
     });
   }
 
@@ -218,6 +275,9 @@ export function ScheduleItemRow({
   }
 
   if (editing) {
+    const estimate = budget ? amountFieldValues(item.estimate, budget) : null;
+    const actual = budget ? amountFieldValues(item.actual, budget) : null;
+    const detail = actualDetailValues(item.actual);
     return (
       <li ref={setNodeRef} style={sortStyle}>
         <ScheduleItemForm
@@ -231,10 +291,19 @@ export function ScheduleItemRow({
             place: item.place ?? "",
             placeId: item.placeId ?? "",
             memo: item.memo ?? "",
+            estimateAmount: estimate?.amount ?? "",
+            estimateCurrency: estimate?.currency ?? "",
+            actualAmount: actual?.amount ?? "",
+            actualCurrency: actual?.currency ?? "",
+            actualPaidOn: detail.paidOn,
+            actualRate: detail.rate,
           }}
           dateOptions={dateOptions}
           places={places}
           searchEnabled={searchEnabled}
+          budget={budget}
+          showActual={item.done || item.actual !== null}
+          actualRateSource={item.actual?.rateSource ?? null}
           onClose={() =>
             setOpenKey((current) => (current === key ? null : current))
           }
@@ -282,30 +351,39 @@ export function ScheduleItemRow({
       <span className="w-12 shrink-0 pt-0.5 text-sm tabular-nums text-zinc-500">
         {item.time}
       </span>
-      <div
-        className={`flex min-w-0 flex-1 flex-col gap-0.5 ${done ? "opacity-50" : ""}`}
-      >
-        <button
-          type="button"
-          onClick={() => setOpenKey(key)}
-          className={`self-start text-left font-medium break-words hover:underline ${done ? "line-through" : ""}`}
-        >
-          {name}
-        </button>
-        {item.place && placeHref && (
-          <a
-            href={placeHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="self-start text-sm text-zinc-600 break-words hover:underline dark:text-zinc-400"
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        {/* 완료된 일정은 흐리게. 완료 뒤에 여는 실제 지출 칸은 흐리지 않는다(#14 리뷰). */}
+        <div className={`flex flex-col gap-0.5 ${done ? "opacity-50" : ""}`}>
+          <button
+            type="button"
+            onClick={() => setOpenKey(key)}
+            className={`self-start text-left font-medium break-words hover:underline ${done ? "line-through" : ""}`}
           >
-            📍 {item.title === null ? "지도에서 보기" : item.place}
-          </a>
-        )}
-        {item.memo && (
-          <p className="text-sm whitespace-pre-wrap break-words text-zinc-600 dark:text-zinc-400">
-            {item.memo}
-          </p>
+            {name}
+          </button>
+          {item.place && placeHref && (
+            <a
+              href={placeHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="self-start text-sm text-zinc-600 break-words hover:underline dark:text-zinc-400"
+            >
+              📍 {item.title === null ? "지도에서 보기" : item.place}
+            </a>
+          )}
+          {item.memo && (
+            <p className="text-sm whitespace-pre-wrap break-words text-zinc-600 dark:text-zinc-400">
+              {item.memo}
+            </p>
+          )}
+        </div>
+        {enteringActual && budget && (
+          <ActualEntry
+            tripId={tripId}
+            item={item}
+            budget={budget}
+            onClose={closeActual}
+          />
         )}
         {error && (
           <p role="alert" className="text-sm text-red-600">
@@ -321,5 +399,103 @@ export function ScheduleItemRow({
         className="mt-1 size-5 shrink-0 accent-foreground"
       />
     </li>
+  );
+}
+
+// 완료 체크칸을 켠 뒤 그 줄 아래에 열리는 실제 지출 칸 하나(§5.7.3). 처음 값은 적어 둔 실제 → 예상 → 빈칸.
+// 저장하면 닫히고, 건너뛰기(돈을 안 쓴 일정)는 실제를 쓰지 않고 닫는다. 빈칸으로 저장하면 실제를 지운다.
+function ActualEntry({
+  tripId,
+  item,
+  budget,
+  onClose,
+}: {
+  tripId: string;
+  item: RowItem;
+  budget: BudgetCurrencies;
+  onClose: () => void;
+}) {
+  const initial = amountFieldValues(item.actual ?? item.estimate, budget);
+  const [amount, setAmount] = useState(initial.amount);
+  const [currency, setCurrency] = useState(initial.currency);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, startSave] = useTransition();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const inputId = `actual-${item.id}`;
+
+  useLayoutEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  function save(event: React.FormEvent) {
+    event.preventDefault();
+    setError(null);
+    startSave(async () => {
+      const result = await setScheduleItemActualAction(
+        tripId,
+        item.id,
+        amount,
+        currency,
+      ).catch(() => ({ ok: false as const, error: SAVE_FAILED }));
+      if (result.ok) onClose();
+      else setError(result.error);
+    });
+  }
+
+  const choices = budget.localCurrency
+    ? [budget.localCurrency, budget.currency]
+    : null;
+  return (
+    <form onSubmit={save} noValidate className="mt-1 flex flex-col gap-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <label htmlFor={inputId} className="text-sm font-medium">
+          실제 지출
+        </label>
+        <input
+          ref={inputRef}
+          id={inputId}
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          inputMode="decimal"
+          autoComplete="off"
+          aria-invalid={error ? true : undefined}
+          className={`${inputClass} w-32 py-1.5`}
+        />
+        {choices && (
+          <select
+            value={currency}
+            onChange={(e) => setCurrency(e.target.value)}
+            aria-label="실제 지출 통화"
+            className={`${inputClass} w-auto py-1.5`}
+          >
+            {choices.map((code) => (
+              <option key={code} value={code}>
+                {currencyLabel(code)}
+              </option>
+            ))}
+          </select>
+        )}
+        <button
+          type="submit"
+          disabled={saving}
+          className="rounded-full bg-foreground px-3 py-1.5 text-sm font-medium text-background disabled:opacity-50"
+        >
+          {saving ? "저장하는 중…" : "저장"}
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={saving}
+          className="rounded-full px-3 py-1.5 text-sm text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
+        >
+          건너뛰기
+        </button>
+      </div>
+      {error && (
+        <p role="alert" className="text-sm text-red-600">
+          {error}
+        </p>
+      )}
+    </form>
   );
 }

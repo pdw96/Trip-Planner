@@ -1,6 +1,13 @@
 // 지도 칸(map-section → trip-map-panel)이 주고받는 데이터 모양과 작은 표시 도우미.
 // 서버와 클라이언트가 함께 쓴다. Google 값은 장소 id 와 좌표만 담는다(§3.2).
 
+import type {
+  ActualMoney,
+  BudgetSettings,
+  BudgetSummary,
+  Money,
+  PeriodTotal,
+} from "@/lib/budget";
 import {
   CATEGORY_LABELS,
   PLACE_CATEGORIES,
@@ -95,3 +102,25 @@ export function circled(n: number): string {
 export function scheduleDaysText(days: number[]): string | null {
   return days.length === 0 ? null : `${days.join("·")}일차 일정`;
 }
+
+// --- 예산 카드(#14) ---
+// 돈 계산은 서버(budget-data.ts)가 하고 카드는 받은 숫자를 그린다. 일정 밖 항목은 카드에서 고친다.
+
+export type PanelExtra = {
+  id: string;
+  title: string;
+  date: string | null;
+  estimate: Money | null;
+  actual: ActualMoney | null;
+};
+
+export type PanelBudget = {
+  settings: BudgetSettings;
+  summary: BudgetSummary;
+  periods: {
+    tripWide: PeriodTotal;
+    byDate: Record<string, PeriodTotal>;
+    outside: PeriodTotal | null;
+  };
+  extras: PanelExtra[];
+} | null;

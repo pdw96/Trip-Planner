@@ -11,6 +11,7 @@ import {
 import { distanceMeters, formatDistance } from "@/lib/geo";
 import { directionsUrl } from "@/lib/leg-display";
 import { dateLabel, displayTime, groupSchedule } from "@/lib/schedule";
+import { loadBudget } from "./budget-data";
 import { lodgingFirst, type PlaceOption, toCategory } from "./map-types";
 import { type DayTravel, ScheduleDayItems } from "./schedule-day-items";
 import {
@@ -55,10 +56,11 @@ export async function ScheduleSection({
   trip: Trip;
   today: string;
 }) {
-  const [items, placeRows, baseRows] = await Promise.all([
+  const [items, placeRows, baseRows, budget] = await Promise.all([
     listScheduleItems(userId, trip.id),
     listPlaces(userId, trip.id),
     listTripBases(userId, trip.id),
+    loadBudget(userId, trip),
   ]);
   // 일정 양식의 장소 고르기(숙소 먼저)와 이어진 장소의 링크에 쓴다.
   const placeOptions: PlaceOption[] = lodgingFirst(
@@ -109,6 +111,8 @@ export async function ScheduleSection({
       placeId: item.placeId,
       memo: item.memo,
       done: item.done,
+      estimate: budget?.bySchedule.get(item.id)?.estimate ?? null,
+      actual: budget?.bySchedule.get(item.id)?.actual ?? null,
     };
   }
 
@@ -127,7 +131,18 @@ export async function ScheduleSection({
           </a>
         )}
       </div>
-      <ScheduleEditorProvider places={placeOptions} browserKey={browserKey}>
+      <ScheduleEditorProvider
+        places={placeOptions}
+        browserKey={browserKey}
+        budget={
+          budget
+            ? {
+                currency: budget.settings.currency,
+                localCurrency: budget.settings.localCurrency,
+              }
+            : null
+        }
+      >
         {days.map(({ day, items: dayItems }) => (
           <section
             key={day.date}

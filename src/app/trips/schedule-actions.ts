@@ -3,6 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
 import {
+  actualOf,
+  estimateOf,
+  getBudgetItemForSchedule,
+  getTripBudget,
+  setScheduleItemAmounts,
+} from "@/db/queries/budget";
+import {
   countPlaces,
   findPlaceIdByGoogleId,
   MAX_PLACES_PER_TRIP,
@@ -19,12 +26,16 @@ import {
   writeDayOrder,
 } from "@/db/queries/schedule-items";
 import { getTrip } from "@/db/queries/trips";
+import type { BudgetItem } from "@/db/schema";
+import type { ActualMoney, BudgetSettings, Money } from "@/lib/budget";
+import { type ParsedAmounts, parseAmountFields } from "@/lib/budget-input";
 import { fetchPlaceCoords } from "@/lib/google-maps-server";
 import { isUuid } from "@/lib/ids";
 import {
   EMPTY_SCHEDULE_FIELDS,
   type GooglePlacePick,
   parseScheduleInput,
+  type ScheduleFieldErrors,
   type ScheduleFields,
   type ScheduleFormState,
   type ScheduleInput,
@@ -37,7 +48,13 @@ import {
 } from "@/lib/schedule-order";
 import { getCurrentUser } from "@/lib/session";
 import { isValidIsoDate } from "@/lib/trip-input";
-import { PLACE_LIMIT, PLACE_NOT_FOUND, SAVE_FAILED } from "./messages";
+import { moneyParsers, resolveActualRate } from "./budget-rate";
+import {
+  MONEY_SAVE_FAILED,
+  PLACE_LIMIT,
+  PLACE_NOT_FOUND,
+  SAVE_FAILED,
+} from "./messages";
 
 // tripId·itemId·date 는 bind 로 오지만 클라이언트가 바꿀 수 있는 값이다.
 // 쿼리의 uuid 검사와 여행 접근 조건(userId 범위), 입력 검증의 날짜 규칙이 막는다.
@@ -66,7 +83,91 @@ function readScheduleFields(
     googlePlaceId: field("googlePlaceId"),
     googleLabel: field("googleLabel"),
     googleCategory: field("googleCategory"),
+    estimateAmount: field("estimateAmount"),
+    estimateCurrency: field("estimateCurrency"),
+    actualAmount: field("actualAmount"),
+    actualCurrency: field("actualCurrency"),
+    actualPaidOn: field("actualPaidOn"),
+    actualRate: field("actualRate"),
   };
+}
+
+// --- 예산 금액 (#14) ---
+// 예산 설정이 있는 여행에서만 일정 양식의 금액 칸을 읽는다. 일정 쓰기(이미 데이터를 바꾸는 CTE)와 한 문에 합치지 않고,
+// 일정을 저장한 뒤 금액이 바뀌었을 때만 쓴다. 금액만 실패하면 일정은 남기고 알린다(설계 §5.7.2).
+
+type MoneyPlan = {
+  settings: BudgetSettings;
+  amounts: ParsedAmounts & { actualTouched: boolean };
+} | null;
+
+async function parseMoney(
+  userId: string,
+  tripId: string,
+  values: ScheduleFields,
+  opts: { actualShown: boolean; defaultPaidOn: string },
+): Promise<
+  { ok: true; plan: MoneyPlan } | { ok: false; errors: ScheduleFieldErrors }
+> {
+  const settings = await getTripBudget(userId, tripId);
+  if (!settings) return { ok: true, plan: null };
+  const parsed = parseAmountFields(
+    values,
+    { currency: settings.currency, localCurrency: settings.localCurrency },
+    moneyParsers,
+    opts,
+  );
+  if (!parsed.ok) return { ok: false, errors: parsed.errors };
+  return { ok: true, plan: { settings, amounts: parsed.value } };
+}
+
+function sameMoney(a: Money | null, b: Money | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.amount === b.amount && a.currency === b.currency;
+}
+
+function sameActual(a: ActualMoney | null, b: ActualMoney | null): boolean {
+  if (a === null || b === null) return a === b;
+  return (
+    sameMoney(a, b) &&
+    a.paidOn === b.paidOn &&
+    a.rate === b.rate &&
+    a.rateSource === b.rateSource
+  );
+}
+
+// 금액이 바뀌었으면 쓴다. 실패하면 false(일정은 이미 저장됨).
+async function writeMoney(
+  userId: string,
+  tripId: string,
+  itemId: string,
+  plan: MoneyPlan,
+  previous: BudgetItem | null,
+): Promise<boolean> {
+  if (!plan) return true;
+  const { amounts, settings } = plan;
+  const prevEstimate = previous ? estimateOf(previous) : null;
+  const prevActual = previous ? actualOf(previous) : null;
+  try {
+    let actual: ActualMoney | null = prevActual;
+    if (amounts.actualTouched) {
+      actual = amounts.actual
+        ? await resolveActualRate(amounts.actual, prevActual, settings)
+        : null;
+    }
+    if (
+      sameMoney(prevEstimate, amounts.estimate) &&
+      sameActual(prevActual, actual)
+    ) {
+      return true;
+    }
+    return await setScheduleItemAmounts(userId, tripId, itemId, {
+      estimate: amounts.estimate,
+      actual,
+    });
+  } catch {
+    return false;
+  }
 }
 
 function tripPath(tripId: string): string {
@@ -211,10 +312,18 @@ export async function createScheduleItemAction(
   const trip = await getTrip(user.id, tripId);
   if (!trip) notFound();
   const parsed = parseScheduleInput(values, trip);
-  if (!parsed.ok) {
+  // 추가 양식에는 실제 지출 칸이 없다(실제는 완료 체크칸에서, §5.7.3).
+  const money = await parseMoney(user.id, tripId, values, {
+    actualShown: false,
+    defaultPaidOn: values.date,
+  });
+  if (!parsed.ok || !money.ok) {
     return {
       values,
-      errors: parsed.errors,
+      errors: {
+        ...(parsed.ok ? {} : parsed.errors),
+        ...(money.ok ? {} : money.errors),
+      },
       formError: null,
       savedAt: prev.savedAt,
     };
@@ -265,11 +374,19 @@ export async function createScheduleItemAction(
     notFound();
   }
 
+  let moneySaved = true;
   if (created.id !== null) {
     await settleDayOrder(user.id, tripId, parsed.value.date, before, {
       id: created.id,
       time: parsed.value.time,
     });
+    moneySaved = await writeMoney(
+      user.id,
+      tripId,
+      created.id,
+      money.plan,
+      null,
+    );
   }
   revalidatePath(tripPath(tripId));
   return {
@@ -277,6 +394,7 @@ export async function createScheduleItemAction(
     errors: {},
     formError: null,
     savedAt: Date.now(),
+    notice: moneySaved ? null : MONEY_SAVE_FAILED,
   };
 }
 
@@ -290,9 +408,10 @@ export async function updateScheduleItemAction(
   if (!user) redirect("/");
 
   const values = readScheduleFields(formData, null);
-  const [trip, item] = await Promise.all([
+  const [trip, item, budgetRow] = await Promise.all([
     getTrip(user.id, tripId),
     getScheduleItem(user.id, tripId, itemId),
+    getBudgetItemForSchedule(user.id, tripId, itemId),
   ]);
   if (!trip || !item) notFound();
   const parsed = parseScheduleInput(values, {
@@ -300,10 +419,24 @@ export async function updateScheduleItemAction(
     endDate: trip.endDate,
     currentDate: item.date,
   });
-  if (!parsed.ok) {
+  // 실제 지출 칸은 완료됐거나 실제가 이미 있는 일정의 고치기 양식에만 있다(§5.7.2).
+  // 실제 칸은 (1) 그 칸을 실제로 그린 양식이 보낸 표시(actualShown=1)가 있고 (2) 지금도 완료됐거나 실제가 있는 일정일 때만 읽는다.
+  // (1)이 없으면 칸이 없던 낡은 양식이 다른 탭에서 적은 실제를 지우고, (2)가 없으면 다른 탭에서 완료를 풀며 지운 실제를
+  // 낡은 양식이 되살린다(Codex 리뷰 두 번). 둘 중 하나라도 아니면 저장된 실제를 그대로 둔다.
+  const actualFieldSent = formData.get("actualShown") === "1";
+  const actualAllowedNow =
+    item.done || (budgetRow?.actualAmount ?? null) !== null;
+  const money = await parseMoney(user.id, tripId, values, {
+    actualShown: actualFieldSent && actualAllowedNow,
+    defaultPaidOn: parsed.ok ? parsed.value.date : item.date,
+  });
+  if (!parsed.ok || !money.ok) {
     return {
       values,
-      errors: parsed.errors,
+      errors: {
+        ...(parsed.ok ? {} : parsed.errors),
+        ...(money.ok ? {} : money.errors),
+      },
       formError: null,
       savedAt: prev.savedAt,
     };
@@ -353,7 +486,23 @@ export async function updateScheduleItemAction(
     id: itemId,
     time: parsed.value.time,
   });
+  const moneySaved = await writeMoney(
+    user.id,
+    tripId,
+    itemId,
+    money.plan,
+    budgetRow,
+  );
   revalidatePath(tripPath(tripId));
+  if (!moneySaved) {
+    // 일정은 저장됐다. 양식을 연 채 알리고, 다시 저장하면 같은 일정에 금액만 다시 쓴다.
+    return {
+      values,
+      errors: {},
+      formError: MONEY_SAVE_FAILED,
+      savedAt: prev.savedAt,
+    };
+  }
   return { values, errors: {}, formError: null, savedAt: Date.now() };
 }
 
@@ -417,6 +566,12 @@ export async function setScheduleItemDoneAction(
 
   let updated: boolean;
   try {
+    // 실제 지출이 있는 일정의 완료 풀기는 확인 뒤 undoScheduleItemWithActualAction 으로만 한다(#14 §5.7.3).
+    // 낡은 화면이 실제를 모른 채 보낸 요청은 거절해, 완료가 아닌 일정에 실제가 남지 않게 한다.
+    if (!done) {
+      const row = await getBudgetItemForSchedule(user.id, tripId, itemId);
+      if (row?.actualAmount != null) return { ok: false };
+    }
     updated = await setScheduleItemDone(user.id, tripId, itemId, done);
   } catch {
     return { ok: false };

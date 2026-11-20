@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import type { RateSource } from "@/lib/budget";
 import { existingPlaceIdFor } from "@/lib/schedule";
 import type { ScheduleFields, ScheduleFormState } from "@/lib/schedule-input";
 import {
@@ -18,6 +19,12 @@ import {
 } from "../styles";
 import { GooglePlaceSearch } from "./google-place-search";
 import { CATEGORY_ICONS, type PlaceOption } from "./map-types";
+import {
+  ActualMoneyFields,
+  type BudgetCurrencies,
+  defaultCurrency,
+  MoneyField,
+} from "./money-fields";
 
 export type DateOption = { value: string; label: string };
 
@@ -38,19 +45,34 @@ type ScheduleItemFormProps = {
   // 고치기에서만 "삭제" 버튼.
   onDelete?: () => void;
   deleting?: boolean;
+  // 예산 금액 칸(#14). undefined = 보이지 않음, null = 예산 설정 없음(안내 한 줄).
+  budget?: BudgetCurrencies | null;
+  // 고치기에서 완료됐거나 실제가 이미 있으면 실제 지출 칸도 보인다(§5.7.2).
+  showActual?: boolean;
+  actualRateSource?: RateSource | null;
 };
 
 // 일정 추가·고치기가 같이 쓰는 양식. 검증은 서버에서 하고, 오류와 입력값을 action 상태로 돌려받는다.
 // 추가는 저장할 때마다 key 를 바꿔 빈 양식으로 다시 열고(연달아 적기), 고치기는 저장하면 접는다.
 // (고치기를 접는 일은 부르는 쪽 action 이 같은 전환 안에서 한다. 여기서의 onClose 는 그 뒤의 안전장치다.)
+// 추가에서 저장은 됐지만 알릴 것(notice, 예: 금액 저장 실패)은 새 양식 위에 보인다.
 export function ScheduleItemForm(props: ScheduleItemFormProps) {
   const [version, setVersion] = useState(0);
+  const [notice, setNotice] = useState<string | null>(null);
   const { mode, onClose } = props;
   return (
     <ScheduleItemFields
       key={version}
       {...props}
-      onSaved={mode === "add" ? () => setVersion((v) => v + 1) : onClose}
+      notice={notice}
+      onSaved={
+        mode === "add"
+          ? (next) => {
+              setNotice(next);
+              setVersion((v) => v + 1);
+            }
+          : onClose
+      }
     />
   );
 }
@@ -65,8 +87,15 @@ function ScheduleItemFields({
   onClose,
   onDelete,
   deleting = false,
+  budget,
+  showActual = false,
+  actualRateSource = null,
+  notice,
   onSaved,
-}: ScheduleItemFormProps & { onSaved: () => void }) {
+}: ScheduleItemFormProps & {
+  notice: string | null;
+  onSaved: (notice: string | null) => void;
+}) {
   const [state, formAction, pending] = useActionState(action, {
     values: initialValues,
     errors: {},
@@ -86,8 +115,8 @@ function ScheduleItemFields({
   const onSavedRef = useRef(onSaved);
   onSavedRef.current = onSaved;
   useEffect(() => {
-    if (state.savedAt !== null) onSavedRef.current();
-  }, [state.savedAt]);
+    if (state.savedAt !== null) onSavedRef.current(state.notice ?? null);
+  }, [state.savedAt, state.notice]);
 
   const busy = pending || deleting;
 
@@ -97,6 +126,11 @@ function ScheduleItemFields({
       noValidate
       className="flex flex-col gap-4 rounded-2xl border border-black/[.08] p-4 dark:border-white/[.145]"
     >
+      {notice && (
+        <output className="block rounded-xl bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+          {notice}
+        </output>
+      )}
       {state.formError && (
         <p
           role="alert"
@@ -166,6 +200,38 @@ function ScheduleItemFields({
         values={values}
         error={errors.place}
       />
+      {budget === null && (
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          예산을 정하면 예상 비용을 적을 수 있어요(지도 칸 [전체] 탭).
+        </p>
+      )}
+      {budget && (
+        <div key={`money-${resultKey(state)}`} className="flex flex-col gap-3">
+          <MoneyField
+            id={`${idPrefix}-estimate`}
+            label="예상 비용 (선택)"
+            amountName="estimateAmount"
+            currencyName="estimateCurrency"
+            amount={values.estimateAmount}
+            currency={values.estimateCurrency || defaultCurrency(budget)}
+            currencies={budget}
+            error={errors.estimateAmount ?? errors.estimateCurrency}
+          />
+          {showActual && <input type="hidden" name="actualShown" value="1" />}
+          {showActual && (
+            <ActualMoneyFields
+              idPrefix={idPrefix}
+              currencies={budget}
+              amount={values.actualAmount}
+              currency={values.actualCurrency || defaultCurrency(budget)}
+              paidOn={values.actualPaidOn}
+              rate={values.actualRate}
+              rateSource={actualRateSource}
+              errors={errors}
+            />
+          )}
+        </div>
+      )}
       <Field
         idPrefix={idPrefix}
         label="메모 (선택)"

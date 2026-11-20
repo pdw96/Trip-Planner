@@ -24,6 +24,12 @@ const valid = {
   googlePlaceId: "",
   googleLabel: "",
   googleCategory: "",
+  estimateAmount: "",
+  estimateCurrency: "",
+  actualAmount: "",
+  actualCurrency: "",
+  actualPaidOn: "",
+  actualRate: "",
 };
 
 const googlePick = {
@@ -53,6 +59,12 @@ test("empty fields are all blank", () => {
     googlePlaceId: "",
     googleLabel: "",
     googleCategory: "",
+    estimateAmount: "",
+    estimateCurrency: "",
+    actualAmount: "",
+    actualCurrency: "",
+    actualPaidOn: "",
+    actualRate: "",
   });
 });
 
@@ -225,4 +237,13 @@ test("placeId: empty becomes null, uuid is kept, others are rejected", () => {
     errorsOf({ ...valid, placeId: "not-a-uuid" }).place,
     "장소를 다시 골라 주세요.",
   );
+});
+
+test("금액 칸은 일정 검증이 보지 않는다(#14, 금액은 budget-input 이 검증)", () => {
+  const result = parseScheduleInput(
+    { ...valid, estimateAmount: "abc", actualAmount: "-1" },
+    range,
+  );
+  assert.equal(result.ok, true);
+  assert.equal("estimateAmount" in result.value, false);
 });
