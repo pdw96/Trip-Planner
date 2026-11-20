@@ -15,6 +15,7 @@
 | #13 | #31 | 가 볼 장소·지도·동선(`places`·`trip_bases`·`schedule_items.place_id`, 마이그레이션 0003). Google 지도([전체]+N일차), Places (New) 자동완성으로 장소 넣기, 날마다 기준점, N일차 동선(Routes API 대중교통 → 도보·직선 + 국내·일본 안내, Google 길찾기 링크), 일정에서 장소 고르기. 설계 `docs/superpowers/specs/2026-11-18-trip-places-map-design.md` |
 | #35 | #38 | 일정 장소 칸에서 Google 장소 검색(저장할 때만 '가 볼 곳'에도 넣음, 이미 있으면 그 장소로), 장소가 있으면 제목은 선택(마이그레이션 0004: `schedule_items.title` nullable). 장소+일정은 데이터를 바꾸는 CTE 한 문. 설계 `docs/superpowers/specs/2026-11-19-schedule-place-search-design.md` |
 | #37 | #42 | 일정표의 일정 사이(도착 일정 줄 위)에 예상 이동 시간 한 줄, 기준점 구간 포함. 화면에 0.5초 머문 날만 묻고, 지도 N일차 탭과 결과를 페이지 저장소(`day-route-store.tsx`)로 함께 씀. DB 변경 없음. 설계 `docs/superpowers/specs/2026-11-19-schedule-travel-time-design.md` |
+| #44 | #45 | 다크 모드에서 고르기 목록이 흰 바탕에 밝은 글자로 안 보이던 것(`color-scheme: light dark`), [전체] 탭 칸 이름 "기준점" → "가까운 순 기준"(일정 동선 기준점과 헷갈림, 부산 여행 제보) |
 
 ## 다음 할 일
 
@@ -51,12 +52,14 @@
 - **Playwright 와 Google 지도**: 지도 타일 요청이 끊이지 않아 `waitUntil: "networkidle"` 은 끝나지 않는다. `domcontentloaded` 뒤 마지막 날 칸을 `waitFor` 한다. 헤드리스 Chromium 의 "Vector Map … Falling back to Raster" 콘솔 오류는 WebGL 탓이고 앱 문제가 아니다(dev 오버레이 "1 Issue" 가 이것).
 - **테스트 데이터에 일정 넣기**: 장소가 이어진 일정은 `place_id` 와 함께 `place`(장소 글자)도 넣는다. 앱은 둘 다 저장하며, `place` 가 비면 제목 없는 일정의 이름이 빈칸으로 보인다. 장소의 Google id·좌표는 클라우드 프록시로 Places Text Search(`places.googleapis.com/v1/places:searchText`)에서 얻는다.
 - **자동 머지**: 모든 검사가 이미 통과한 PR 은 GitHub 가 자동 머지 켜기를 거절한다("clean status"). 그때는 리뷰 종료 기준을 채웠으면 바로 squash 머지한다(#42).
+- **Turbopack dev 캐시**: `git stash` 처럼 파일을 빠르게 바꿨다 되돌리면 dev 서버가 옛 CSS 를 계속 내줄 수 있다(다시 띄워도 같은 묶음 이름). `.next/dev` 를 지우고 다시 띄운다(#44).
 - **Codex 리뷰**: PR 을 draft 에서 바꾸면 자동으로 돌고, 다시 받으려면 PR 에 `@codex review` 댓글. 막는 지적을 고친 뒤에는 마지막 커밋 기준으로 다시 받는다.
 - **공휴일**: Vercel 환경 변수 `DATA_GO_KR_SERVICE_KEY`(Production·Preview). 이 세션에서는 `apis.data.go.kr` 접속이 막혀 있다. 실패하면 Vercel 로그에 `[holidays]` 한 줄(키는 가림)이 남는다.
 
 ## 남은 확인
 
-- #37 프로덕션 확인: 실제 Google 로그인으로 일정표를 스크롤해 이동 줄이 뜨는지, 지도 N일차 탭과 같은 날을 두 번 묻지 않는지(Vercel 로그의 `day-route` 요청 수).
+- #37 프로덕션: 사용자가 이동 줄이 뜨는 것을 확인함(부산 여행). 남은 것: 지도 N일차 탭과 같은 날을 두 번 묻지 않는지(Vercel 로그의 `day-route` 요청 수).
+- 도착·출발일 동선: 도착하는 날은 숙소가 아니라 첫 일정에서 시작하는 게 자연스럽다(지금은 N일차 기준점을 "없음"으로, 다음 날을 숙소로 두 번 바꿔야 함). #44 때 이슈로 정리할지 물었으나 사용자가 고르지 않음(필요해지면 사용자가 요청).
 - #37 남은 지적(PR #42 본문): 좌표 30일 갱신 순간 지도·일정표 서명이 달라 한 번 더 물을 수 있음(설계 §4.5), 지도 로딩 자리가 짧아 처음에 1–2일 미리 물을 수 있음, 저장소가 옛 서명 결과를 지우지 않음, 탭을 넘겨도 진행 중 요청을 끊지 않음, 아직 묻지 않은 날도 "불러오는 중…", 쓰지 않는 대비 코드 2곳.
 
 - #35 프로덕션 확인: 일정 장소 칸에서 Google 장소 검색·저장, 제목 없이 저장. (할당량은 확인함: 자동완성이 막힐 걱정은 없다. 위 'Google 지도 플랫폼' 참고)
