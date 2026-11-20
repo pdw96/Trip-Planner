@@ -274,6 +274,7 @@ function PanelBody({
               </p>
             ) : (
               <DayLegs
+                dayNumber={day.dayNumber}
                 rows={legRows(day, placesById, routeResult)}
                 notices={routeResult?.ok ? routeResult.notices : []}
               />
@@ -370,6 +371,7 @@ function dayView(
       text: CATEGORY_ICONS.lodging,
       kind: "base",
       title: `기준점: ${base.label}`,
+      dayNumber: null,
     });
   }
   // 같은 장소를 두 번 들르면 핀 하나에 번호를 함께("1·3").
@@ -391,6 +393,7 @@ function dayView(
       text: nums.join("·"),
       kind: "stop",
       title: `${nums.join("·")}. ${place.label}`,
+      dayNumber: day.dayNumber,
     });
   }
 
@@ -413,8 +416,14 @@ function dayView(
             style: "route",
             path: [from, to],
             encodedPath,
+            dayNumber: day.dayNumber,
           }
-        : { key: `leg:${i}:straight`, style: "straight", path: [from, to] },
+        : {
+            key: `leg:${i}:straight`,
+            style: "straight",
+            path: [from, to],
+            dayNumber: day.dayNumber,
+          },
     );
   });
   return { pins, lines };
@@ -438,12 +447,14 @@ function overviewView(
       text: CATEGORY_ICONS[place.category],
       kind: isBase ? "base" : "place",
       title: isBase ? `기준점: ${place.label}` : place.label,
+      dayNumber: null,
     });
     if (baseCoords && !isBase) {
       lines.push({
         key: `from-base:${place.id}`,
         style: "faint",
         path: [baseCoords, position],
+        dayNumber: null,
       });
     }
   }
