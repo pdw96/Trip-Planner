@@ -394,9 +394,10 @@ export function ScheduleItemRow({
         <span className="pt-2.5 text-xs text-sub">시각 없음</span>
       )}
       <span className="relative flex justify-center self-stretch">
-        {railTop && <span aria-hidden className={`${RAIL} top-0 h-6`} />}
+        {/* 줄의 py-1 만큼 위아래로 늘려 이웃 줄의 레일과 잇는다. 역 중심은 이 칸 위에서 20px. */}
+        {railTop && <span aria-hidden className={`${RAIL} -top-1 h-6`} />}
         {railBottom && (
-          <span aria-hidden className={`${RAIL} top-6 bottom-0`} />
+          <span aria-hidden className={`${RAIL} top-5 -bottom-1`} />
         )}
         <label className="relative z-10 flex size-10 cursor-pointer items-center justify-center">
           <input

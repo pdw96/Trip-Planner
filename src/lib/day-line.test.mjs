@@ -36,9 +36,10 @@ test("miniLineDots trims long trips", () => {
 });
 
 test("lineVar", () => {
-  assert.equal(lineVar(3), "var(--color-line-3)");
-  assert.equal(lineVar(11), "var(--color-line-3)");
-  assert.equal(lineVar(null), "var(--color-sub)");
+  // globals.css 의 :root 변수(@theme inline 은 --color-* 변수를 CSS 로 내보내지 않는다).
+  assert.equal(lineVar(3), "var(--line-3)");
+  assert.equal(lineVar(11), "var(--line-3)");
+  assert.equal(lineVar(null), "var(--sub)");
 });
 
 test("LINE_HEX matches globals.css", () => {

@@ -6,31 +6,36 @@ import { dateLabel } from "@/lib/schedule";
 import { useSelectedDay } from "./selected-day";
 
 // 여행 화면의 날짜 고르기(#53 설계 §5.4 4, §5.4.2). [전체] + 날마다 노선 색 동그라미.
-// 내려서 제목이 화면 밖으로 나가면 작은 제목 한 줄과 함께 화면 위에 붙는다(sticky).
+// 내리면 화면 위에 붙고(sticky), 붙은 동안 작은 제목 한 줄이 함께 보인다(제목은 이미 화면 밖이다).
 // 작은 제목 줄은 늘 자리를 차지하고(붙기 전에는 invisible) article 의 gap 안에 올라가 있어, 붙는 순간 아래 내용이 밀리지 않는다.
 export function TripDayBar({
   title,
-  titleId,
   days,
 }: {
   title: string;
-  titleId: string;
   days: { date: string; dayNumber: number }[];
 }) {
   const { selected, select } = useSelectedDay();
   const [stuck, setStuck] = useState(false);
+  const barRef = useRef<HTMLDivElement>(null);
   const rowRef = useRef<HTMLFieldSetElement>(null);
 
-  // 제목이 위로 나갔는지는 스크롤 이벤트가 아니라 IntersectionObserver 로 본다.
+  // 줄이 실제로 화면 위에 붙었는지: 위쪽 1px 을 뺀 영역으로 보면 붙은 동안 줄 위 끝이 잘려 다 보이지 않는다.
+  // 스크롤 이벤트마다 계산하지 않는다. (제목만 보면 줄이 아직 제자리일 때도 작은 제목이 떠 겹쳐 보인다.)
   useEffect(() => {
-    const target = document.getElementById(titleId);
-    if (!target) return;
-    const observer = new IntersectionObserver(([entry]) => {
-      setStuck(!entry.isIntersecting && entry.boundingClientRect.top < 0);
-    });
-    observer.observe(target);
+    const bar = barRef.current;
+    if (!bar) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setStuck(
+          entry.intersectionRatio < 1 && entry.boundingClientRect.top < 1,
+        );
+      },
+      { rootMargin: "-1px 0px 0px 0px", threshold: 1 },
+    );
+    observer.observe(bar);
     return () => observer.disconnect();
-  }, [titleId]);
+  }, []);
 
   // 처음 그릴 때 고른 날(여행 중이면 오늘)이 줄 안에 보이게 줄만 옮긴다(scrollIntoView 는 페이지도 움직인다).
   useLayoutEffect(() => {
@@ -44,6 +49,7 @@ export function TripDayBar({
   const allActive = selected === "all";
   return (
     <div
+      ref={barRef}
       className="sticky top-0 z-20 -mx-4 -mt-6 border-b border-transparent bg-background px-4 data-[stuck=true]:border-rule sm:-mx-6 sm:px-6"
       data-stuck={stuck}
     >

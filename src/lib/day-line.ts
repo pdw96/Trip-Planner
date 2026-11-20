@@ -61,11 +61,12 @@ export function miniLineDots(
 }
 
 // 일정 노선처럼 자식들이 함께 쓰는 색은 CSS 변수로 물려준다(style={{ "--line": lineVar(n) }}, 클래스 bg-(--line)).
-// null 은 여행 기간 밖 일정의 회색 노선.
+// null 은 여행 기간 밖 일정의 회색 노선. globals.css 의 :root 변수를 가리킨다(@theme inline 은 --color-* 를
+// CSS 변수로 내보내지 않아 var(--color-line-N) 은 비어 있다).
 export function lineVar(dayNumber: number | null): string {
   return dayNumber === null
-    ? "var(--color-sub)"
-    : `var(--color-line-${lineIndex(dayNumber)})`;
+    ? "var(--sub)"
+    : `var(--line-${lineIndex(dayNumber)})`;
 }
 
 // 지도 선(Google Polyline)은 CSS 변수를 못 읽어 실제 색 값이 필요하다. globals.css 의 --line-N 과 같아야 한다

@@ -57,9 +57,7 @@ async function TripDetail({
           </div>
         </div>
         <div className="flex flex-col gap-1">
-          <h1 id="trip-title" className="text-2xl font-bold break-words">
-            {trip.title}
-          </h1>
+          <h1 className="text-2xl font-bold break-words">{trip.title}</h1>
           <p className="text-sub break-words">
             {trip.destination} · {formatLongRange(trip.startDate, trip.endDate)}{" "}
             · {stayLength(trip.startDate, trip.endDate)}
@@ -84,7 +82,6 @@ async function TripDetail({
         >
           <TripDayBar
             title={trip.title}
-            titleId="trip-title"
             days={tripDays(trip.startDate, trip.endDate).map(
               ({ date, dayNumber }) => ({ date, dayNumber }),
             )}
