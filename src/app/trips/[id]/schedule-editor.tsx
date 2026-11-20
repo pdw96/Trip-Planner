@@ -1,5 +1,7 @@
 "use client";
 
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { APIProvider } from "@vis.gl/react-google-maps";
 import {
   createContext,
@@ -129,17 +131,39 @@ export function AddScheduleItem({
   );
 }
 
+// sortable: 손잡이로 끌 수 있는가(그날 일정이 둘 이상, #41). SortableContext 안에서만 쓴다.
 export function ScheduleItemRow({
   tripId,
   item,
   dateOptions,
+  sortable,
 }: {
   tripId: string;
   item: RowItem;
   dateOptions: DateOption[];
+  sortable: boolean;
 }) {
   const { openKey, setOpenKey, places, searchEnabled } = useOpen();
   const key = `edit:${item.id}`;
+  const editing = openKey === key;
+  // 입력칸으로 열린 줄은 끌지 않는다. 다른 줄이 움직일 때 자리를 비켜 주도록 노드는 늘 등록한다.
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: item.id,
+    disabled: !sortable || editing,
+    attributes: { roleDescription: "순서 바꾸기" },
+  });
+  const sortStyle = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+  };
   const [done, setOptimisticDone] = useOptimistic(item.done);
   const [error, setError] = useState<string | null>(null);
   const [, startToggle] = useTransition();
@@ -193,9 +217,9 @@ export function ScheduleItemRow({
     return next;
   }
 
-  if (openKey === key) {
+  if (editing) {
     return (
-      <li>
+      <li ref={setNodeRef} style={sortStyle}>
         <ScheduleItemForm
           mode="edit"
           action={saveAndClose}
@@ -234,8 +258,27 @@ export function ScheduleItemRow({
   // 제목이 없으면 장소 이름이 제목 자리에 온다(#35).
   const name = item.title ?? item.place ?? "";
 
+  // 손잡이로만 끈다(줄을 눌러 고치기·줄 위 터치 스크롤과 겹치지 않게). 손잡이에만 touch-action: none.
   return (
-    <li className="flex items-start gap-3 py-2">
+    <li
+      ref={setNodeRef}
+      style={sortStyle}
+      className={`flex items-start gap-3 py-2 ${isDragging ? "relative z-10 rounded-lg bg-background shadow-lg" : ""}`}
+    >
+      {sortable ? (
+        <button
+          type="button"
+          ref={setActivatorNodeRef}
+          {...attributes}
+          {...listeners}
+          aria-label={`${name} 순서 옮기기`}
+          className="-my-2 flex h-11 w-6 shrink-0 cursor-grab touch-none items-center justify-center rounded text-zinc-400 select-none hover:text-zinc-600 active:cursor-grabbing dark:hover:text-zinc-300"
+        >
+          ⠿
+        </button>
+      ) : (
+        <span className="w-6 shrink-0" />
+      )}
       <span className="w-12 shrink-0 pt-0.5 text-sm tabular-nums text-zinc-500">
         {item.time}
       </span>
