@@ -32,6 +32,7 @@ import {
 } from "../budget-actions";
 import {
   dangerButtonClass,
+  inputBaseClass,
   inputClass,
   primaryButtonClass,
   secondaryButtonClass,
@@ -180,14 +181,14 @@ function SettingsFields({ state }: { state: BudgetSettingsFormState }) {
             aria-describedby={
               errors.totalAmount ? `${id}-total-error` : undefined
             }
-            className={`${inputClass} min-w-0 flex-1`}
+            className={`${inputBaseClass} min-w-0 flex-1`}
           />
           <select
             name="currency"
             defaultValue={values.currency}
             aria-label="예산 통화"
             onChange={(e) => setCurrency(e.target.value)}
-            className={`${inputClass} w-auto shrink-0`}
+            className={`${inputBaseClass} w-auto shrink-0`}
           >
             {CURRENCIES.map((c) => (
               <option key={c.code} value={c.code}>
