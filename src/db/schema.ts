@@ -1,11 +1,13 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   check,
   date,
   doublePrecision,
   index,
   integer,
+  numeric,
   pgTable,
   primaryKey,
   text,
@@ -226,3 +228,102 @@ export const tripBases = pgTable(
 );
 
 export type TripBase = typeof tripBases.$inferSelect;
+
+// --- 예산 (#14) ---
+// 금액은 통화 최소 단위 정수(원·엔은 1, 달러는 센트), 10^12 미만. 환율은 "현지 통화 1 = 예산 통화 몇".
+// 설정이 바뀌어도 금액의 통화가 사라지지 않도록, 통화 바꾸기 조건은 쓰기 쿼리가 확인한다(설계 §5.2).
+
+export const tripBudgets = pgTable(
+  "trip_budgets",
+  {
+    tripId: uuid("trip_id")
+      .primaryKey()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    currency: text("currency").notNull(),
+    totalAmount: bigint("total_amount", { mode: "number" }).notNull(),
+    localCurrency: text("local_currency"),
+    plannedRate: numeric("planned_rate", { precision: 20, scale: 10 }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    check("trip_budgets_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
+    check(
+      "trip_budgets_local_currency_check",
+      sql`${t.localCurrency} is null or (${t.localCurrency} ~ '^[A-Z]{3}$' and ${t.localCurrency} <> ${t.currency})`,
+    ),
+    check(
+      "trip_budgets_total_check",
+      sql`${t.totalAmount} >= 0 and ${t.totalAmount} < 1000000000000`,
+    ),
+    check(
+      "trip_budgets_rate_check",
+      sql`(${t.localCurrency} is null and ${t.plannedRate} is null) or (${t.localCurrency} is not null and ${t.plannedRate} > 0)`,
+    ),
+  ],
+);
+
+export type TripBudget = typeof tripBudgets.$inferSelect;
+
+// 일정에 붙은 금액(일정 하나에 한 행, 일정을 지우면 함께 지움) 또는 일정 밖 항목(이름, 날짜 없으면 여행 전체).
+// 실제 지출이 현지 통화면 결제일·환율·출처를 함께 저장한다. 저장한 환율은 나중에 저절로 바뀌지 않는다.
+export const budgetItems = pgTable(
+  "budget_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tripId: uuid("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    scheduleItemId: uuid("schedule_item_id").references(
+      () => scheduleItems.id,
+      { onDelete: "cascade" },
+    ),
+    title: text("title"),
+    date: date("date"),
+    estimateAmount: bigint("estimate_amount", { mode: "number" }),
+    estimateCurrency: text("estimate_currency"),
+    actualAmount: bigint("actual_amount", { mode: "number" }),
+    actualCurrency: text("actual_currency"),
+    actualPaidOn: date("actual_paid_on"),
+    actualRate: numeric("actual_rate", { precision: 20, scale: 10 }),
+    actualRateSource: text("actual_rate_source"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("budget_items_trip_id_idx").on(t.tripId),
+    uniqueIndex("budget_items_schedule_item_idx").on(t.scheduleItemId),
+    check(
+      "budget_items_link_check",
+      sql`(${t.scheduleItemId} is not null and ${t.title} is null and ${t.date} is null) or (${t.scheduleItemId} is null and ${t.title} is not null)`,
+    ),
+    check(
+      "budget_items_estimate_check",
+      sql`(${t.estimateAmount} is null and ${t.estimateCurrency} is null) or (${t.estimateAmount} >= 0 and ${t.estimateAmount} < 1000000000000 and ${t.estimateCurrency} ~ '^[A-Z]{3}$')`,
+    ),
+    check(
+      "budget_items_actual_check",
+      sql`(${t.actualAmount} is null and ${t.actualCurrency} is null) or (${t.actualAmount} >= 0 and ${t.actualAmount} < 1000000000000 and ${t.actualCurrency} ~ '^[A-Z]{3}$')`,
+    ),
+    check(
+      "budget_items_rate_check",
+      sql`(${t.actualRate} is null and ${t.actualRateSource} is null and ${t.actualPaidOn} is null) or (${t.actualAmount} is not null and ${t.actualRate} > 0 and ${t.actualRateSource} in ('ecb', 'manual', 'planned') and ${t.actualPaidOn} is not null)`,
+    ),
+    check(
+      "budget_items_some_amount_check",
+      sql`${t.estimateAmount} is not null or ${t.actualAmount} is not null`,
+    ),
+  ],
+);
+
+export type BudgetItem = typeof budgetItems.$inferSelect;
