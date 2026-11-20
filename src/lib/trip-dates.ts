@@ -99,3 +99,24 @@ export function tripCountdown(
 export function tripDayCount(startDate: string, endDate: string): number {
   return Math.round((utcDay(endDate) - utcDay(startDate)) / DAY_MS) + 1;
 }
+
+// 여행 화면에서 고른 날(#53 설계 §5.4.1). "all" 이거나 여행 기간 안 날짜면 그대로, 아니면(여행 날짜를 바꿔
+// 사라진 날) "all". 날짜는 "YYYY-MM-DD" 문자열끼리 비교한다.
+export function resolveSelection(
+  selected: string,
+  startDate: string,
+  endDate: string,
+): string {
+  if (selected === "all") return selected;
+  return /^\d{4}-\d{2}-\d{2}$/.test(selected) &&
+    selected >= startDate &&
+    selected <= endDate
+    ? selected
+    : "all";
+}
+
+// 여행 머리의 숙박 길이: "당일" | "2박 3일".
+export function stayLength(startDate: string, endDate: string): string {
+  const days = tripDayCount(startDate, endDate);
+  return days <= 1 ? "당일" : `${days - 1}박 ${days}일`;
+}

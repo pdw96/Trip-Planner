@@ -50,9 +50,8 @@ import {
 
 // 예산 카드의 양식(#14): 예산 설정, 일정 밖 항목 넣기·고치기. 검증은 서버에서 하고 오류와 입력값을 돌려받는다.
 
-// 예산 카드(surface) 안에 열리므로 바탕 대신 테두리로 구분한다(PR 2 에서 카드와 함께 다시 본다).
-const formClass =
-  "flex flex-col gap-4 rounded-[14px] border border-field-line bg-background p-4";
+// 예산 카드(surface) 안에 열리므로 바탕색(background)으로 구분한다(#53 §5.5).
+const formClass = "flex flex-col gap-4 rounded-[14px] bg-background p-4";
 
 // 액션 결과(state 객체)마다 다른 키. React 19 는 제출할 때마다 form.reset() 을 하므로,
 // 칸들을 결과마다 다시 만들어 돌려받은 values 로 맞춘다(schedule-item-form.tsx 와 같은 방법).
@@ -252,6 +251,16 @@ function SettingsFields({ state }: { state: BudgetSettingsFormState }) {
 }
 
 export type DateChoice = { value: string; label: string };
+
+// 일정 밖 지출의 날짜 고르기: "여행 전체" + 여행의 날들. 예산 카드와 아래 예산 줄 시트가 같이 쓴다.
+export function tripDateChoices(
+  days: { date: string; label: string }[],
+): DateChoice[] {
+  return [
+    { value: "", label: "여행 전체" },
+    ...days.map((d) => ({ value: d.date, label: d.label })),
+  ];
+}
 
 function extraFields(
   item: PanelExtra | null,

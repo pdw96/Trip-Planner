@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   amountInputValue,
+  budgetMeter,
   CURRENCIES,
   currencyInfo,
   decideRate,
@@ -329,4 +330,15 @@ test("환율 정수부는 10자리까지(numeric(20,10))", () => {
   assert.equal(parseRateInput("99999999999", 1).error, "환율이 너무 커요.");
   assert.equal(parseRateInput("9999999999.5", 1).ok, true);
   assert.equal(parseRateInput("99999999999", 100).ok, true);
+});
+
+test("budgetMeter", () => {
+  assert.deepEqual(budgetMeter(472000, 600000), {
+    percent: 78.67,
+    over: false,
+  });
+  assert.deepEqual(budgetMeter(700000, 600000), { percent: 100, over: true });
+  assert.deepEqual(budgetMeter(600000, 600000), { percent: 100, over: false });
+  assert.deepEqual(budgetMeter(0, 0), { percent: 0, over: false });
+  assert.deepEqual(budgetMeter(1000, 0), { percent: 100, over: true });
 });

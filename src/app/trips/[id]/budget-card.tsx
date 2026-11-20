@@ -1,7 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { buttonClass, cardClass, secondaryButtonClass } from "@/app/ui/styles";
+import {
+  buttonClass,
+  cardClass,
+  emptyStateClass,
+  secondaryButtonClass,
+} from "@/app/ui/styles";
 import {
   type ActualMoney,
   type BudgetSettings,
@@ -10,12 +15,14 @@ import {
   type PeriodTotal,
   toBudgetMinor,
 } from "@/lib/budget";
+import { lineClass } from "@/lib/day-line";
 import { dateLabel } from "@/lib/schedule";
 import {
   BudgetSettingsForm,
-  type DateChoice,
   ExtraItemForm,
+  tripDateChoices,
 } from "./budget-forms";
+import { BalanceText, BudgetBar } from "./budget-meter";
 import type { PanelBudget, PanelDay, PanelExtra } from "./map-types";
 import { RATE_SOURCE_LABELS } from "./money-fields";
 
@@ -49,11 +56,14 @@ function CardBody({ tripId, budget, tab, days, onSelectTab }: Props) {
   if (!budget) {
     if (tab !== "all") return null;
     return (
-      <section aria-label="예산" className={budgetCardClass}>
+      <section
+        aria-label="예산"
+        className={open === "settings" ? budgetCardClass : emptyStateClass}
+      >
         {open === "settings" ? (
           <BudgetSettingsForm tripId={tripId} settings={null} onClose={close} />
         ) : (
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex w-full flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-sub">
               예산을 정하면 일정마다 예상 비용과 실제 지출을 적을 수 있어요.
             </p>
@@ -75,10 +85,7 @@ function CardBody({ tripId, budget, tab, days, onSelectTab }: Props) {
     currency: settings.currency,
     localCurrency: settings.localCurrency,
   };
-  const dateChoices: DateChoice[] = [
-    { value: "", label: "여행 전체" },
-    ...days.map((d) => ({ value: d.date, label: d.label })),
-  ];
+  const dateChoices = tripDateChoices(days);
   const day = tab === "all" ? null : days.find((d) => d.date === tab);
   const extras = budget.extras.filter((e) =>
     day ? e.date === day.date : e.date === null,
@@ -129,6 +136,7 @@ function CardBody({ tripId, budget, tab, days, onSelectTab }: Props) {
         className={budgetCardClass}
       >
         <h3 className="font-semibold">{day.dayNumber}일차 예산</h3>
+        <BudgetHead budget={budget} />
         <PeriodLine
           total={budget.periods.byDate[day.date]}
           settings={settings}
@@ -153,6 +161,7 @@ function CardBody({ tripId, budget, tab, days, onSelectTab }: Props) {
           </button>
         )}
       </div>
+      <BudgetHead budget={budget} />
       {open === "settings" ? (
         <BudgetSettingsForm
           tripId={tripId}
@@ -186,19 +195,25 @@ function money(minor: number, settings: BudgetSettings): string {
   return formatMoney(minor, settings.currency);
 }
 
-// 여유(양수)·초과(음수)·딱 맞음.
-function BalanceText({
-  balance,
-  settings,
-}: {
-  balance: number;
-  settings: BudgetSettings;
-}) {
-  if (balance === 0) return <span>딱 맞아요</span>;
-  return balance < 0 ? (
-    <span className={OVER}>{money(-balance, settings)} 초과</span>
-  ) : (
-    <span className={UNDER}>{money(balance, settings)} 여유</span>
+// 카드 머리(탑승권식, #53 설계 §5.5): 여행 전체 "예상 총지출 / 총 예산", 막대, 여유·초과. 두 탭 공통.
+function BudgetHead({ budget }: { budget: NonNullable<PanelBudget> }) {
+  const { settings, summary: s } = budget;
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <p className="text-xl font-bold tabular-nums">
+          {money(s.projected, settings)}
+          <span className="text-base font-semibold text-sub">
+            {" "}
+            / {money(s.total, settings)}
+          </span>
+        </p>
+        <p className="text-sm font-semibold">
+          <BalanceText balance={s.balance} settings={settings} />
+        </p>
+      </div>
+      <BudgetBar projected={s.projected} total={s.total} />
+    </div>
   );
 }
 
@@ -294,8 +309,12 @@ function DayTable({
                   type="button"
                   onClick={() => onSelectTab(d.date)}
                   title={d.label}
-                  className="hover:underline"
+                  className="inline-flex items-center gap-1.5 hover:underline"
                 >
+                  <span
+                    aria-hidden
+                    className={`size-2 shrink-0 rounded-full ${lineClass(d.dayNumber, "bg")}`}
+                  />
                   {d.dayNumber}일차
                 </button>
               </td>

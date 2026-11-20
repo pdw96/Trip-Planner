@@ -8,6 +8,8 @@ import {
   useMap,
 } from "@vis.gl/react-google-maps";
 import { useEffect, useRef } from "react";
+import { lineClass, lineHex } from "@/lib/day-line";
+import { useColorScheme } from "./use-color-scheme";
 
 // 지도 그림만 맡는다: 핀(Advanced Marker), 선, 핀 맞추기. 무엇을 그릴지는 trip-map-panel 이 정한다.
 // APIProvider 안에서만 쓴다(지도 ID 가 있어야 Advanced Marker 가 그려진다).
@@ -22,6 +24,8 @@ export type MapPin = {
   text: string;
   kind: "base" | "stop" | "place";
   title: string;
+  // 번호 핀(stop)의 N일차. 핀 바탕이 그날 노선 색이다(#53 §5.6).
+  dayNumber: number | null;
 };
 
 // route: Google 경로 선(인코딩 폴리라인, 실선). straight: 직선 점선(직선 구간·실패·기다리는 중).
@@ -31,6 +35,8 @@ export type MapLine = {
   style: "route" | "straight" | "faint";
   path: LatLngLiteral[];
   encodedPath?: string;
+  // route·straight 선의 N일차(선 색 = 그날 노선 색).
+  dayNumber: number | null;
 };
 
 // 지도가 처음 보일 곳(핀이 없을 때). 서울 시청.
@@ -38,20 +44,30 @@ const FALLBACK_CENTER: LatLngLiteral = { lat: 37.5665, lng: 126.978 };
 const SINGLE_PIN_ZOOM = 15;
 const FIT_PADDING = 48;
 
-const LINE_COLOR = "#2563eb";
+// 옅은 선(전체 보기의 기준점 → 장소)은 보조 글자 색(globals.css --sub).
+const FAINT_COLOR = { light: "#6a707b", dark: "#9aa1ad" } as const;
 
-const DASH_ICONS: google.maps.IconSequence[] = [
-  {
-    icon: {
-      path: "M 0,-1 0,1",
-      strokeOpacity: 0.9,
-      strokeColor: LINE_COLOR,
-      scale: 3,
+// 색마다 한 번만 만든다(그릴 때마다 새 배열이면 점선마다 setOptions 가 다시 불린다).
+const dashIconCache = new Map<string, google.maps.IconSequence[]>();
+
+function dashIcons(color: string): google.maps.IconSequence[] {
+  const cached = dashIconCache.get(color);
+  if (cached) return cached;
+  const icons: google.maps.IconSequence[] = [
+    {
+      icon: {
+        path: "M 0,-1 0,1",
+        strokeOpacity: 0.9,
+        strokeColor: color,
+        scale: 3,
+      },
+      offset: "0",
+      repeat: "12px",
     },
-    offset: "0",
-    repeat: "12px",
-  },
-];
+  ];
+  dashIconCache.set(color, icons);
+  return icons;
+}
 
 export function TripMapCanvas({
   mapId,
@@ -72,6 +88,8 @@ export function TripMapCanvas({
   focus: { placeId: string; seq: number } | null;
   onPinClick: (placeId: string) => void;
 }) {
+  const scheme = useColorScheme();
+  const colorOf = (line: MapLine) => lineHex(line.dayNumber ?? 1, scheme);
   return (
     <div className="h-[50vh] max-h-[480px] min-h-[240px] w-full overflow-hidden rounded-2xl">
       <GoogleMap
@@ -92,7 +110,7 @@ export function TripMapCanvas({
             <Polyline
               key={line.key}
               encodedPath={line.encodedPath}
-              strokeColor={LINE_COLOR}
+              strokeColor={colorOf(line)}
               strokeOpacity={0.85}
               strokeWeight={5}
             />
@@ -100,7 +118,7 @@ export function TripMapCanvas({
             <Polyline
               key={line.key}
               path={line.path}
-              strokeColor="#71717a"
+              strokeColor={FAINT_COLOR[scheme]}
               strokeOpacity={0.35}
               strokeWeight={2}
             />
@@ -109,7 +127,7 @@ export function TripMapCanvas({
               key={line.key}
               path={line.path}
               strokeOpacity={0}
-              icons={DASH_ICONS}
+              icons={dashIcons(colorOf(line))}
             />
           ),
         )}
@@ -138,12 +156,12 @@ export function TripMapCanvas({
 
 function PinBody({ pin, highlighted }: { pin: MapPin; highlighted: boolean }) {
   const ring = highlighted
-    ? "ring-4 ring-amber-400 scale-125"
-    : "ring-2 ring-white";
+    ? "ring-4 ring-foreground scale-125"
+    : "ring-2 ring-background";
   if (pin.kind === "stop") {
     return (
       <span
-        className={`flex h-7 min-w-7 items-center justify-center rounded-full bg-blue-600 px-1.5 text-sm font-semibold text-white shadow ${ring}`}
+        className={`flex h-7 min-w-7 items-center justify-center rounded-full px-1.5 text-sm font-bold text-on-line shadow ${lineClass(pin.dayNumber ?? 1, "bg")} ${ring}`}
       >
         {pin.text}
       </span>
@@ -151,7 +169,7 @@ function PinBody({ pin, highlighted }: { pin: MapPin; highlighted: boolean }) {
   }
   return (
     <span
-      className={`flex size-8 items-center justify-center rounded-full bg-white text-base shadow ${ring}`}
+      className={`flex size-8 items-center justify-center rounded-full bg-background text-base shadow ${ring}`}
     >
       {pin.text}
     </span>

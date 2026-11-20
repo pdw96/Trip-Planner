@@ -1,9 +1,10 @@
-import { cardClass } from "@/app/ui/styles";
+import { sectionTitleClass } from "@/app/ui/styles";
 import { listPlaces } from "@/db/queries/places";
 import { listScheduleItems } from "@/db/queries/schedule-items";
 import { listTripBases } from "@/db/queries/trip-bases";
 import type { TripRow as Trip } from "@/db/queries/trips";
 import type { ScheduleItem } from "@/db/schema";
+import { lineClass, lineVar } from "@/lib/day-line";
 import {
   type DayRoute,
   daySignature,
@@ -22,6 +23,12 @@ import {
   type RowItem,
   ScheduleEditorProvider,
 } from "./schedule-editor";
+import { ShownWhen } from "./selected-day";
+
+// 날마다 노선 색을 CSS 변수로 물려준다(레일·역·일정 추가 동그라미가 bg-(--line) 으로 읽는다, #53 설계 §5.6).
+function lineStyle(dayNumber: number | null): React.CSSProperties {
+  return { "--line": lineVar(dayNumber) } as React.CSSProperties;
+}
 
 // 그날 동선 뼈대 → 일정표 이동 줄의 자리·서명(#37). 구간이 없으면 null.
 // labels 는 여행의 모든 장소(응답 구간이 뼈대에 없던 장소를 담아도 출발지 문구를 붙이도록).
@@ -98,8 +105,8 @@ export async function ScheduleSection({
   const dayOptions: DateOption[] = days.map(({ day }) => ({
     value: day.date,
     label: day.label,
+    dayNumber: day.dayNumber,
   }));
-  const todayInTrip = today >= trip.startDate && today <= trip.endDate;
   // 장소 칸 Google 검색(#35). 브라우저 키는 공개 값(웹사이트 제한)이다. 자동완성에는 지도 ID 가 필요 없다.
   const browserKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY || null;
 
@@ -120,19 +127,9 @@ export async function ScheduleSection({
 
   return (
     <section aria-labelledby="schedule-heading" className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id="schedule-heading" className="text-xl font-semibold">
-          일정
-        </h2>
-        {todayInTrip && (
-          <a
-            href={`#day-${today}`}
-            className="text-sm text-sub hover:underline"
-          >
-            오늘 일정으로 ↓
-          </a>
-        )}
-      </div>
+      <h2 id="schedule-heading" className={sectionTitleClass}>
+        일정
+      </h2>
       <ScheduleEditorProvider
         places={placeOptions}
         browserKey={browserKey}
@@ -146,63 +143,84 @@ export async function ScheduleSection({
         }
       >
         {days.map(({ day, items: dayItems }) => (
-          <section
-            key={day.date}
-            id={`day-${day.date}`}
-            aria-labelledby={`day-${day.date}-heading`}
-            className="flex scroll-mt-4 flex-col gap-1"
-          >
-            <h3
-              id={`day-${day.date}-heading`}
-              className="flex items-center gap-2 font-semibold"
+          <ShownWhen key={day.date} value={day.date}>
+            <section
+              id={`day-${day.date}`}
+              aria-labelledby={`day-${day.date}-heading`}
+              style={lineStyle(day.dayNumber)}
+              className="flex scroll-mt-28 flex-col gap-2"
             >
-              {day.label}
-              {day.date === today && (
-                <span className="rounded-full bg-foreground px-2 py-0.5 text-xs font-semibold text-on-ink">
-                  오늘
+              <h3
+                id={`day-${day.date}-heading`}
+                className="flex items-center gap-2 text-[17px] font-bold"
+              >
+                <span
+                  aria-hidden
+                  className={`flex size-7 shrink-0 items-center justify-center rounded-full text-sm font-bold text-on-line tabular-nums ${lineClass(day.dayNumber, "bg")}`}
+                >
+                  {day.dayNumber}
                 </span>
-              )}
-            </h3>
-            <ScheduleDayItems
-              tripId={trip.id}
-              date={day.date}
-              items={dayItems.map(rowItem)}
-              dateOptions={dayOptions}
-              travel={dayTravel(day.date, routes.get(day.date), placeLabels)}
-            />
-            <AddScheduleItem tripId={trip.id} date={day.date} />
-          </section>
+                <span className="sr-only">{day.dayNumber}일차 </span>
+                {dateLabel(day.date, false)}
+                {day.date === today && (
+                  <span className="rounded-full bg-foreground px-2 py-0.5 text-xs font-semibold text-on-ink">
+                    오늘
+                  </span>
+                )}
+              </h3>
+              <ScheduleDayItems
+                tripId={trip.id}
+                date={day.date}
+                items={dayItems.map(rowItem)}
+                dateOptions={dayOptions}
+                travel={dayTravel(day.date, routes.get(day.date), placeLabels)}
+              />
+              <AddScheduleItem tripId={trip.id} date={day.date} />
+            </section>
+          </ShownWhen>
         ))}
         {outside.length > 0 && (
-          <section
-            aria-labelledby="schedule-outside-heading"
-            className={`flex flex-col gap-3 ${cardClass}`}
-          >
-            <div className="flex flex-col gap-1">
-              <h3 id="schedule-outside-heading" className="font-semibold">
-                여행 기간 밖 일정
-              </h3>
-              <p className="text-sm text-sub">
-                여행 날짜를 바꿔 기간 밖에 남은 일정이에요. 눌러서 날짜를
-                옮기거나 지울 수 있어요.
-              </p>
-            </div>
-            {outside.map((group) => (
-              <div key={group.date} className="flex flex-col">
-                <h4 className="text-sm font-medium">{group.label}</h4>
-                <ScheduleDayItems
-                  tripId={trip.id}
-                  date={group.date}
-                  items={group.items.map(rowItem)}
-                  dateOptions={[
-                    { value: group.date, label: dateLabel(group.date, true) },
-                    ...dayOptions,
-                  ]}
-                  travel={null}
-                />
+          <ShownWhen value="all">
+            <section
+              aria-labelledby="schedule-outside-heading"
+              style={lineStyle(null)}
+              className="flex flex-col gap-3"
+            >
+              <div className="flex flex-col gap-1">
+                <h3
+                  id="schedule-outside-heading"
+                  className="text-[17px] font-bold"
+                >
+                  여행 기간 밖 일정
+                </h3>
+                <p className="text-sm text-sub">
+                  여행 날짜를 바꿔 기간 밖에 남은 일정이에요. 눌러서 날짜를
+                  옮기거나 지울 수 있어요.
+                </p>
               </div>
-            ))}
-          </section>
+              {outside.map((group) => (
+                <div key={group.date} className="flex flex-col">
+                  <h4 className="text-sm font-semibold text-sub">
+                    {group.label}
+                  </h4>
+                  <ScheduleDayItems
+                    tripId={trip.id}
+                    date={group.date}
+                    items={group.items.map(rowItem)}
+                    dateOptions={[
+                      {
+                        value: group.date,
+                        label: dateLabel(group.date, true),
+                        dayNumber: null,
+                      },
+                      ...dayOptions,
+                    ]}
+                    travel={null}
+                  />
+                </div>
+              ))}
+            </section>
+          </ShownWhen>
         )}
       </ScheduleEditorProvider>
     </section>

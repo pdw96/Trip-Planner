@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { dangerButtonClass } from "@/app/ui/styles";
+import { buttonClass } from "@/app/ui/styles";
 import { deleteTripAction } from "./actions";
 
 export function DeleteTripButton({ tripId }: { tripId: string }) {
@@ -19,7 +19,7 @@ export function DeleteTripButton({ tripId }: { tripId: string }) {
       type="button"
       onClick={onClick}
       disabled={pending}
-      className={dangerButtonClass}
+      className={buttonClass("danger", "small")}
     >
       {pending ? "삭제하는 중…" : "삭제"}
     </button>
