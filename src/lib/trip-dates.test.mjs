@@ -5,6 +5,7 @@ import {
   formatShortRange,
   splitTrips,
   todayInSeoul,
+  tripCountdown,
 } from "./trip-dates.ts";
 
 test("todayInSeoul crosses midnight in Seoul", () => {
@@ -90,4 +91,24 @@ test("formatLongRange", () => {
     "2026년 12월 30일 – 2027년 1월 2일",
   );
   assert.equal(formatLongRange("2026-12-20", "2026-12-20"), "2026년 12월 20일");
+});
+
+test("tripCountdown", () => {
+  assert.equal(
+    tripCountdown("2026-12-05", "2026-12-07", "2026-11-20"),
+    "15일 남음",
+  );
+  assert.equal(
+    tripCountdown("2026-12-05", "2026-12-07", "2026-12-04"),
+    "내일 출발",
+  );
+  assert.equal(
+    tripCountdown("2026-12-05", "2026-12-07", "2026-12-05"),
+    "여행 중",
+  );
+  assert.equal(
+    tripCountdown("2026-12-05", "2026-12-07", "2026-12-07"),
+    "여행 중",
+  );
+  assert.equal(tripCountdown("2026-12-05", "2026-12-07", "2026-12-08"), null);
 });
