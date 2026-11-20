@@ -4,13 +4,13 @@ import { Suspense } from "react";
 import { MiniLine } from "@/app/ui/mini-line";
 import { emptyStateClass, primaryButtonClass } from "@/app/ui/styles";
 import { listTrips, type TripListItem } from "@/db/queries/trips";
-import { tripDays } from "@/lib/schedule";
 import { getCurrentUser } from "@/lib/session";
 import {
   formatShortRange,
   splitTrips,
   todayInSeoul,
   tripCountdown,
+  tripDayCount,
 } from "@/lib/trip-dates";
 import { SignOutButton } from "../auth-buttons";
 
@@ -112,7 +112,7 @@ function TripRow({ trip, today }: { trip: TripListItem; today: string }) {
           {countdown && ` · ${countdown}`}
         </span>
         <MiniLine
-          dayCount={tripDays(trip.startDate, trip.endDate).length}
+          dayCount={tripDayCount(trip.startDate, trip.endDate)}
           dim={past}
         />
       </Link>

@@ -1,6 +1,6 @@
 # 지금 상태
 
-2026-11-20 기준(#15 프로덕션 확인 반영). 이슈 하나가 끝날 때마다(PR 머지, 배포 확인) 고친다. 새 세션은 이 파일부터 읽는다(`CLAUDE.md` '작업 흐름').
+2026-11-21 기준(#53 PR 1 배포, PR 2 남음). 이슈 하나가 끝날 때마다(PR 머지, 배포 확인) 고친다. 새 세션은 이 파일부터 읽는다(`CLAUDE.md` '작업 흐름').
 
 ## 끝나서 배포된 것
 
@@ -20,17 +20,33 @@
 | #14 | #50 | 여행별 예산·지출(`trip_budgets`·`budget_items`, 마이그레이션 0006). 총 예산 + 예산 통화(+ 현지 통화·예정 환율), 예상은 일정 양식, 실제는 완료 체크칸을 켜면 열리는 칸(현지 통화는 결제일 유럽중앙은행 기준환율, Frankfurter), 지도 [전체]·[N일차] 탭 예산 카드(예상 총지출 = 실제 + 남은 예상, 초과·여유, 날짜별 표, 일정 밖 항목). 일정 줄에는 금액 없음. 설계 `docs/superpowers/specs/2026-11-20-trip-budget-design.md` |
 | #15 | #54 | 지인과 여행 함께 보기·고치기(`trip_members`, `trips.invite_token_hash`, 마이그레이션 0007). 주인이 초대 링크(`/invite/<비밀값>`, DB 에는 SHA-256 만)를 만들고, 받은 사람이 로그인 뒤 [참여]. 함께하는 사람은 주인과 똑같이 고치고, 삭제·링크·내보내기는 주인만, 본인은 나가기. 카톡 앱 안 브라우저는 바깥 브라우저로 넘김. 설계 `docs/superpowers/specs/2026-11-20-trip-sharing-design.md` |
 
+## 진행 중: #53 전체 화면 디자인 정리 (노선도)
+
+설계 승인됨: `docs/superpowers/specs/2026-11-20-design-refresh-design.md`(시안 링크 3개가 맨 위에). PR 두 번으로 나눴다.
+- **PR 1 (#57, 배포됨)**: 색·글꼴 토큰, 공용 조각, 여행 목록·홈·양식·달력·초대 화면. 계획 `docs/superpowers/plans/2026-11-20-design-refresh-pr1.md`. Codex 지적(목록이 날 수를 세려고 여행의 모든 날을 펼침)은 후속 PR 에서 `tripDayCount` 로 고침.
+- **PR 2 (다음 세션)**: 여행 화면 — 설계 §5.4(머리·함께하는 사람 접기·날짜 동그라미·지도 선/핀 색·가 볼 곳은 [전체] 에서만·노선 일정·역 동그라미 = 완료 체크칸·손잡이 오른쪽), §5.4.1(날짜 고르기가 지도·예산·일정을 함께 거름, 숨긴 날은 그리되 감춤), §5.4.2(위: 내리면 제목 한 줄+날짜 줄 고정 / 아래: 휴대폰에서만 예산 줄 늘 떠 있음 + [+ 지출] 시트), §5.5(예산 카드: 탑승권식 막대 머리를 더하고 기존 숫자는 모두 유지), §5.6(지도 선 색). `Closes #53`.
+  - 시작: superpowers `writing-plans` 로 PR 2 계획을 `docs/superpowers/plans/2026-11-21-design-refresh-pr2.md` 에 쓰고, 사용자가 실행 방식을 고른다(PR 1 은 '직접 실행' + 마지막 `/code-review`).
+  - PR 1 에서 남긴 것: 예산 양식 판은 카드 안이라 테두리 판(PR 2 에서 카드와 함께), 함께하는 사람 칸은 테두리 판 그대로(PR 2 에서 접는 한 줄), `trip-map-canvas.tsx` 의 `LINE_COLOR`·`bg-blue-600`·`ring-amber-400` 은 그대로(PR 2 에서 날짜 색).
+
 ## 다음 할 일
 
 사용자가 열린 이슈에서 고른다.
 
-- 다음 순서로 정해 둔 것: #53 전체 화면 디자인 정리(#15 다음에 하기로 2026-11-20 정함). #36·#22–#24 는 그 정리 뒤에 그 틀에 맞춰 넣는다.
+- #53 PR 2 를 먼저 끝낸다(위). #36·#22–#24 는 그 틀에 맞춰 넣는다.
 - 기능: #36 구간 경로 후보 2–3개
 - 개선: #22 단위 시험을 CI 에서, #23 달력 키보드 이동, #24 자잘한 개선 모음
 
 여행 접근 조건은 `src/db/queries/trips.ts` 의 `accessibleTrips(userId)`(주인 또는 함께하는 사람) 하나, 주인만 하는 일은 `ownedTrips(userId)`. 하위 데이터 쿼리는 `schedule-items.ts`·`places.ts`·`budget.ts` 처럼 이 조건을 같은 SQL 문 안에 넣는다(하위 id 와 여행 id 를 함께 묶어 섞어 보내기를 막는다). `accessibleTrips` 는 `trips` 를 별칭 없이 FROM 에 둔 쿼리에서만 쓴다(안의 EXISTS 가 바깥 `trips.id` 를 가리킨다). 여러 테이블을 함께 쓰려면 neon-http 에 트랜잭션이 없으므로 데이터를 바꾸는 CTE 한 문으로 한다(`updatePlace`, `createScheduleItemWithNewPlace`).
 
 ## 알아 둘 것
+
+- **디자인 토큰(#53)**:
+  - 색은 `src/app/globals.css` 의 CSS 변수 + `@theme inline` 하나(`bg-surface`, `text-sub`, `border-rule`, `bg-field`·`border-field-line`, `text-danger`, `text-ok`, `text-warn`·`bg-warn-surface`, `text-on-ink`, 날짜 색 `line-1…8`). 다크 모드는 변수만 바꾼다. 컴포넌트에 `dark:` 클래스·`zinc-*`·`black/[.08]` 같은 값을 쓰지 않는다.
+  - 공용 클래스는 `src/app/ui/styles.ts`: `buttonClass(look, size)`(+ `primary/secondary/danger/quietButtonClass`), `fieldClass`(**폭 없음** — 쓰는 쪽이 `w-full`·`w-32`·`flex-1` 을 붙인다, #52), `fieldAreaClass`(textarea), `cardClass`, `errorTextClass`, `emptyStateClass`.
+  - 날짜 색은 `src/lib/day-line.ts` 의 `lineClass(dayNumber, "bg"|"text"|"border")` — Tailwind 가 찾도록 클래스 이름을 표로 적어 두었다(문자열 조립 금지). 8색을 돌려 쓴다.
+  - 글꼴 IBM Plex Sans KR(`next/font/google`, 가변 글꼴이 아니라 굵기 400–700 을 적음, 한글 조각은 빌드 때 받는다).
+  - 짧은 노선 `src/app/ui/mini-line.tsx`(목록·홈). 남은 날 `tripCountdown`, 날 수 `tripDayCount`(`src/lib/trip-dates.ts`) — 여행 기간 상한이 없으니 날을 펼치는 `tripDays` 를 목록에서 쓰지 않는다.
+  - 브라우저 확인: dev 서버의 화면 갱신이 늦어 고친 직후 사진이 옛 모양일 수 있다. 이상하면 요소 크기를 직접 재 보고(`getBoundingClientRect`) 다시 찍는다(#53).
 
 - **공유(#15)**:
   - 여행 객체(`getTrip`·`listTrips`)는 `TripRow`(초대 해시 칸 없음)에 `isOwner`(`listTrips` 는 `ownerName` 도). `isOwner` 는 버튼 고르기에만 쓰고 권한은 쿼리 조건이 정한다. 화면에는 이메일을 내지 않는다(이름·사진만).

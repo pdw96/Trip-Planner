@@ -94,3 +94,8 @@ export function tripCountdown(
   const days = Math.round((utcDay(startDate) - utcDay(today)) / DAY_MS);
   return days === 1 ? "내일 출발" : `${days}일 남음`;
 }
+
+// 여행 날 수(시작·끝 포함). 날을 펼치지 않고 센다(여행 기간 상한이 없어 아주 긴 여행도 목록이 느려지지 않게, PR #57 Codex 지적).
+export function tripDayCount(startDate: string, endDate: string): number {
+  return Math.round((utcDay(endDate) - utcDay(startDate)) / DAY_MS) + 1;
+}
