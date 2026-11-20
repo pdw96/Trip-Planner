@@ -34,17 +34,26 @@ export function ownedTrips(userId: string): SQL {
   return eq(trips.userId, userId);
 }
 
+// 여행 객체에는 초대 링크 해시를 싣지 않는다(초대 쿼리만 다룬다, #15).
+const {
+  inviteTokenHash: _inviteTokenHash,
+  inviteTokenCreatedAt: _inviteTokenCreatedAt,
+  ...tripColumns
+} = getTableColumns(trips);
+
+export type TripRow = Omit<Trip, "inviteTokenHash" | "inviteTokenCreatedAt">;
+
 function isOwnerColumn(userId: string) {
   return sql<boolean>`${trips.userId} = ${userId}`;
 }
 
-export type TripListItem = Trip & { isOwner: boolean; ownerName: string };
+export type TripListItem = TripRow & { isOwner: boolean; ownerName: string };
 
 // 내 여행과 공유받은 여행. 공유받은 여행 카드에 주인 이름을 보인다(이메일은 고르지 않는다).
 export async function listTrips(userId: string): Promise<TripListItem[]> {
   return db
     .select({
-      ...getTableColumns(trips),
+      ...tripColumns,
       isOwner: isOwnerColumn(userId),
       ownerName: user.name,
     })
@@ -53,7 +62,7 @@ export async function listTrips(userId: string): Promise<TripListItem[]> {
     .where(accessibleTrips(userId));
 }
 
-export type TripWithAccess = Trip & { isOwner: boolean };
+export type TripWithAccess = TripRow & { isOwner: boolean };
 
 // 없거나 접근할 수 없거나 id 형식이 틀리면 모두 null. 일정·장소·예산도 여행 접근 확인에 이것을 쓴다.
 // isOwner 는 화면이 버튼을 고르는 데만 쓴다. 권한 판단은 각 쿼리의 조건이 한다.
@@ -63,7 +72,7 @@ export async function getTrip(
 ): Promise<TripWithAccess | null> {
   if (!isUuid(tripId)) return null;
   const [trip] = await db
-    .select({ ...getTableColumns(trips), isOwner: isOwnerColumn(userId) })
+    .select({ ...tripColumns, isOwner: isOwnerColumn(userId) })
     .from(trips)
     .where(and(eq(trips.id, tripId), accessibleTrips(userId)))
     .limit(1);

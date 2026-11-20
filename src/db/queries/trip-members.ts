@@ -120,6 +120,7 @@ export type InvitePreview = {
 };
 
 // 초대 화면에 보일 것만. 링크를 가진 사람이면 누구나 보는 정보다.
+// CLAUDE.md '첫 인자 userId' 규칙의 예외: 아직 멤버가 아닌 사람이 비밀값(해시)으로 찾는 쿼리라 userId 로 범위를 좁힐 수 없다.
 export async function findInvite(hash: string): Promise<InvitePreview | null> {
   const [row] = await db
     .select({
@@ -155,7 +156,7 @@ export async function joinTrip(
   return result.rows[0]?.trip_id ?? null;
 }
 
-// [참여] 실패 사유를 가리는 데만 쓴다. 초대 해시로 찾은 여행에만 부른다.
+// [참여] 실패 사유를 가리는 데만 쓴다. 초대 해시로 찾은 여행에만 부른다(findInvite 와 같은 까닭으로 userId 를 받지 않는다).
 export async function countTripMembers(tripId: string): Promise<number> {
   if (!isUuid(tripId)) return 0;
   const [row] = await db

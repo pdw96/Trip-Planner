@@ -1,7 +1,8 @@
 import { listPlaces } from "@/db/queries/places";
 import { listScheduleItems } from "@/db/queries/schedule-items";
 import { listTripBases } from "@/db/queries/trip-bases";
-import type { ScheduleItem, Trip } from "@/db/schema";
+import type { TripRow as Trip } from "@/db/queries/trips";
+import type { ScheduleItem } from "@/db/schema";
 import {
   type DayRoute,
   daySignature,
