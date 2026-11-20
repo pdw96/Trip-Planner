@@ -7,6 +7,7 @@ import { tripDays } from "@/lib/schedule";
 import { getCurrentUser } from "@/lib/session";
 import { formatLongRange, stayLength, todayInSeoul } from "@/lib/trip-dates";
 import { DeleteTripButton } from "../delete-trip-button";
+import { BudgetDockSection } from "./budget-dock-section";
 import { DayRouteProvider } from "./day-route-store";
 import { MapSection } from "./map-section";
 import { MembersSection } from "./members-section";
@@ -95,6 +96,10 @@ async function TripDetail({
             <MapSection userId={user.id} trip={trip} />
           </Suspense>
           <ScheduleSection userId={user.id} trip={trip} today={today} />
+          {/* 휴대폰 아래 예산 줄(§5.4.2). article 마지막이라 끝까지 내리면 제자리에 놓인다. */}
+          <Suspense fallback={null}>
+            <BudgetDockSection userId={user.id} trip={trip} today={today} />
+          </Suspense>
         </SelectedDayProvider>
       </DayRouteProvider>
     </article>
