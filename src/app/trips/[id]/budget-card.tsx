@@ -1,12 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  cardClass,
-  quietButtonClass,
-  secondaryButtonClass,
-  smallButton,
-} from "@/app/ui/styles";
+import { buttonClass, cardClass, secondaryButtonClass } from "@/app/ui/styles";
 import {
   type ActualMoney,
   type BudgetSettings,
@@ -28,7 +23,7 @@ import { RATE_SOURCE_LABELS } from "./money-fields";
 // [N일차]는 그날 예상·실제와 일정 밖 지출. 숫자는 서버가 계산해 넘긴다. 금액은 일정 줄에 보이지 않는다.
 
 const budgetCardClass = `flex flex-col gap-3 ${cardClass}`;
-const linkButtonClass = `self-start ${smallButton(quietButtonClass)}`;
+const linkButtonClass = `self-start ${buttonClass("quiet", "small")}`;
 const OVER = "text-danger";
 const UNDER = "text-ok";
 

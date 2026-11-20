@@ -4,22 +4,33 @@
 
 const button =
   "inline-flex shrink-0 items-center justify-center rounded-[10px] font-semibold transition-colors disabled:opacity-50";
-const regular = "h-10 px-4 text-sm";
-const small = "h-8 px-3 text-[13px]";
 
-export const primaryButtonClass = `${button} ${regular} bg-foreground text-on-ink hover:opacity-85`;
+const SIZES = {
+  regular: "h-10 px-4 text-sm",
+  small: "h-8 px-3 text-[13px]",
+  large: "h-12 px-5",
+} as const;
 
-export const secondaryButtonClass = `${button} ${regular} border border-field-line hover:bg-surface`;
+const LOOKS = {
+  primary: "bg-foreground text-on-ink hover:opacity-85",
+  secondary: "border border-field-line hover:bg-surface",
+  danger: "border border-danger/45 text-danger hover:bg-danger/10",
+  // 테두리 없는 글자 버튼("일정 넣기", "취소" 같은 곳).
+  quiet: "text-sub hover:bg-surface hover:text-foreground",
+} as const;
 
-export const dangerButtonClass = `${button} ${regular} border border-danger/45 text-danger hover:bg-danger/10`;
-
-// 테두리 없는 글자 버튼("일정 넣기", "취소" 같은 곳).
-export const quietButtonClass = `${button} ${regular} text-sub hover:bg-surface hover:text-foreground`;
-
-// 같은 버튼을 높이 32px 로. 덧붙이면 h-10·h-8 이 충돌하므로 크기 부분을 바꿔 끼운다.
-export function smallButton(cls: string): string {
-  return cls.replace(regular, small);
+// 크기와 모양을 따로 골라 합친다(같은 속성의 클래스가 둘 붙어 충돌하지 않게).
+export function buttonClass(
+  look: keyof typeof LOOKS,
+  size: keyof typeof SIZES = "regular",
+): string {
+  return `${button} ${SIZES[size]} ${LOOKS[look]}`;
 }
+
+export const primaryButtonClass = buttonClass("primary");
+export const secondaryButtonClass = buttonClass("secondary");
+export const dangerButtonClass = buttonClass("danger");
+export const quietButtonClass = buttonClass("quiet");
 
 export const fieldClass =
   "h-[42px] rounded-[10px] border border-field-line bg-field px-3 text-[15px] aria-[invalid=true]:border-danger";

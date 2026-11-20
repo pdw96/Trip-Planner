@@ -13,13 +13,7 @@ import {
   useState,
   useTransition,
 } from "react";
-import {
-  errorTextClass,
-  fieldClass,
-  primaryButtonClass,
-  quietButtonClass,
-  smallButton,
-} from "@/app/ui/styles";
+import { buttonClass, errorTextClass, fieldClass } from "@/app/ui/styles";
 import { type ActualMoney, formatMoney, type Money } from "@/lib/budget";
 import { placeUrl } from "@/lib/leg-display";
 import { mapsSearchUrl } from "@/lib/schedule";
@@ -140,7 +134,7 @@ export function AddScheduleItem({
       <button
         type="button"
         onClick={() => setOpenKey(key)}
-        className={`self-start ${smallButton(quietButtonClass)}`}
+        className={`self-start ${buttonClass("quiet", "small")}`}
       >
         + 일정 추가
       </button>
@@ -484,7 +478,7 @@ function ActualEntry({
         <button
           type="submit"
           disabled={saving}
-          className={smallButton(primaryButtonClass)}
+          className={buttonClass("primary", "small")}
         >
           {saving ? "저장하는 중…" : "저장"}
         </button>
@@ -492,7 +486,7 @@ function ActualEntry({
           type="button"
           onClick={onClose}
           disabled={saving}
-          className={smallButton(quietButtonClass)}
+          className={buttonClass("quiet", "small")}
         >
           건너뛰기
         </button>
