@@ -119,6 +119,7 @@ export function ScheduleDayItems({
   const [, startReorder] = useTransition();
   const [dragging, setDragging] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const refreshAfterRevert = useRef(false);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, {
@@ -178,8 +179,7 @@ export function ScheduleDayItems({
       );
       if (!ok) {
         setNotice(ORDER_SAVE_FAILED);
-        // 그 사이 다른 창에서 일정이 바뀌었을 수 있으므로 서버 값으로 새로 고친다.
-        router.refresh();
+        refreshAfterRevert.current = true;
       }
     });
   }
@@ -189,6 +189,14 @@ export function ScheduleDayItems({
   const reordering =
     ordered.map((item) => item.id).join() !==
     items.map((item) => item.id).join();
+
+  // 저장에 실패하면 그 사이 다른 창에서 일정이 바뀌었을 수 있으므로 서버 값으로 새로 고친다. 원래 순서로 돌아간
+  // 뒤에 부른다(전환 안에서 부르면 새로 고침이 끝날 때까지 실패한 순서가 그대로 보인다).
+  useEffect(() => {
+    if (reordering || !refreshAfterRevert.current) return;
+    refreshAfterRevert.current = false;
+    router.refresh();
+  }, [reordering, router]);
   const sortable = ordered.length > 1;
 
   const dayRef = useRef<HTMLDivElement>(null);
