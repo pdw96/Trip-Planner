@@ -542,3 +542,18 @@ export function decideRate(input: {
   }
   return { kind: "fetch" };
 }
+
+// 예산 막대(#53 설계 §5.5): 채움 비율 = 예상 총지출 ÷ 총 예산(100% 상한, 소수 둘째 자리), 넘으면 over.
+// 총 예산이 0 이면 쓴 돈이 있을 때만 가득 찬 초과.
+export function budgetMeter(
+  projected: number,
+  total: number,
+): { percent: number; over: boolean } {
+  if (total <= 0) {
+    return projected > 0
+      ? { percent: 100, over: true }
+      : { percent: 0, over: false };
+  }
+  const percent = Math.min(100, Math.round((projected / total) * 10000) / 100);
+  return { percent, over: projected > total };
+}

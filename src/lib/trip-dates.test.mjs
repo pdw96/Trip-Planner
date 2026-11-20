@@ -3,7 +3,9 @@ import { test } from "node:test";
 import {
   formatLongRange,
   formatShortRange,
+  resolveSelection,
   splitTrips,
+  stayLength,
   todayInSeoul,
   tripCountdown,
   tripDayCount,
@@ -119,4 +121,34 @@ test("tripDayCount counts days without expanding them", () => {
   assert.equal(tripDayCount("2026-12-05", "2026-12-05"), 1);
   assert.equal(tripDayCount("2026-12-30", "2027-01-02"), 4);
   assert.equal(tripDayCount("2026-01-01", "3026-01-01"), 365243);
+});
+
+test("resolveSelection keeps all and in-range dates", () => {
+  assert.equal(resolveSelection("all", "2026-12-05", "2026-12-07"), "all");
+  assert.equal(
+    resolveSelection("2026-12-05", "2026-12-05", "2026-12-07"),
+    "2026-12-05",
+  );
+  assert.equal(
+    resolveSelection("2026-12-07", "2026-12-05", "2026-12-07"),
+    "2026-12-07",
+  );
+});
+
+test("resolveSelection falls back to all", () => {
+  assert.equal(
+    resolveSelection("2026-12-08", "2026-12-05", "2026-12-07"),
+    "all",
+  );
+  assert.equal(
+    resolveSelection("2026-12-04", "2026-12-05", "2026-12-07"),
+    "all",
+  );
+  assert.equal(resolveSelection("", "2026-12-05", "2026-12-07"), "all");
+});
+
+test("stayLength", () => {
+  assert.equal(stayLength("2026-12-05", "2026-12-05"), "당일");
+  assert.equal(stayLength("2026-12-05", "2026-12-06"), "1박 2일");
+  assert.equal(stayLength("2026-12-30", "2027-01-02"), "3박 4일");
 });

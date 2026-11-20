@@ -15,9 +15,11 @@
   --ok: #1d7f45;
   --warn: #8a5a00;
   --warn-surface: rgb(232 160 32 / 0.14);
+  /* 날짜 동그라미 안 숫자(노선 색 위, 대비 3:1 이상) */
+  --on-line: #ffffff;
   /* 날짜(노선) 색. 날짜 표시에만 쓴다(설계 §5.6). */
   --line-1: #1f9a52;
-  --line-2: #ef7d1a;
+  --line-2: #e0700f;
   --line-3: #2a6fd6;
   --line-4: #8a4fd0;
   --line-5: #0e97a8;
@@ -41,6 +43,7 @@
   --color-ok: var(--ok);
   --color-warn: var(--warn);
   --color-warn-surface: var(--warn-surface);
+  --color-on-line: var(--on-line);
   --color-line-1: var(--line-1);
   --color-line-2: var(--line-2);
   --color-line-3: var(--line-3);
@@ -67,6 +70,7 @@
     --ok: #4cc27c;
     --warn: #f0c060;
     --warn-surface: rgb(240 192 96 / 0.14);
+    --on-line: #121418;
     --line-1: #33b46a;
     --line-2: #f39234;
     --line-3: #4b8ef0;
