@@ -12,6 +12,7 @@ import {
   useState,
   useTransition,
 } from "react";
+import type { ActualMoney, Money } from "@/lib/budget";
 import { placeUrl } from "@/lib/leg-display";
 import { mapsSearchUrl } from "@/lib/schedule";
 import {
@@ -26,6 +27,11 @@ import {
   updateScheduleItemAction,
 } from "../schedule-actions";
 import type { PlaceOption } from "./map-types";
+import {
+  actualDetailValues,
+  amountFieldValues,
+  type BudgetCurrencies,
+} from "./money-fields";
 import { type DateOption, ScheduleItemForm } from "./schedule-item-form";
 
 export type { DateOption };
@@ -41,6 +47,9 @@ export type RowItem = {
   placeId: string | null;
   memo: string | null;
   done: boolean;
+  // 예산 금액(#14). 일정 줄에는 보이지 않고 양식·체크칸에서만 쓴다.
+  estimate: Money | null;
+  actual: ActualMoney | null;
 };
 
 const ERROR_VISIBLE_MS = 4000;
@@ -48,11 +57,13 @@ const ERROR_VISIBLE_MS = 4000;
 // 입력칸은 화면 전체에서 하나만 열린다. 키: "add:<날짜>" 또는 "edit:<일정 id>".
 // places: 이 여행의 장소(숙소 먼저). 양식의 장소 고르기와 이어진 장소의 링크에 쓴다.
 // searchEnabled: 장소 칸에서 Google 검색을 보일지(브라우저 키가 있을 때, #35).
+// budget: 예산 설정의 두 통화(#14). 없으면 null(금액 칸 대신 안내).
 type OpenState = {
   openKey: string | null;
   setOpenKey: React.Dispatch<React.SetStateAction<string | null>>;
   places: PlaceOption[];
   searchEnabled: boolean;
+  budget: BudgetCurrencies | null;
 };
 
 const OpenContext = createContext<OpenState | null>(null);
@@ -70,10 +81,12 @@ function useOpen(): OpenState {
 export function ScheduleEditorProvider({
   places,
   browserKey,
+  budget,
   children,
 }: {
   places: PlaceOption[];
   browserKey: string | null;
+  budget: BudgetCurrencies | null;
   children: React.ReactNode;
 }) {
   const [openKey, setOpenKey] = useState<string | null>(null);
@@ -85,6 +98,7 @@ export function ScheduleEditorProvider({
         setOpenKey,
         places,
         searchEnabled: browserKey !== null,
+        budget,
       }}
     >
       {children}
@@ -105,7 +119,7 @@ export function AddScheduleItem({
   tripId: string;
   date: string;
 }) {
-  const { openKey, setOpenKey, places, searchEnabled } = useOpen();
+  const { openKey, setOpenKey, places, searchEnabled, budget } = useOpen();
   const key = `add:${date}`;
 
   if (openKey !== key) {
@@ -126,6 +140,7 @@ export function AddScheduleItem({
       initialValues={{ ...EMPTY_SCHEDULE_FIELDS, date }}
       places={places}
       searchEnabled={searchEnabled}
+      budget={budget}
       onClose={() => setOpenKey(null)}
     />
   );
@@ -143,7 +158,7 @@ export function ScheduleItemRow({
   dateOptions: DateOption[];
   sortable: boolean;
 }) {
-  const { openKey, setOpenKey, places, searchEnabled } = useOpen();
+  const { openKey, setOpenKey, places, searchEnabled, budget } = useOpen();
   const key = `edit:${item.id}`;
   const editing = openKey === key;
   // 입력칸으로 열린 줄은 끌지 않는다. 다른 줄이 움직일 때 자리를 비켜 주도록 노드는 늘 등록한다.
@@ -218,6 +233,9 @@ export function ScheduleItemRow({
   }
 
   if (editing) {
+    const estimate = budget ? amountFieldValues(item.estimate, budget) : null;
+    const actual = budget ? amountFieldValues(item.actual, budget) : null;
+    const detail = actualDetailValues(item.actual);
     return (
       <li ref={setNodeRef} style={sortStyle}>
         <ScheduleItemForm
@@ -231,10 +249,19 @@ export function ScheduleItemRow({
             place: item.place ?? "",
             placeId: item.placeId ?? "",
             memo: item.memo ?? "",
+            estimateAmount: estimate?.amount ?? "",
+            estimateCurrency: estimate?.currency ?? "",
+            actualAmount: actual?.amount ?? "",
+            actualCurrency: actual?.currency ?? "",
+            actualPaidOn: detail.paidOn,
+            actualRate: detail.rate,
           }}
           dateOptions={dateOptions}
           places={places}
           searchEnabled={searchEnabled}
+          budget={budget}
+          showActual={item.done || item.actual !== null}
+          actualRateSource={item.actual?.rateSource ?? null}
           onClose={() =>
             setOpenKey((current) => (current === key ? null : current))
           }

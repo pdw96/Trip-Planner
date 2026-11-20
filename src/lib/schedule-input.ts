@@ -27,6 +27,13 @@ export type ScheduleFields = {
   googlePlaceId: string;
   googleLabel: string;
   googleCategory: string;
+  // 예산 금액 칸(#14). 일정 검증(parseScheduleInput)은 보지 않고, 예산 설정이 있을 때 budget-input 이 검증한다.
+  estimateAmount: string;
+  estimateCurrency: string;
+  actualAmount: string;
+  actualCurrency: string;
+  actualPaidOn: string;
+  actualRate: string;
 };
 
 export type GooglePlacePick = {
@@ -53,11 +60,13 @@ export type ScheduleInputResult =
   | { ok: false; errors: ScheduleFieldErrors };
 
 // savedAt: 저장에 성공할 때마다 새 값(Date.now()). 클라이언트가 바뀐 것을 보고 입력칸을 비우거나 접는다.
+// notice: 저장은 됐지만 알릴 것(예: 일정은 저장했지만 금액은 못 함, #14). 추가 양식이 새 양식 위에 보인다.
 export type ScheduleFormState = {
   values: ScheduleFields;
   errors: ScheduleFieldErrors;
   formError: string | null;
   savedAt: number | null;
+  notice?: string | null;
 };
 
 export const EMPTY_SCHEDULE_FIELDS: ScheduleFields = {
@@ -70,6 +79,12 @@ export const EMPTY_SCHEDULE_FIELDS: ScheduleFields = {
   googlePlaceId: "",
   googleLabel: "",
   googleCategory: "",
+  estimateAmount: "",
+  estimateCurrency: "",
+  actualAmount: "",
+  actualCurrency: "",
+  actualPaidOn: "",
+  actualRate: "",
 };
 
 export type AllowedDates = {
