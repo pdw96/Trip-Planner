@@ -28,6 +28,7 @@ import {
   useState,
   useTransition,
 } from "react";
+import { errorTextClass } from "@/app/ui/styles";
 import { legText, NOTICES } from "@/lib/leg-display";
 import { keepsTimeOrder } from "@/lib/schedule-order";
 import { type LineLeg, placeTravelLines } from "@/lib/travel-lines";
@@ -237,7 +238,7 @@ export function ScheduleDayItems({
   return (
     <div ref={dayRef} className="flex flex-col gap-1">
       {ordered.length === 0 ? (
-        <p className="py-2 text-sm text-zinc-500">아직 일정이 없어요</p>
+        <p className="py-2 text-sm text-sub">아직 일정이 없어요</p>
       ) : (
         <DndContext
           id={dndId}
@@ -294,16 +295,13 @@ export function ScheduleDayItems({
         </DndContext>
       )}
       {notice && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className={errorTextClass}>
           {notice}
         </p>
       )}
       {result?.ok &&
         result.notices.map((notice) => (
-          <p
-            key={notice}
-            className="text-sm text-zinc-600 break-words dark:text-zinc-400"
-          >
+          <p key={notice} className="text-sm text-sub break-words">
             ⓘ {NOTICES[notice]}
           </p>
         ))}
@@ -326,7 +324,7 @@ function TravelLine({
   return (
     <li
       aria-hidden={concealed || undefined}
-      className={`flex items-baseline gap-3 py-0.5 text-sm text-zinc-500 ${concealed ? "invisible" : ""}`}
+      className={`flex items-baseline gap-3 py-0.5 text-sm text-sub ${concealed ? "invisible" : ""}`}
     >
       <span className="w-6 shrink-0" />
       <span className="w-12 shrink-0" />
@@ -337,7 +335,7 @@ function TravelLine({
           <button
             type="button"
             onClick={onRetry}
-            className="ml-2 text-zinc-600 underline dark:text-zinc-400"
+            className="ml-2 text-sub underline"
           >
             다시
           </button>

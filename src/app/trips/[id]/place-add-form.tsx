@@ -8,9 +8,14 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  cardClass,
+  errorTextClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from "@/app/ui/styles";
 import type { PlaceFields, PlaceFormState } from "@/lib/place-input";
 import { createPlaceAction } from "../place-actions";
-import { primaryButtonClass, secondaryButtonClass } from "../styles";
 import { GooglePlaceSearch } from "./google-place-search";
 import { PlaceFieldInputs } from "./place-fields";
 
@@ -68,7 +73,7 @@ function PlaceSearch({
         }}
       />
       {pickError && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className={errorTextClass}>
           {pickError}
         </p>
       )}
@@ -120,12 +125,12 @@ function PlaceDraftForm({
     <form
       action={formAction}
       noValidate
-      className="flex flex-col gap-4 rounded-2xl border border-black/[.08] p-4 dark:border-white/[.145]"
+      className={`flex flex-col gap-4 ${cardClass}`}
     >
       {formError && (
         <p
           role="alert"
-          className="rounded-xl bg-red-600/10 px-4 py-3 text-sm text-red-600"
+          className="rounded-[10px] bg-danger/10 px-4 py-3 text-sm text-danger"
         >
           {formError}
         </p>

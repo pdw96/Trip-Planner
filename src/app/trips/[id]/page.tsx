@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
+import { secondaryButtonClass } from "@/app/ui/styles";
 import { getTrip } from "@/db/queries/trips";
 import { getCurrentUser } from "@/lib/session";
 import { formatLongRange, todayInSeoul } from "@/lib/trip-dates";
 import { DeleteTripButton } from "../delete-trip-button";
-import { secondaryButtonClass } from "../styles";
 import { DayRouteProvider } from "./day-route-store";
 import { MapSection } from "./map-section";
 import { MembersSection } from "./members-section";
@@ -14,10 +14,10 @@ import { ScheduleSection } from "./schedule-section";
 export default function TripPage({ params }: PageProps<"/trips/[id]">) {
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-4 py-10 sm:px-6">
-      <Link href="/trips" className="text-sm text-zinc-500 hover:underline">
+      <Link href="/trips" className="text-sm text-sub hover:underline">
         ← 내 여행
       </Link>
-      <Suspense fallback={<p className="text-zinc-500">불러오는 중…</p>}>
+      <Suspense fallback={<p className="text-sub">불러오는 중…</p>}>
         <TripDetail params={params} />
       </Suspense>
     </main>
@@ -53,11 +53,11 @@ async function TripDetail({
             {trip.isOwner && <DeleteTripButton tripId={trip.id} />}
           </div>
         </div>
-        <p className="text-zinc-600 break-words dark:text-zinc-400">
+        <p className="text-sub break-words">
           {trip.destination} · {formatLongRange(trip.startDate, trip.endDate)}
         </p>
         {trip.notes && (
-          <p className="whitespace-pre-wrap break-words rounded-2xl bg-black/[.04] px-5 py-4 dark:bg-white/[.06]">
+          <p className="whitespace-pre-wrap break-words rounded-[14px] bg-surface px-4 py-3">
             {trip.notes}
           </p>
         )}
@@ -69,9 +69,7 @@ async function TripDetail({
       <DayRouteProvider key={trip.id} tripId={trip.id}>
         {/* 지도는 좌표 30일 갱신으로 Google 을 부를 수 있어 따로 기다린다(머리·일정이 먼저 보이게). */}
         <Suspense
-          fallback={
-            <p className="text-sm text-zinc-500">지도를 불러오는 중…</p>
-          }
+          fallback={<p className="text-sm text-sub">지도를 불러오는 중…</p>}
         >
           <MapSection userId={user.id} trip={trip} today={today} />
         </Suspense>

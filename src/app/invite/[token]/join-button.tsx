@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { primaryButtonClass } from "../../trips/styles";
+import { errorTextClass, primaryButtonClass } from "@/app/ui/styles";
 import { joinTripAction } from "../actions";
 
 export function JoinButton({ token }: { token: string }) {
@@ -27,7 +27,7 @@ export function JoinButton({ token }: { token: string }) {
         {pending ? "참여하는 중…" : "참여"}
       </button>
       {error && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className={errorTextClass}>
           {error}
         </p>
       )}

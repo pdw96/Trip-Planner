@@ -23,7 +23,7 @@ export function DayLegs({
 }) {
   return (
     <div className="flex flex-col gap-2">
-      <ul className="flex flex-col divide-y divide-black/[.06] dark:divide-white/[.08]">
+      <ul className="flex flex-col divide-y divide-rule">
         {rows.map((row) => (
           <li
             key={row.key}
@@ -33,17 +33,17 @@ export function DayLegs({
               {row.fromMarker} → {row.toMarker}
               {row.toLabel && ` ${row.toLabel}`}
             </span>
-            <span className="text-zinc-600 dark:text-zinc-400">
+            <span className="text-sub">
               {row.text === null ? "불러오는 중…" : row.text}
             </span>
-            <span className="tabular-nums text-zinc-500">
+            <span className="tabular-nums text-sub">
               직선 {row.distanceText}
             </span>
             <a
               href={row.directionsUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="ml-auto shrink-0 text-zinc-600 hover:underline dark:text-zinc-400"
+              className="ml-auto shrink-0 text-sub hover:underline"
             >
               Google 지도 ↗
             </a>
@@ -51,10 +51,7 @@ export function DayLegs({
         ))}
       </ul>
       {notices.map((notice) => (
-        <p
-          key={notice}
-          className="text-sm text-zinc-600 break-words dark:text-zinc-400"
-        >
+        <p key={notice} className="text-sm text-sub break-words">
           ⓘ {NOTICES[notice]}
         </p>
       ))}

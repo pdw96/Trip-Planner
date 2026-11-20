@@ -8,15 +8,18 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  cardClass,
+  dangerButtonClass,
+  errorTextClass,
+  fieldAreaClass,
+  fieldClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from "@/app/ui/styles";
 import type { RateSource } from "@/lib/budget";
 import { existingPlaceIdFor } from "@/lib/schedule";
 import type { ScheduleFields, ScheduleFormState } from "@/lib/schedule-input";
-import {
-  dangerButtonClass,
-  inputClass,
-  primaryButtonClass,
-  secondaryButtonClass,
-} from "../styles";
 import { GooglePlaceSearch } from "./google-place-search";
 import { CATEGORY_ICONS, type PlaceOption } from "./map-types";
 import {
@@ -124,17 +127,17 @@ function ScheduleItemFields({
     <form
       action={formAction}
       noValidate
-      className="flex flex-col gap-4 rounded-2xl border border-black/[.08] p-4 dark:border-white/[.145]"
+      className={`flex flex-col gap-4 ${cardClass}`}
     >
       {notice && (
-        <output className="block rounded-xl bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+        <output className="block rounded-[10px] bg-warn-surface px-4 py-3 text-sm text-warn">
           {notice}
         </output>
       )}
       {state.formError && (
         <p
           role="alert"
-          className="rounded-xl bg-red-600/10 px-4 py-3 text-sm text-red-600"
+          className="rounded-[10px] bg-danger/10 px-4 py-3 text-sm text-danger"
         >
           {state.formError}
         </p>
@@ -145,7 +148,7 @@ function ScheduleItemFields({
             <select
               {...props}
               defaultValue={values.date}
-              className={inputClass}
+              className={`w-full ${fieldClass}`}
             >
               {dateOptions.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -157,7 +160,7 @@ function ScheduleItemFields({
         </Field>
       )}
       {!dateOptions && errors.date && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className={errorTextClass}>
           {errors.date}
         </p>
       )}
@@ -172,7 +175,7 @@ function ScheduleItemFields({
             {...props}
             type="time"
             defaultValue={values.time}
-            className={inputClass}
+            className={`w-full ${fieldClass}`}
           />
         )}
       </Field>
@@ -188,7 +191,7 @@ function ScheduleItemFields({
             ref={titleRef}
             type="text"
             defaultValue={values.title}
-            className={inputClass}
+            className={`w-full ${fieldClass}`}
           />
         )}
       </Field>
@@ -201,7 +204,7 @@ function ScheduleItemFields({
         error={errors.place}
       />
       {budget === null && (
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="text-sm text-sub">
           예산을 정하면 예상 비용을 적을 수 있어요(지도 칸 [전체] 탭).
         </p>
       )}
@@ -243,7 +246,7 @@ function ScheduleItemFields({
             {...props}
             rows={3}
             defaultValue={values.memo}
-            className={inputClass}
+            className={`w-full ${fieldAreaClass}`}
           />
         )}
       </Field>
@@ -352,10 +355,10 @@ function PlaceField({
         </label>
       )}
       {picked ? (
-        <div className="flex items-center gap-2 rounded-xl border border-black/[.08] px-3 py-2 dark:border-white/[.145]">
+        <div className="flex items-center gap-2 rounded-[10px] border border-field-line bg-field px-3 py-2">
           <p className="min-w-0 flex-1 break-words">
             📍 {picked.label}{" "}
-            <span className="text-sm text-zinc-500">
+            <span className="text-sm text-sub">
               · {existingId ? "가 볼 곳에 있는 장소" : "가 볼 곳에 새로 넣어요"}
             </span>
           </p>
@@ -367,7 +370,7 @@ function PlaceField({
             }}
             aria-label="고른 장소 지우기"
             aria-describedby={shownError ? errorId : undefined}
-            className="shrink-0 rounded-full px-2 py-1 text-zinc-500 hover:bg-black/[.04] dark:hover:bg-white/[.06]"
+            className="shrink-0 rounded-[8px] px-2 py-1 text-sub hover:bg-background hover:text-foreground"
           >
             ✕
           </button>
@@ -420,7 +423,7 @@ function PlaceField({
               aria-describedby={
                 shownError && placeId !== "" ? errorId : undefined
               }
-              className={inputClass}
+              className={`w-full ${fieldClass}`}
             >
               <option value="">직접 적기</option>
               {places.map((place) => (
@@ -443,13 +446,13 @@ function PlaceField({
               placeholder={hasSelect || searchEnabled ? "장소 이름" : undefined}
               aria-invalid={Boolean(shownError)}
               aria-describedby={shownError ? errorId : undefined}
-              className={inputClass}
+              className={`w-full ${fieldClass}`}
             />
           )}
         </>
       )}
       {shownError && (
-        <p id={errorId} role="alert" className="text-sm text-red-600">
+        <p id={errorId} role="alert" className={errorTextClass}>
           {shownError}
         </p>
       )}
@@ -491,7 +494,7 @@ function Field({
         "aria-describedby": error ? errorId : undefined,
       })}
       {error && (
-        <p id={errorId} role="alert" className="text-sm text-red-600">
+        <p id={errorId} role="alert" className={errorTextClass}>
           {error}
         </p>
       )}

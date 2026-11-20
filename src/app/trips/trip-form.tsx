@@ -2,10 +2,16 @@
 
 import Link from "next/link";
 import { useActionState, useLayoutEffect, useState } from "react";
+import {
+  errorTextClass,
+  fieldAreaClass,
+  fieldClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from "@/app/ui/styles";
 import type { CalendarRange } from "@/lib/calendar";
 import type { TripFields, TripFormState } from "@/lib/trip-input";
 import { DateRangePicker } from "./date-range-picker";
-import { inputClass, primaryButtonClass, secondaryButtonClass } from "./styles";
 
 type TripFormProps = {
   action: (prev: TripFormState, formData: FormData) => Promise<TripFormState>;
@@ -43,11 +49,11 @@ function TripFormFields({
   const { values, errors } = state;
 
   return (
-    <form action={formAction} noValidate className="flex flex-col gap-5">
+    <form action={formAction} noValidate className="flex flex-col gap-3.5">
       {state.formError && (
         <p
           role="alert"
-          className="rounded-xl bg-red-600/10 px-4 py-3 text-sm text-red-600"
+          className="rounded-[10px] bg-danger/10 px-4 py-3 text-sm text-danger"
         >
           {state.formError}
         </p>
@@ -58,7 +64,7 @@ function TripFormFields({
             {...props}
             type="text"
             defaultValue={values.title}
-            className={inputClass}
+            className={`w-full ${fieldClass}`}
           />
         )}
       </Field>
@@ -68,7 +74,7 @@ function TripFormFields({
             {...props}
             type="text"
             defaultValue={values.destination}
-            className={inputClass}
+            className={`w-full ${fieldClass}`}
           />
         )}
       </Field>
@@ -86,11 +92,11 @@ function TripFormFields({
             {...props}
             rows={5}
             defaultValue={values.notes}
-            className={inputClass}
+            className={`w-full ${fieldAreaClass}`}
           />
         )}
       </Field>
-      <div className="flex gap-2">
+      <div className="flex gap-2 pt-1">
         <button type="submit" disabled={pending} className={primaryButtonClass}>
           {pending ? "저장하는 중…" : submitLabel}
         </button>
@@ -124,7 +130,7 @@ function Field({
   const errorId = `${id}-error`;
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="text-sm font-medium">
+      <label htmlFor={id} className="text-[13px] font-semibold">
         {label}
       </label>
       {children({
@@ -134,7 +140,7 @@ function Field({
         "aria-describedby": error ? errorId : undefined,
       })}
       {error && (
-        <p id={errorId} role="alert" className="text-sm text-red-600">
+        <p id={errorId} role="alert" className={errorTextClass}>
           {error}
         </p>
       )}

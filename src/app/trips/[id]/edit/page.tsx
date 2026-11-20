@@ -13,8 +13,8 @@ export default function EditTripPage({
 }: PageProps<"/trips/[id]/edit">) {
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-4 py-10 sm:px-6">
-      <h1 className="text-2xl font-semibold tracking-tight">여행 고치기</h1>
-      <Suspense fallback={<p className="text-zinc-500">불러오는 중…</p>}>
+      <h1 className="text-2xl font-bold">여행 고치기</h1>
+      <Suspense fallback={<p className="text-sub">불러오는 중…</p>}>
         <EditTripForm params={params} />
       </Suspense>
     </main>

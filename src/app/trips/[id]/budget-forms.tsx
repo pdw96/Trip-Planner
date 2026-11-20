@@ -10,6 +10,13 @@ import {
   useTransition,
 } from "react";
 import {
+  dangerButtonClass,
+  errorTextClass,
+  fieldClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from "@/app/ui/styles";
+import {
   amountInputValue,
   type BudgetSettings,
   CURRENCIES,
@@ -30,13 +37,6 @@ import {
   saveBudgetSettingsAction,
   updateExtraItemAction,
 } from "../budget-actions";
-import {
-  dangerButtonClass,
-  inputBaseClass,
-  inputClass,
-  primaryButtonClass,
-  secondaryButtonClass,
-} from "../styles";
 import type { PanelExtra } from "./map-types";
 import {
   ActualMoneyFields,
@@ -50,8 +50,9 @@ import {
 
 // 예산 카드의 양식(#14): 예산 설정, 일정 밖 항목 넣기·고치기. 검증은 서버에서 하고 오류와 입력값을 돌려받는다.
 
+// 예산 카드(surface) 안에 열리므로 바탕 대신 테두리로 구분한다(PR 2 에서 카드와 함께 다시 본다).
 const formClass =
-  "flex flex-col gap-4 rounded-2xl border border-black/[.08] p-4 dark:border-white/[.145]";
+  "flex flex-col gap-4 rounded-[14px] border border-field-line bg-background p-4";
 
 // 액션 결과(state 객체)마다 다른 키. React 19 는 제출할 때마다 form.reset() 을 하므로,
 // 칸들을 결과마다 다시 만들어 돌려받은 values 로 맞춘다(schedule-item-form.tsx 와 같은 방법).
@@ -84,7 +85,7 @@ function FormError({ message }: { message: string | null }) {
   return (
     <p
       role="alert"
-      className="rounded-xl bg-red-600/10 px-4 py-3 text-sm text-red-600"
+      className="rounded-[10px] bg-danger/10 px-4 py-3 text-sm text-danger"
     >
       {message}
     </p>
@@ -94,7 +95,7 @@ function FormError({ message }: { message: string | null }) {
 function FieldError({ id, message }: { id: string; message?: string }) {
   if (!message) return null;
   return (
-    <p id={id} className="text-sm text-red-600">
+    <p id={id} className={errorTextClass}>
       {message}
     </p>
   );
@@ -181,14 +182,14 @@ function SettingsFields({ state }: { state: BudgetSettingsFormState }) {
             aria-describedby={
               errors.totalAmount ? `${id}-total-error` : undefined
             }
-            className={`${inputBaseClass} min-w-0 flex-1`}
+            className={`${fieldClass} min-w-0 flex-1`}
           />
           <select
             name="currency"
             defaultValue={values.currency}
             aria-label="예산 통화"
             onChange={(e) => setCurrency(e.target.value)}
-            className={`${inputBaseClass} w-auto shrink-0`}
+            className={`${fieldClass} w-auto shrink-0`}
           >
             {CURRENCIES.map((c) => (
               <option key={c.code} value={c.code}>
@@ -210,7 +211,7 @@ function SettingsFields({ state }: { state: BudgetSettingsFormState }) {
           defaultValue={values.localCurrency}
           onChange={(e) => setLocal(e.target.value)}
           aria-invalid={errors.localCurrency ? true : undefined}
-          className={inputClass}
+          className={`w-full ${fieldClass}`}
         >
           <option value="">없음 (예산 통화로만 적기)</option>
           {CURRENCIES.map((c) => (
@@ -237,9 +238,9 @@ function SettingsFields({ state }: { state: BudgetSettingsFormState }) {
             inputMode="decimal"
             autoComplete="off"
             aria-invalid={errors.plannedRate ? true : undefined}
-            className={inputClass}
+            className={`w-full ${fieldClass}`}
           />
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          <p className="text-sm text-sub">
             현지 통화로 적은 예상 비용을 이 환율로 합쳐요. 실제 지출은 결제일
             기준환율로 계산해요.
           </p>
@@ -379,7 +380,7 @@ function ExtraFields({
           placeholder="예: 항공권 왕복, 편의점"
           autoComplete="off"
           aria-invalid={errors.title ? true : undefined}
-          className={inputClass}
+          className={`w-full ${fieldClass}`}
         />
         <FieldError id={`${id}-title-error`} message={errors.title} />
       </div>
@@ -392,7 +393,7 @@ function ExtraFields({
           name="date"
           defaultValue={values.date}
           aria-invalid={errors.date ? true : undefined}
-          className={inputClass}
+          className={`w-full ${fieldClass}`}
         >
           {dates.map((d) => (
             <option key={d.value} value={d.value}>

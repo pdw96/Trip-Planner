@@ -13,6 +13,7 @@ import {
   useState,
   useTransition,
 } from "react";
+import { buttonClass, errorTextClass, fieldClass } from "@/app/ui/styles";
 import { type ActualMoney, formatMoney, type Money } from "@/lib/budget";
 import { placeUrl } from "@/lib/leg-display";
 import { mapsSearchUrl } from "@/lib/schedule";
@@ -31,7 +32,6 @@ import {
   setScheduleItemDoneAction,
   updateScheduleItemAction,
 } from "../schedule-actions";
-import { inputBaseClass, inputClass } from "../styles";
 import type { PlaceOption } from "./map-types";
 import {
   actualDetailValues,
@@ -134,7 +134,7 @@ export function AddScheduleItem({
       <button
         type="button"
         onClick={() => setOpenKey(key)}
-        className="self-start rounded-full px-3 py-1.5 text-sm text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
+        className={`self-start ${buttonClass("quiet", "small")}`}
       >
         + 일정 추가
       </button>
@@ -332,7 +332,7 @@ export function ScheduleItemRow({
     <li
       ref={setNodeRef}
       style={sortStyle}
-      className={`flex items-start gap-3 py-2 ${isDragging ? "relative z-10 rounded-lg bg-background shadow-lg" : ""}`}
+      className={`flex items-start gap-3 py-2 ${isDragging ? "relative z-10 rounded-[10px] bg-surface shadow-lg" : ""}`}
     >
       {sortable ? (
         <button
@@ -341,14 +341,14 @@ export function ScheduleItemRow({
           {...attributes}
           {...listeners}
           aria-label={`${name || "일정"} 순서 옮기기`}
-          className="-my-2 flex h-11 w-6 shrink-0 cursor-grab touch-none items-center justify-center rounded text-zinc-400 select-none hover:text-zinc-600 active:cursor-grabbing dark:hover:text-zinc-300"
+          className="-my-2 flex h-11 w-6 shrink-0 cursor-grab touch-none items-center justify-center rounded text-sub select-none hover:text-foreground active:cursor-grabbing"
         >
           ⠿
         </button>
       ) : (
         <span className="w-6 shrink-0" />
       )}
-      <span className="w-12 shrink-0 pt-0.5 text-sm tabular-nums text-zinc-500">
+      <span className="w-12 shrink-0 pt-0.5 text-sm tabular-nums text-sub">
         {item.time}
       </span>
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -366,13 +366,13 @@ export function ScheduleItemRow({
               href={placeHref}
               target="_blank"
               rel="noopener noreferrer"
-              className="self-start text-sm text-zinc-600 break-words hover:underline dark:text-zinc-400"
+              className="self-start text-sm text-sub break-words hover:underline"
             >
               📍 {item.title === null ? "지도에서 보기" : item.place}
             </a>
           )}
           {item.memo && (
-            <p className="text-sm whitespace-pre-wrap break-words text-zinc-600 dark:text-zinc-400">
+            <p className="text-sm whitespace-pre-wrap break-words text-sub">
               {item.memo}
             </p>
           )}
@@ -386,7 +386,7 @@ export function ScheduleItemRow({
           />
         )}
         {error && (
-          <p role="alert" className="text-sm text-red-600">
+          <p role="alert" className={errorTextClass}>
             {error}
           </p>
         )}
@@ -459,14 +459,14 @@ function ActualEntry({
           inputMode="decimal"
           autoComplete="off"
           aria-invalid={error ? true : undefined}
-          className={`${inputBaseClass} w-32 py-1.5`}
+          className={`${fieldClass} h-8 w-32`}
         />
         {choices && (
           <select
             value={currency}
             onChange={(e) => setCurrency(e.target.value)}
             aria-label="실제 지출 통화"
-            className={`${inputBaseClass} w-auto py-1.5`}
+            className={`${fieldClass} h-8 w-auto`}
           >
             {choices.map((code) => (
               <option key={code} value={code}>
@@ -478,7 +478,7 @@ function ActualEntry({
         <button
           type="submit"
           disabled={saving}
-          className="rounded-full bg-foreground px-3 py-1.5 text-sm font-medium text-background disabled:opacity-50"
+          className={buttonClass("primary", "small")}
         >
           {saving ? "저장하는 중…" : "저장"}
         </button>
@@ -486,13 +486,13 @@ function ActualEntry({
           type="button"
           onClick={onClose}
           disabled={saving}
-          className="rounded-full px-3 py-1.5 text-sm text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
+          className={buttonClass("quiet", "small")}
         >
           건너뛰기
         </button>
       </div>
       {error && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className={errorTextClass}>
           {error}
         </p>
       )}

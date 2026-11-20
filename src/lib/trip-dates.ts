@@ -75,3 +75,22 @@ export function formatLongRange(startDate: string, endDate: string): string {
   const endText = `${end.year !== start.year ? `${end.year}년 ` : ""}${end.month}월 ${end.day}일`;
   return `${startText}${SEPARATOR}${endText}`;
 }
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function utcDay(date: string): number {
+  const { year, month, day } = parts(date);
+  return Date.UTC(year, month - 1, day);
+}
+
+// 여행 목록의 남은 날 표시(#53). 지난 여행은 null.
+export function tripCountdown(
+  startDate: string,
+  endDate: string,
+  today: string,
+): string | null {
+  if (endDate < today) return null;
+  if (startDate <= today) return "여행 중";
+  const days = Math.round((utcDay(startDate) - utcDay(today)) / DAY_MS);
+  return days === 1 ? "내일 출발" : `${days}일 남음`;
+}

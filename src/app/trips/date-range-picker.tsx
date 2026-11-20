@@ -2,6 +2,11 @@
 
 import { Suspense, use, useEffect, useMemo, useRef, useState } from "react";
 import {
+  errorTextClass,
+  fieldClass,
+  primaryButtonClass,
+} from "@/app/ui/styles";
+import {
   type CalendarRange,
   formatSelection,
   initialSelection,
@@ -12,7 +17,6 @@ import {
   type Selection,
   weekdayName,
 } from "@/lib/calendar";
-import { primaryButtonClass } from "./styles";
 
 // 숙소 예약 앱처럼 달력 하나에서 시작일과 끝일을 차례로 고른다.
 // 고른 값은 숨은 입력(startDate, endDate)으로 양식에 실리고, 검증은 여전히 서버가 한다.
@@ -62,7 +66,7 @@ export function DateRangePicker({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor="trip-dates" className="text-sm font-medium">
+      <label htmlFor="trip-dates" className="text-[13px] font-semibold">
         여행 날짜
       </label>
       <button
@@ -72,14 +76,14 @@ export function DateRangePicker({
         aria-haspopup="dialog"
         aria-invalid={Boolean(error)}
         aria-describedby={error ? errorId : undefined}
-        className="w-full rounded-xl border border-black/[.15] px-4 py-2.5 text-left aria-[invalid=true]:border-red-600 dark:border-white/[.2]"
+        className={`w-full ${fieldClass} text-left`}
       >
-        {summary || <span className="text-zinc-500">날짜를 선택해 주세요</span>}
+        {summary || <span className="text-sub">날짜를 선택해 주세요</span>}
       </button>
       <input type="hidden" name="startDate" value={applied.startDate} />
       <input type="hidden" name="endDate" value={applied.endDate} />
       {error && (
-        <p id={errorId} role="alert" className="text-sm text-red-600">
+        <p id={errorId} role="alert" className={errorTextClass}>
           {error}
         </p>
       )}
@@ -143,16 +147,16 @@ function PickerSheet({
 
   return (
     <>
-      <div className="flex flex-col gap-3 border-b border-black/[.08] px-5 pt-5 pb-3 dark:border-white/[.145]">
+      <div className="flex flex-col gap-3 border-b border-rule px-5 pt-5 pb-3">
         <div className="flex items-center justify-between">
-          <h2 id="trip-dates-title" className="text-lg font-semibold">
+          <h2 id="trip-dates-title" className="text-lg font-bold">
             여행 날짜 선택
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="닫기"
-            className="flex size-9 items-center justify-center rounded-full text-xl hover:bg-black/[.06] dark:hover:bg-white/[.1]"
+            className="flex size-9 items-center justify-center rounded-[8px] text-xl hover:bg-surface"
           >
             ✕
           </button>
@@ -160,14 +164,12 @@ function PickerSheet({
         <p aria-live="polite" className="min-h-6 font-medium">
           {summary || "시작 날짜를 골라 주세요"}
           {draft.start && !draft.end && (
-            <span className="ml-2 text-sm text-zinc-500">
-              끝 날짜를 골라 주세요
-            </span>
+            <span className="ml-2 text-sm text-sub">끝 날짜를 골라 주세요</span>
           )}
         </p>
-        <div className="grid grid-cols-7 text-center text-sm text-zinc-500">
+        <div className="grid grid-cols-7 text-center text-sm text-sub">
           {WEEKDAY_HEADER.map((name, i) => (
-            <span key={name} className={i === 0 ? "text-red-600" : undefined}>
+            <span key={name} className={i === 0 ? "text-danger" : undefined}>
               {name}
             </span>
           ))}
@@ -199,7 +201,7 @@ function PickerSheet({
         </Suspense>
       </div>
 
-      <div className="border-t border-black/[.08] p-4 dark:border-white/[.145]">
+      <div className="border-t border-rule p-4">
         <button
           type="button"
           onClick={onApply}
@@ -296,11 +298,11 @@ function DayButton({
 
   // 시작~끝 사이는 띠로 칠한다. 시작은 오른쪽 절반, 끝은 왼쪽 절반만.
   const band = inside
-    ? "bg-zinc-200 dark:bg-zinc-800"
+    ? "bg-surface"
     : isStart && end !== null && !sameDay
-      ? "bg-linear-to-r from-transparent from-50% to-zinc-200 to-50% dark:to-zinc-800"
+      ? "bg-linear-to-r from-transparent from-50% to-surface to-50%"
       : isEnd && !sameDay
-        ? "bg-linear-to-r from-zinc-200 from-50% to-transparent to-50% dark:from-zinc-800"
+        ? "bg-linear-to-r from-surface from-50% to-transparent to-50%"
         : "";
 
   return (
@@ -310,8 +312,8 @@ function DayButton({
         onClick={() => onPick(date)}
         aria-label={label}
         aria-pressed={selected}
-        className={`flex h-14 w-12 flex-col items-center justify-center rounded-xl ${
-          selected ? "bg-foreground text-background" : red ? "text-red-600" : ""
+        className={`flex h-14 w-12 flex-col items-center justify-center rounded-[10px] ${
+          selected ? "bg-foreground text-on-ink" : red ? "text-danger" : ""
         } ${date === today ? "font-bold underline underline-offset-4" : ""}`}
       >
         <span>{day}</span>

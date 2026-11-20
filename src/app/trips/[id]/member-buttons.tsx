@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { leaveTripAction, removeMemberAction } from "../member-actions";
 
 const linkButtonClass =
-  "shrink-0 text-sm text-red-600 hover:underline disabled:opacity-50";
+  "shrink-0 text-sm text-danger hover:underline disabled:opacity-50";
 
 export function RemoveMemberButton({
   tripId,
@@ -43,7 +43,7 @@ export function RemoveMemberButton({
         {pending ? "내보내는 중…" : "내보내기"}
       </button>
       {error && (
-        <span role="alert" className="text-xs text-red-600">
+        <span role="alert" className="text-xs text-danger">
           {error}
         </span>
       )}
@@ -80,7 +80,7 @@ export function LeaveTripButton({ tripId }: { tripId: string }) {
         {pending ? "나가는 중…" : "나가기"}
       </button>
       {error && (
-        <span role="alert" className="text-xs text-red-600">
+        <span role="alert" className="text-xs text-danger">
           {error}
         </span>
       )}
