@@ -40,6 +40,7 @@ import {
   currencyLabel,
 } from "./money-fields";
 import { type DateOption, ScheduleItemForm } from "./schedule-item-form";
+import { useSelectedDay } from "./selected-day";
 
 export type { DateOption };
 
@@ -61,6 +62,12 @@ export type RowItem = {
 
 const ERROR_VISIBLE_MS = 4000;
 
+// 노선 줄 칸: 시각 | 레일·역 | 내용 | 손잡이. 이동 줄·일정 추가 줄도 같은 칸을 쓴다(schedule-day-items).
+export const ROW_GRID =
+  "grid grid-cols-[3.25rem_2.5rem_minmax(0,1fr)_2.5rem] items-start gap-x-2";
+// 레일 토막. 색은 날 묶음이 물려준 --line(노선 색, 기간 밖은 회색).
+export const RAIL = "absolute left-1/2 w-1.5 -translate-x-1/2 bg-(--line)";
+
 // 입력칸은 화면 전체에서 하나만 열린다. 키: "add:<날짜>" 또는 "edit:<일정 id>".
 // places: 이 여행의 장소(숙소 먼저). 양식의 장소 고르기와 이어진 장소의 링크에 쓴다.
 // searchEnabled: 장소 칸에서 Google 검색을 보일지(브라우저 키가 있을 때, #35).
@@ -71,6 +78,9 @@ type OpenState = {
   places: PlaceOption[];
   searchEnabled: boolean;
   budget: BudgetCurrencies | null;
+  // 고른 날을 보다가 일정의 날짜를 옮기면 그 날 목록 아래에 잠깐 보이는 안내(#53 §5.4.1).
+  moved: { fromDate: string; text: string } | null;
+  setMoved: (moved: { fromDate: string; text: string } | null) => void;
 };
 
 const OpenContext = createContext<OpenState | null>(null);
@@ -97,6 +107,7 @@ export function ScheduleEditorProvider({
   children: React.ReactNode;
 }) {
   const [openKey, setOpenKey] = useState<string | null>(null);
+  const [moved, setMoved] = useState<OpenState["moved"]>(null);
   useLayoutEffect(() => () => setOpenKey(null), []);
   const body = (
     <OpenContext
@@ -106,6 +117,8 @@ export function ScheduleEditorProvider({
         places,
         searchEnabled: browserKey !== null,
         budget,
+        moved,
+        setMoved,
       }}
     >
       {children}
@@ -117,6 +130,20 @@ export function ScheduleEditorProvider({
       {body}
     </APIProvider>
   );
+}
+
+const MOVED_VISIBLE_MS = 4000;
+
+// 이 날에서 다른 날로 옮긴 일정의 안내 글자(잠깐만). 없으면 null.
+export function useMovedNotice(date: string): string | null {
+  const { moved, setMoved } = useOpen();
+  const mine = moved?.fromDate === date ? moved : null;
+  useEffect(() => {
+    if (!mine) return;
+    const timer = setTimeout(() => setMoved(null), MOVED_VISIBLE_MS);
+    return () => clearTimeout(timer);
+  }, [mine, setMoved]);
+  return mine?.text ?? null;
 }
 
 export function AddScheduleItem({
@@ -134,9 +161,16 @@ export function AddScheduleItem({
       <button
         type="button"
         onClick={() => setOpenKey(key)}
-        className={`self-start ${buttonClass("quiet", "small")}`}
+        className={`${ROW_GRID} min-h-10 w-full items-center rounded-[10px] text-left hover:bg-surface`}
       >
-        + 일정 추가
+        <span />
+        <span className="flex justify-center">
+          <span
+            aria-hidden
+            className="size-5 rounded-full border-2 border-dashed border-field-line"
+          />
+        </span>
+        <span className="text-sm text-sub">+ 일정 추가</span>
       </button>
     );
   }
@@ -154,18 +188,25 @@ export function AddScheduleItem({
 }
 
 // sortable: 손잡이로 끌 수 있는가(그날 일정이 둘 이상, #41). SortableContext 안에서만 쓴다.
+// railTop·railBottom: 역 위·아래로 노선(레일)을 이어 그릴지. 첫 역 위·마지막 역 아래는 비운다.
 export function ScheduleItemRow({
   tripId,
   item,
   dateOptions,
   sortable,
+  railTop,
+  railBottom,
 }: {
   tripId: string;
   item: RowItem;
   dateOptions: DateOption[];
   sortable: boolean;
+  railTop: boolean;
+  railBottom: boolean;
 }) {
-  const { openKey, setOpenKey, places, searchEnabled, budget } = useOpen();
+  const { openKey, setOpenKey, places, searchEnabled, budget, setMoved } =
+    useOpen();
+  const { selected } = useSelectedDay();
   const key = `edit:${item.id}`;
   const editing = openKey === key;
   // 완료 체크칸을 켜면 열리는 실제 지출 칸(#14 §5.7.3).
@@ -270,6 +311,15 @@ export function ScheduleItemRow({
     // 저장하는 사이 다른 입력칸을 열었으면 그것은 그대로 둔다.
     if (next.savedAt !== prev.savedAt) {
       setOpenKey((current) => (current === key ? null : current));
+      // 그날만 보고 있는데 다른 날로 옮겼으면 줄이 사라지므로 어디로 갔는지 알린다.
+      const to = formData.get("date");
+      const target = dateOptions.find((option) => option.value === to);
+      if (selected !== "all" && to !== item.date && target?.dayNumber) {
+        setMoved({
+          fromDate: item.date,
+          text: `${target.dayNumber}일차로 옮겼어요`,
+        });
+      }
     }
     return next;
   }
@@ -327,37 +377,44 @@ export function ScheduleItemRow({
   // 제목이 없으면 장소 이름이 제목 자리에 온다(#35).
   const name = item.title ?? item.place ?? "";
 
+  // 노선 한 역(#53 설계 §5.4 6): 시각 | 레일·역 | 제목·장소·메모 | 손잡이.
+  // 역 동그라미가 완료 체크칸이다(모양만 바꾼 input checkbox 라 키보드·화면 읽기는 그대로).
   // 손잡이로만 끈다(줄을 눌러 고치기·줄 위 터치 스크롤과 겹치지 않게). 손잡이에만 touch-action: none.
   return (
     <li
       ref={setNodeRef}
       style={sortStyle}
-      className={`flex items-start gap-3 py-2 ${isDragging ? "relative z-10 rounded-[10px] bg-surface shadow-lg" : ""}`}
+      className={`${ROW_GRID} relative py-1 ${isDragging ? "z-10 rounded-[10px] bg-surface shadow-lg" : ""}`}
     >
-      {sortable ? (
-        <button
-          type="button"
-          ref={setActivatorNodeRef}
-          {...attributes}
-          {...listeners}
-          aria-label={`${name || "일정"} 순서 옮기기`}
-          className="-my-2 flex h-11 w-6 shrink-0 cursor-grab touch-none items-center justify-center rounded text-sub select-none hover:text-foreground active:cursor-grabbing"
-        >
-          ⠿
-        </button>
+      {item.time ? (
+        <span className="pt-2 text-[15px] font-bold tabular-nums">
+          {item.time}
+        </span>
       ) : (
-        <span className="w-6 shrink-0" />
+        <span className="pt-2.5 text-xs text-sub">시각 없음</span>
       )}
-      <span className="w-12 shrink-0 pt-0.5 text-sm tabular-nums text-sub">
-        {item.time}
+      <span className="relative flex justify-center self-stretch">
+        {railTop && <span aria-hidden className={`${RAIL} top-0 h-6`} />}
+        {railBottom && (
+          <span aria-hidden className={`${RAIL} top-6 bottom-0`} />
+        )}
+        <label className="relative z-10 flex size-10 cursor-pointer items-center justify-center">
+          <input
+            type="checkbox"
+            checked={done}
+            onChange={toggleDone}
+            aria-label={`${name} 완료`}
+            className="size-5 cursor-pointer appearance-none rounded-full border-[3px] border-(--line) bg-background checked:bg-(--line)"
+          />
+        </label>
       </span>
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        {/* 완료된 일정은 흐리게. 완료 뒤에 여는 실제 지출 칸은 흐리지 않는다(#14 리뷰). */}
-        <div className={`flex flex-col gap-0.5 ${done ? "opacity-50" : ""}`}>
+      <div className="flex min-w-0 flex-col gap-0.5 pt-1.5">
+        {/* 완료된 일정은 보조 색. 완료 뒤에 여는 실제 지출 칸은 그대로 둔다(#14 리뷰). */}
+        <div className={`flex flex-col gap-0.5 ${done ? "text-sub" : ""}`}>
           <button
             type="button"
             onClick={() => setOpenKey(key)}
-            className={`self-start text-left font-medium break-words hover:underline ${done ? "line-through" : ""}`}
+            className="self-start text-left font-medium break-words hover:underline"
           >
             {name}
           </button>
@@ -391,13 +448,20 @@ export function ScheduleItemRow({
           </p>
         )}
       </div>
-      <input
-        type="checkbox"
-        checked={done}
-        onChange={toggleDone}
-        aria-label={`${name} 완료`}
-        className="mt-1 size-5 shrink-0 accent-foreground"
-      />
+      {sortable ? (
+        <button
+          type="button"
+          ref={setActivatorNodeRef}
+          {...attributes}
+          {...listeners}
+          aria-label={`${name || "일정"} 순서 옮기기`}
+          className="flex h-10 w-full cursor-grab touch-none items-center justify-center rounded text-sub select-none hover:text-foreground active:cursor-grabbing"
+        >
+          ⠿
+        </button>
+      ) : (
+        <span />
+      )}
     </li>
   );
 }

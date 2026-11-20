@@ -29,7 +29,12 @@ import {
   MoneyField,
 } from "./money-fields";
 
-export type DateOption = { value: string; label: string };
+// dayNumber: 여행 기간 안 날이면 N일차 번호, 기간 밖 날짜면 null.
+export type DateOption = {
+  value: string;
+  label: string;
+  dayNumber: number | null;
+};
 
 type ScheduleItemFormProps = {
   action: (

@@ -37,8 +37,11 @@ import { reorderScheduleItemsAction } from "../schedule-actions";
 import { useDayRoute } from "./day-route-store";
 import {
   type DateOption,
+  RAIL,
+  ROW_GRID,
   type RowItem,
   ScheduleItemRow,
+  useMovedNotice,
 } from "./schedule-editor";
 import { useDwellVisible } from "./use-dwell-visible";
 
@@ -232,6 +235,7 @@ export function ScheduleDayItems({
     ordered.map((item) => item.id),
     reordering ? [] : lines,
   );
+  const moved = useMovedNotice(date);
 
   // 감싸개는 하나로 늘 그린다(빈 날에 첫 일정을 넣어도 같은 요소를 계속 지켜보도록).
   // 일정 줄은 일정 id 로 묶어(Fragment key) 앞에 일정이 들어오거나 빠져도 뒤 줄이 다시 마운트되지 않게 한다.
@@ -261,7 +265,7 @@ export function ScheduleDayItems({
             strategy={verticalListSortingStrategy}
           >
             <ul className="flex flex-col">
-              {ordered.map((item) => {
+              {ordered.map((item, index) => {
                 const line = placed.before.get(item.id);
                 return (
                   <Fragment key={item.id}>
@@ -278,6 +282,10 @@ export function ScheduleDayItems({
                       item={item}
                       dateOptions={dateOptions}
                       sortable={sortable}
+                      railTop={index > 0 || line !== undefined}
+                      railBottom={
+                        index < ordered.length - 1 || placed.after !== null
+                      }
                     />
                   </Fragment>
                 );
@@ -299,6 +307,7 @@ export function ScheduleDayItems({
           {notice}
         </p>
       )}
+      {moved && <output className="block text-sm text-sub">{moved}</output>}
       {result?.ok &&
         result.notices.map((notice) => (
           <p key={notice} className="text-sm text-sub break-words">
@@ -309,6 +318,7 @@ export function ScheduleDayItems({
   );
 }
 
+// 역 사이 구간. 레일은 끊김 없이 이어지고, 글자는 본문 색(노선 색 글자는 대비가 모자라 레일이 색을 맡는다).
 // concealed: 자리는 차지하되 보이지 않음(끄는 동안).
 function TravelLine({
   line,
@@ -324,13 +334,15 @@ function TravelLine({
   return (
     <li
       aria-hidden={concealed || undefined}
-      className={`flex items-baseline gap-3 py-0.5 text-sm text-sub ${concealed ? "invisible" : ""}`}
+      className={`${ROW_GRID} ${concealed ? "invisible" : ""}`}
     >
-      <span className="w-6 shrink-0" />
-      <span className="w-12 shrink-0" />
-      <span className="min-w-0 flex-1 break-words">
-        ↓ {caption && `${caption} · `}
-        {line.text}
+      <span />
+      <span className="relative self-stretch">
+        <span aria-hidden className={`${RAIL} top-0 bottom-0`} />
+      </span>
+      <span className="min-w-0 py-1.5 text-sm break-words">
+        {caption && <span className="text-sub">{caption} · </span>}
+        <span className="font-medium">{line.text}</span>
         {line.failed && (
           <button
             type="button"
@@ -340,15 +352,16 @@ function TravelLine({
             다시
           </button>
         )}
+        <span className="text-sub"> · </span>
+        <a
+          href={line.directionsUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="whitespace-nowrap text-sub hover:underline"
+        >
+          길찾기 ↗
+        </a>
       </span>
-      <a
-        href={line.directionsUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="shrink-0 hover:underline"
-      >
-        길찾기 ↗
-      </a>
     </li>
   );
 }
