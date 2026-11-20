@@ -9,7 +9,7 @@ import {
   type RateSource,
   rateInputValue,
 } from "@/lib/budget";
-import { inputClass } from "../styles";
+import { inputBaseClass, inputClass } from "../styles";
 
 // 예산 카드와 일정 양식이 같이 쓰는 금액 칸(#14). 통화는 그 여행의 예산·현지 통화 둘 중 하나만 고른다.
 
@@ -109,7 +109,7 @@ export function MoneyField({
           autoComplete="off"
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? errorId : undefined}
-          className={`${inputClass} min-w-0 flex-1`}
+          className={`${inputBaseClass} min-w-0 flex-1`}
         />
         {choices ? (
           <select
@@ -117,7 +117,7 @@ export function MoneyField({
             defaultValue={currency}
             aria-label={`${label} 통화`}
             onChange={(e) => onCurrencyChange?.(e.target.value)}
-            className={`${inputClass} w-auto shrink-0`}
+            className={`${inputBaseClass} w-auto shrink-0`}
           >
             {choices.map((code) => (
               <option key={code} value={code}>
@@ -175,7 +175,7 @@ export function ActualRateFields({
           name="actualPaidOn"
           defaultValue={paidOn}
           aria-invalid={errors.actualPaidOn ? true : undefined}
-          className={`${inputClass} w-auto py-1.5`}
+          className={`${inputBaseClass} w-auto py-1.5`}
         />
         {errors.actualPaidOn && (
           <p className="text-red-600">{errors.actualPaidOn}</p>
@@ -197,7 +197,7 @@ export function ActualRateFields({
           autoComplete="off"
           placeholder="결제일 기준환율로 자동"
           aria-invalid={errors.actualRate ? true : undefined}
-          className={`${inputClass} w-48 py-1.5`}
+          className={`${inputBaseClass} w-48 py-1.5`}
         />
         {errors.actualRate && (
           <p className="text-red-600">{errors.actualRate}</p>

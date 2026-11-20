@@ -31,7 +31,7 @@ import {
   setScheduleItemDoneAction,
   updateScheduleItemAction,
 } from "../schedule-actions";
-import { inputClass } from "../styles";
+import { inputBaseClass, inputClass } from "../styles";
 import type { PlaceOption } from "./map-types";
 import {
   actualDetailValues,
@@ -459,14 +459,14 @@ function ActualEntry({
           inputMode="decimal"
           autoComplete="off"
           aria-invalid={error ? true : undefined}
-          className={`${inputClass} w-32 py-1.5`}
+          className={`${inputBaseClass} w-32 py-1.5`}
         />
         {choices && (
           <select
             value={currency}
             onChange={(e) => setCurrency(e.target.value)}
             aria-label="실제 지출 통화"
-            className={`${inputClass} w-auto py-1.5`}
+            className={`${inputBaseClass} w-auto py-1.5`}
           >
             {choices.map((code) => (
               <option key={code} value={code}>
