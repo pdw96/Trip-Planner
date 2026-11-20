@@ -192,7 +192,7 @@ function PanelBody({
           place: item,
           distance:
             item.id === overviewBase.id
-              ? "기준점"
+              ? "기준"
               : meters === null
                 ? null
                 : formatDistance(meters),
@@ -586,7 +586,7 @@ function DayBasePicker({
   );
 }
 
-// [전체] 보기의 기준점. 저장하지 않는다(§5.5).
+// [전체] 보기의 가까운 순 기준. 저장하지 않는다(§5.5). 일정 동선의 기준점(N일차 탭)과 헷갈리지 않게 이름을 달리한다(#44).
 function OverviewBasePicker({
   candidates,
   value,
@@ -600,7 +600,7 @@ function OverviewBasePicker({
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
       <label htmlFor={id} className="text-sm font-medium">
-        기준점
+        가까운 순 기준
       </label>
       <select
         id={id}
@@ -615,7 +615,9 @@ function OverviewBasePicker({
           </option>
         ))}
       </select>
-      <span className="text-xs text-zinc-500">고르면 가까운 순으로 보여요</span>
+      <span className="text-xs text-zinc-500">
+        고르면 가까운 순으로 보여요. 일정 동선의 기준점은 N일차 탭에서 정해요.
+      </span>
     </div>
   );
 }

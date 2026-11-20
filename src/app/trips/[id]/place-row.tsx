@@ -36,7 +36,7 @@ export function PlaceRow({
   tripId: string;
   place: PanelPlace;
   highlighted: boolean;
-  // 전체 보기에서 기준점을 골랐을 때만: "기준점" 또는 "3.4km".
+  // 전체 보기에서 가까운 순 기준을 골랐을 때만: "기준" 또는 "3.4km".
   distance: string | null;
   editing: boolean;
   onEdit: () => void;
