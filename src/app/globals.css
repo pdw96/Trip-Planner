@@ -1,8 +1,29 @@
 @import "tailwindcss";
 
+/* 디자인 토큰(#53 설계 §5.1). 색은 여기서만 정하고, 다크 모드는 아래 media 블록에서 값만 바꾼다.
+   컴포넌트는 bg-surface·text-sub 같은 토큰 유틸리티를 쓰고 dark: 클래스를 쓰지 않는다. */
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #1b1d21;
+  --surface: #f3f4f7;
+  --on-ink: #ffffff;
+  --sub: #6a707b;
+  --rule: #e6e8ed;
+  --field: #ffffff;
+  --field-line: #cfd3da;
+  --danger: #c8322f;
+  --ok: #1d7f45;
+  --warn: #8a5a00;
+  --warn-surface: rgb(232 160 32 / 0.14);
+  /* 날짜(노선) 색. 날짜 표시에만 쓴다(설계 §5.6). */
+  --line-1: #1f9a52;
+  --line-2: #ef7d1a;
+  --line-3: #2a6fd6;
+  --line-4: #8a4fd0;
+  --line-5: #0e97a8;
+  --line-6: #d6336c;
+  --line-7: #9a7420;
+  --line-8: #5a6b8c;
   /* 고르기 목록·날짜 칸 같은 브라우저 기본 칸도 다크 모드를 따르게(#44) */
   color-scheme: light dark;
 }
@@ -10,19 +31,59 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-surface: var(--surface);
+  --color-on-ink: var(--on-ink);
+  --color-sub: var(--sub);
+  --color-rule: var(--rule);
+  --color-field: var(--field);
+  --color-field-line: var(--field-line);
+  --color-danger: var(--danger);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-warn-surface: var(--warn-surface);
+  --color-line-1: var(--line-1);
+  --color-line-2: var(--line-2);
+  --color-line-3: var(--line-3);
+  --color-line-4: var(--line-4);
+  --color-line-5: var(--line-5);
+  --color-line-6: var(--line-6);
+  --color-line-7: var(--line-7);
+  --color-line-8: var(--line-8);
+  --font-sans:
+    var(--font-plex-kr), "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #121418;
+    --foreground: #eceef2;
+    --surface: #1c1f25;
+    --on-ink: #121418;
+    --sub: #9aa1ad;
+    --rule: #2b2f37;
+    --field: #16181d;
+    --field-line: #3a3f49;
+    --danger: #f06a65;
+    --ok: #4cc27c;
+    --warn: #f0c060;
+    --warn-surface: rgb(240 192 96 / 0.14);
+    --line-1: #33b46a;
+    --line-2: #f39234;
+    --line-3: #4b8ef0;
+    --line-4: #a273e6;
+    --line-5: #25b3c4;
+    --line-6: #ea5a8c;
+    --line-7: #c39a3c;
+    --line-8: #7d8fb3;
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+}
+
+:focus-visible {
+  outline: 2px solid var(--foreground);
+  outline-offset: 2px;
 }
