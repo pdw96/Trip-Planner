@@ -217,6 +217,7 @@ function ScheduleItemFields({
             currencies={budget}
             error={errors.estimateAmount ?? errors.estimateCurrency}
           />
+          {showActual && <input type="hidden" name="actualShown" value="1" />}
           {showActual && (
             <ActualMoneyFields
               idPrefix={idPrefix}

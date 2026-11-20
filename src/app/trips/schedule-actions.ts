@@ -420,8 +420,11 @@ export async function updateScheduleItemAction(
     currentDate: item.date,
   });
   // 실제 지출 칸은 완료됐거나 실제가 이미 있는 일정의 고치기 양식에만 있다(§5.7.2).
+  // 그 칸을 실제로 그린 양식만 표시(actualShown=1)를 보낸다. 칸이 없던 낡은 양식(다른 탭에서 완료·실제를 적기 전에 연 것)을
+  // 저장해도 실제를 지우지 않도록, DB 상태가 아니라 보낸 양식을 기준으로 읽는다(Codex 리뷰).
+  const actualFieldSent = formData.get("actualShown") === "1";
   const money = await parseMoney(user.id, tripId, values, {
-    actualShown: item.done || (budgetRow?.actualAmount ?? null) !== null,
+    actualShown: actualFieldSent,
     defaultPaidOn: parsed.ok ? parsed.value.date : item.date,
   });
   if (!parsed.ok || !money.ok) {
