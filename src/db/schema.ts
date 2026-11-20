@@ -5,6 +5,7 @@ import {
   date,
   doublePrecision,
   index,
+  integer,
   pgTable,
   primaryKey,
   text,
@@ -184,6 +185,9 @@ export const scheduleItems = pgTable(
     }),
     memo: text("memo"),
     done: boolean("done").notNull().default(false),
+    // 그날 안의 순서(작을수록 위). 비어 있으면 그날은 아직 순서를 저장한 적이 없어 시각 순 정렬을 쓴다(#41).
+    // 순서에 영향을 주는 쓰기는 그날 전체를 0, 1, 2, … 로 다시 쓴다.
+    position: integer("position"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
