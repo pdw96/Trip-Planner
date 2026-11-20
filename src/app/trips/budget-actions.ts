@@ -33,6 +33,7 @@ import { getCurrentUser } from "@/lib/session";
 import { todayInSeoul } from "@/lib/trip-dates";
 import { moneyParsers, resolveActualRate } from "./budget-rate";
 import {
+  ACTUAL_NEEDS_DONE,
   BUDGET_CURRENCY_LOCKED,
   BUDGET_ITEM_LIMIT,
   BUDGET_NOT_SET,
@@ -41,6 +42,8 @@ import {
 
 // 예산 Server Action(#14). tripId·itemId 는 bind 로 오지만 클라이언트가 바꿀 수 있는 값이다.
 // 쿼리의 uuid 검사와 여행 접근 조건(userId 범위)이 막는다. 남의 것과 없는 것은 똑같이 찾을 수 없음.
+// 금액 검증에는 그 여행의 통화(예산 설정)가 필요해, 설정·일정을 userId 범위 쿼리로 읽은 뒤 필드를 검증한다
+// (CLAUDE.md 순서의 예외. 읽기만 하고, 쓰기는 검증 뒤에 한다).
 
 type Errors<T> = Partial<Record<keyof T, string>>;
 
@@ -285,6 +288,10 @@ export async function setScheduleItemActualAction(
     ]);
     if (!item) return { ok: false, error: SAVE_FAILED };
     if (!settings) return { ok: false, error: BUDGET_NOT_SET };
+    // 실제 지출은 완료된 일정에만(완료 저장이 실패했는데 칸이 열려 있던 경우 등).
+    if (!item.done && amountText.trim() !== "") {
+      return { ok: false, error: ACTUAL_NEEDS_DONE };
+    }
     const previous = row ? actualOf(row) : null;
     const parsed = parseAmountFields(
       {

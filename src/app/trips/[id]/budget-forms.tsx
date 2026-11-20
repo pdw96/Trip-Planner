@@ -225,10 +225,14 @@ function SettingsFields({ state }: { state: BudgetSettingsFormState }) {
           <label htmlFor={`${id}-rate`} className="text-sm font-medium">
             예정 환율 {rateUnitLabel(local, currency)}
           </label>
+          {/* 현지 통화를 바꾸면 환율 단위가 달라지므로 칸을 비운다(예전 글자가 새 단위로 저장되지 않게). */}
           <input
+            key={local}
             id={`${id}-rate`}
             name="plannedRate"
-            defaultValue={values.plannedRate}
+            defaultValue={
+              local === values.localCurrency ? values.plannedRate : ""
+            }
             inputMode="decimal"
             autoComplete="off"
             aria-invalid={errors.plannedRate ? true : undefined}

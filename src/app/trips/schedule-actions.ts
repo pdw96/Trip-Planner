@@ -560,6 +560,12 @@ export async function setScheduleItemDoneAction(
 
   let updated: boolean;
   try {
+    // 실제 지출이 있는 일정의 완료 풀기는 확인 뒤 undoScheduleItemWithActualAction 으로만 한다(#14 §5.7.3).
+    // 낡은 화면이 실제를 모른 채 보낸 요청은 거절해, 완료가 아닌 일정에 실제가 남지 않게 한다.
+    if (!done) {
+      const row = await getBudgetItemForSchedule(user.id, tripId, itemId);
+      if (row?.actualAmount != null) return { ok: false };
+    }
     updated = await setScheduleItemDone(user.id, tripId, itemId, done);
   } catch {
     return { ok: false };

@@ -320,3 +320,13 @@ test("환율 결정", () => {
     { kind: "planned" },
   );
 });
+
+test("환율 정수부는 10자리까지(numeric(20,10))", () => {
+  assert.deepEqual(parseRateInput("9999999999", 1), {
+    ok: true,
+    rate: "9999999999",
+  });
+  assert.equal(parseRateInput("99999999999", 1).error, "환율이 너무 커요.");
+  assert.equal(parseRateInput("9999999999.5", 1).ok, true);
+  assert.equal(parseRateInput("99999999999", 100).ok, true);
+});

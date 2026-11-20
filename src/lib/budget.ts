@@ -159,6 +159,7 @@ const B2 = BigInt(2);
 const B10 = BigInt(10);
 const MAX_AMOUNT_BIG = B10 ** BigInt(12);
 const RATE_MAX_DECIMALS = 10;
+const RATE_MAX_INT_DIGITS = 10;
 
 export type Money = { amount: number; currency: string };
 export type RateSource = "ecb" | "manual" | "planned";
@@ -282,8 +283,13 @@ export function parseRateInput(
   }
   const shifted = shiftDecimal(parts.int, parts.frac, -unitPlaces(unit));
   const rate = canonical(shifted.int, shifted.frac);
-  if ((rate.split(".")[1] ?? "").length > RATE_MAX_DECIMALS) {
+  const [int, frac = ""] = rate.split(".");
+  if (frac.length > RATE_MAX_DECIMALS) {
     return { ok: false, error: RATE_INVALID };
+  }
+  // DB 칸이 numeric(20,10) 이라 정수부는 10자리까지다.
+  if (int.length > RATE_MAX_INT_DIGITS) {
+    return { ok: false, error: "환율이 너무 커요." };
   }
   return { ok: true, rate };
 }

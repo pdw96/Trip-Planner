@@ -240,7 +240,11 @@ export function ScheduleItemRow({
         (result) => result.ok,
         () => false,
       );
-      if (!ok) setError(SAVE_FAILED);
+      if (!ok) {
+        setError(SAVE_FAILED);
+        // 완료가 되돌아갔으니 실제 지출 칸도 닫는다(#14 리뷰).
+        closeActual();
+      }
     });
   }
 
