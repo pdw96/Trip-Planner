@@ -6,6 +6,8 @@ export type SortableItem = {
   date: string;
   time: string | null;
   createdAt: Date;
+  // 그날 안의 순서(#41). 비어 있으면 아직 순서를 저장하지 않은 날이라 시각 순을 쓴다.
+  position: number | null;
 };
 
 export type TripDay = { date: string; dayNumber: number; label: string };
@@ -59,9 +61,15 @@ export function tripDays(startDate: string, endDate: string): TripDay[] {
   });
 }
 
-// 날짜 → 시각 있는 것(시각 순) → 시각 없는 것 → 만든 순서 → id.
+// 날짜 → 순서(#41, 비어 있으면 뒤) → 시각 있는 것(시각 순) → 시각 없는 것 → 만든 순서 → id.
+// listScheduleItems 의 SQL 정렬과 같아야 한다.
 export function compareScheduleItems(a: SortableItem, b: SortableItem): number {
   if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+  if (a.position !== b.position) {
+    if (a.position === null) return 1;
+    if (b.position === null) return -1;
+    return a.position - b.position;
+  }
   if (a.time !== b.time) {
     if (a.time === null) return 1;
     if (b.time === null) return -1;

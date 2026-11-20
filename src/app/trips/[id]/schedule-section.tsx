@@ -18,7 +18,6 @@ import {
   type DateOption,
   type RowItem,
   ScheduleEditorProvider,
-  ScheduleItemRow,
 } from "./schedule-editor";
 
 // 그날 동선 뼈대 → 일정표 이동 줄의 자리·서명(#37). 구간이 없으면 null.
@@ -113,17 +112,6 @@ export async function ScheduleSection({
     };
   }
 
-  function row(item: ScheduleItem, dateOptions: DateOption[]) {
-    return (
-      <ScheduleItemRow
-        key={item.id}
-        tripId={trip.id}
-        item={rowItem(item)}
-        dateOptions={dateOptions}
-      />
-    );
-  }
-
   return (
     <section aria-labelledby="schedule-heading" className="flex flex-col gap-6">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -160,6 +148,7 @@ export async function ScheduleSection({
             </h3>
             <ScheduleDayItems
               tripId={trip.id}
+              date={day.date}
               items={dayItems.map(rowItem)}
               dateOptions={dayOptions}
               travel={dayTravel(day.date, routes.get(day.date), placeLabels)}
@@ -184,14 +173,16 @@ export async function ScheduleSection({
             {outside.map((group) => (
               <div key={group.date} className="flex flex-col">
                 <h4 className="text-sm font-medium">{group.label}</h4>
-                <ul className="flex flex-col">
-                  {group.items.map((item) =>
-                    row(item, [
-                      { value: item.date, label: dateLabel(item.date, true) },
-                      ...dayOptions,
-                    ]),
-                  )}
-                </ul>
+                <ScheduleDayItems
+                  tripId={trip.id}
+                  date={group.date}
+                  items={group.items.map(rowItem)}
+                  dateOptions={[
+                    { value: group.date, label: dateLabel(group.date, true) },
+                    ...dayOptions,
+                  ]}
+                  travel={null}
+                />
               </div>
             ))}
           </section>

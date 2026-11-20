@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { places, type ScheduleItem, scheduleItems, trips } from "@/db/schema";
 import { isUuid } from "@/lib/ids";
 import type { GooglePlacePick, ScheduleInput } from "@/lib/schedule-input";
+import type { OrderItem } from "@/lib/schedule-order";
 import { accessibleTrips } from "./trips";
 
 // 일정 쿼리. 여행 접근은 trips.ts 의 accessibleTrips 조건 하나로만 판단한다(공유 #15 가 그것만 바꾸도록).
@@ -38,6 +39,20 @@ function columnsOf({ google: _google, ...columns }: ScheduleInput) {
   return columns;
 }
 
+// 일정 순서(#41). 그날 순서(position)가 있으면 그것, 없으면 시각 순(NULL 이 맨 뒤) → 만든 순서 → id.
+// src/lib/schedule.ts 의 compareScheduleItems 와 같아야 한다.
+const itemOrder = [
+  asc(scheduleItems.date),
+  sql`${scheduleItems.position} asc nulls last`,
+  asc(scheduleItems.time), // Postgres 오름차순은 NULL 이 맨 뒤
+  asc(scheduleItems.createdAt),
+  asc(scheduleItems.id),
+];
+
+function validDate(date: string): boolean {
+  return typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date);
+}
+
 // 한 화면 요청 안에서 지도 칸과 일정 칸이 같은 결과를 나눠 쓰도록 cache 로 감싼다(요청마다 새로 묻는다).
 export const listScheduleItems = cache(
   async (userId: string, tripId: string): Promise<ScheduleItem[]> => {
@@ -46,14 +61,53 @@ export const listScheduleItems = cache(
       .select()
       .from(scheduleItems)
       .where(inAccessibleTrip(userId, tripId))
-      .orderBy(
-        asc(scheduleItems.date),
-        asc(scheduleItems.time), // Postgres 오름차순은 NULL 이 맨 뒤
-        asc(scheduleItems.createdAt),
-        asc(scheduleItems.id),
-      );
+      .orderBy(...itemOrder);
   },
 );
+
+// 그날 일정의 지금 순서(id·시각). 순서 저장 검증과 넣기·고치기 뒤 자리 계산에 쓴다.
+export async function listDayOrder(
+  userId: string,
+  tripId: string,
+  date: string,
+): Promise<OrderItem[]> {
+  if (!validIds(tripId) || !validDate(date)) return [];
+  return db
+    .select({ id: scheduleItems.id, time: scheduleItems.time })
+    .from(scheduleItems)
+    .where(and(inAccessibleTrip(userId, tripId), eq(scheduleItems.date, date)))
+    .orderBy(...itemOrder);
+}
+
+// 그날 순서를 0, 1, 2, … 로 한 문에 다시 쓴다. 목록의 모든 일정이 이 사용자가 접근할 수 있는 여행 tripId 의
+// 그날 일정일 때만 true(바뀐 행 수가 목록 길이와 같음). 순서는 일정 내용 변경이 아니므로 updated_at 은 두고,
+// 그래서 $onUpdate 가 붙는 query builder 대신 SQL 로 쓴다.
+export async function writeDayOrder(
+  userId: string,
+  tripId: string,
+  date: string,
+  orderedIds: string[],
+): Promise<boolean> {
+  if (
+    orderedIds.length === 0 ||
+    !validIds(tripId, ...orderedIds) ||
+    !validDate(date)
+  ) {
+    return false;
+  }
+  const values = sql.join(
+    orderedIds.map((id, i) => sql`(${id}::uuid, ${i}::integer)`),
+    sql`, `,
+  );
+  const result = await db.execute<{ id: string }>(sql`
+    UPDATE ${scheduleItems} SET position = v.pos
+    FROM (VALUES ${values}) AS v(id, pos)
+    WHERE ${scheduleItems.id} = v.id
+      AND ${scheduleItems.date} = ${date}::date
+      AND ${inAccessibleTrip(userId, tripId)}
+    RETURNING ${scheduleItems.id}`);
+  return result.rows.length === orderedIds.length;
+}
 
 // 없거나 남의 것이거나 id 형식이 틀리면 null.
 export async function getScheduleItem(
@@ -115,6 +169,8 @@ export async function createScheduleItem(
             placeId: places.id,
             memo: sql<string | null>`${input.memo}::text`.as("memo"),
             done: sql<boolean>`false`.as("done"),
+            // 자리는 액션이 넣은 뒤 그날 순서를 다시 쓰며 정한다(#41).
+            position: sql<number | null>`null::integer`.as("position"),
             createdAt: sql<Date>`now()`.as("created_at"),
             updatedAt: sql<Date>`now()`.as("updated_at"),
           })
