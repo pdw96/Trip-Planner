@@ -27,3 +27,10 @@ export const MONEY_SAVE_FAILED = "일정은 저장했지만 금액은 저장하�
 export const BUDGET_NOT_SET = "예산을 먼저 정해 주세요.";
 
 export const ACTUAL_NEEDS_DONE = "완료한 일정에만 실제 지출을 적을 수 있어요.";
+
+// --- 공유 (#15) ---
+
+export const INVITE_INVALID =
+  "초대 링크가 만료됐거나 잘못됐어요. 여행을 만든 분께 새 링크를 받아 주세요.";
+
+export const MEMBER_LIMIT = "함께하는 사람이 너무 많아요(20명까지).";
