@@ -168,11 +168,15 @@ function PanelBody({
     setHighlightedId(null);
   }, [selected]);
 
-  // 같은 날을 다시 고르면 다시 묻는다(구간 정보는 저장하지 않는다, §3.2).
+  // 같은 날을 다시 고르면 다시 묻는다(구간 정보는 저장하지 않는다, §3.2). 다시 그려질 때(Activity 로 돌아옴)
+  // 묻지 않도록 이미 처리한 횟수를 기억한다.
   const reloadRef = useRef(reload);
   reloadRef.current = reload;
+  const handledReselect = useRef(reselectCount);
   useEffect(() => {
-    if (reselectCount > 0) reloadRef.current();
+    if (reselectCount === handledReselect.current) return;
+    handledReselect.current = reselectCount;
+    reloadRef.current();
   }, [reselectCount]);
 
   // [전체] 보기의 기준점(저장하지 않는 화면 상태). 후보에서 사라졌으면(장소 삭제) 없음으로 본다.
@@ -188,16 +192,9 @@ function PanelBody({
   const view = day
     ? dayView(day, placesById, routeResult)
     : overviewView(places, overviewBase?.id ?? null, overviewBaseCoords);
-  // 이 날 보기에 핀이 없는 장소(다른 날·일정에 없는 장소)는 [전체]로 바꿔 그 핀을 보인다. [전체]는 구간을 묻지 않는다.
-  // 포커스는 탭이 바뀐 다음 그려질 때 FocusPin 이 새 핀으로 적용한다. 좌표가 없으면 보일 것이 없으므로 탭은 그대로 둔다.
+  // 가 볼 곳 목록은 [전체]에서만 보이므로(§5.4.1) 늘 [전체] 보기의 핀을 찾는다.
+  // 포커스는 FocusPin 이 그 핀으로 적용한다. 좌표가 없으면 강조만 한다.
   function showOnMap(placeId: string) {
-    if (
-      day &&
-      !view.pins.some((p) => p.placeId === placeId) &&
-      positionOf(placesById.get(placeId)) !== null
-    ) {
-      select("all");
-    }
     setHighlightedId(placeId);
     setFocus((f) => ({ placeId, seq: (f?.seq ?? 0) + 1 }));
   }

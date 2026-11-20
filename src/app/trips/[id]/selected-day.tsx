@@ -30,9 +30,10 @@ export function SelectedDayProvider({
   const [raw, setRaw] = useState(initial);
   const [reselectCount, setReselectCount] = useState(0);
   const selected = resolveSelection(raw, startDate, endDate);
+  // raw 는 늘 고른 값으로 둔다(기간에서 사라진 옛 날짜가 남아 있다가 날짜를 되돌리면 그날로 튀지 않게).
   function select(value: string) {
     if (value === selected) setReselectCount((n) => n + 1);
-    else setRaw(value);
+    setRaw(value);
   }
   return (
     <SelectedDayContext value={{ selected, select, reselectCount }}>

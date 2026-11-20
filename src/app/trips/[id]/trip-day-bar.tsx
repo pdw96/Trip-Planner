@@ -37,14 +37,19 @@ export function TripDayBar({
     return () => observer.disconnect();
   }, []);
 
-  // 처음 그릴 때 고른 날(여행 중이면 오늘)이 줄 안에 보이게 줄만 옮긴다(scrollIntoView 는 페이지도 움직인다).
+  // 고른 날(처음에는 여행 중이면 오늘)이 줄 밖에 있으면 줄만 옮겨 가운데에 둔다. 예산 표에서 날을 골라도 따라온다.
+  // scrollIntoView 는 페이지도 움직이므로 쓰지 않는다.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 고른 날이 바뀔 때마다 맞춘다
   useLayoutEffect(() => {
     const row = rowRef.current;
     const button = row?.querySelector<HTMLElement>('[aria-pressed="true"]');
     if (!row || !button) return;
-    row.scrollLeft =
-      button.offsetLeft - row.clientWidth / 2 + button.offsetWidth / 2;
-  }, []);
+    const left = button.offsetLeft;
+    const right = left + button.offsetWidth;
+    if (left >= row.scrollLeft && right <= row.scrollLeft + row.clientWidth)
+      return;
+    row.scrollLeft = left - row.clientWidth / 2 + button.offsetWidth / 2;
+  }, [selected]);
 
   const allActive = selected === "all";
   return (

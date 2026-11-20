@@ -47,8 +47,13 @@ const FIT_PADDING = 48;
 // 옅은 선(전체 보기의 기준점 → 장소)은 보조 글자 색(globals.css --sub).
 const FAINT_COLOR = { light: "#6a707b", dark: "#9aa1ad" } as const;
 
+// 색마다 한 번만 만든다(그릴 때마다 새 배열이면 점선마다 setOptions 가 다시 불린다).
+const dashIconCache = new Map<string, google.maps.IconSequence[]>();
+
 function dashIcons(color: string): google.maps.IconSequence[] {
-  return [
+  const cached = dashIconCache.get(color);
+  if (cached) return cached;
+  const icons: google.maps.IconSequence[] = [
     {
       icon: {
         path: "M 0,-1 0,1",
@@ -60,6 +65,8 @@ function dashIcons(color: string): google.maps.IconSequence[] {
       repeat: "12px",
     },
   ];
+  dashIconCache.set(color, icons);
+  return icons;
 }
 
 export function TripMapCanvas({

@@ -44,39 +44,43 @@ export function BudgetDock({
     dialogRef.current?.close();
   }
 
+  // 시트(dialog)는 sm:hidden 줄 밖에 둔다. 안에 두면 휴대폰을 가로로 돌려 sm 이상이 될 때 열린 시트가
+  // 보이지 않게 되는데 페이지는 모달로 막힌 채 남는다(휴대폰에는 Esc 가 없다).
   return (
-    <div className="sticky bottom-0 z-20 -mx-4 border-t border-rule bg-background px-4 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:hidden">
-      <div className="flex items-center gap-3">
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          {day ? (
-            <p className="flex flex-wrap items-baseline gap-x-2 text-sm tabular-nums">
-              <span className="font-semibold">
-                {day.dayNumber}일차 예상{" "}
-                {money(budget.periods.byDate[day.date]?.estimate ?? 0)}
-              </span>
-              <span className="text-xs text-sub">
-                전체 {money(s.projected)} / {money(s.total)}
-              </span>
-            </p>
-          ) : (
-            <p className="flex flex-wrap items-baseline gap-x-2 text-sm tabular-nums">
-              <span className="font-semibold">
-                예상 {money(s.projected)} / {money(s.total)}
-              </span>
-              <span className="text-xs">
-                <BalanceText balance={s.balance} settings={settings} />
-              </span>
-            </p>
-          )}
-          <BudgetBar projected={s.projected} total={s.total} thin />
+    <>
+      <div className="sticky bottom-0 z-20 -mx-4 border-t border-rule bg-background px-4 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:hidden">
+        <div className="flex items-center gap-3">
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            {day ? (
+              <p className="flex flex-wrap items-baseline gap-x-2 text-sm tabular-nums">
+                <span className="font-semibold">
+                  {day.dayNumber}일차 예상{" "}
+                  {money(budget.periods.byDate[day.date]?.estimate ?? 0)}
+                </span>
+                <span className="text-xs text-sub">
+                  전체 {money(s.projected)} / {money(s.total)}
+                </span>
+              </p>
+            ) : (
+              <p className="flex flex-wrap items-baseline gap-x-2 text-sm tabular-nums">
+                <span className="font-semibold">
+                  예상 {money(s.projected)} / {money(s.total)}
+                </span>
+                <span className="text-xs">
+                  <BalanceText balance={s.balance} settings={settings} />
+                </span>
+              </p>
+            )}
+            <BudgetBar projected={s.projected} total={s.total} thin />
+          </div>
+          <button
+            type="button"
+            onClick={openSheet}
+            className={buttonClass("primary", "small")}
+          >
+            + 지출
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={openSheet}
-          className={buttonClass("primary", "small")}
-        >
-          + 지출
-        </button>
       </div>
       {/* 바깥(바탕 가림막)을 누르면 닫는다: 그때 event.target 이 dialog 자신이다. 키보드는 Esc 로 닫는다. */}
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: Esc 는 dialog 가 처리한다 */}
@@ -104,6 +108,6 @@ export function BudgetDock({
           />
         )}
       </dialog>
-    </div>
+    </>
   );
 }
