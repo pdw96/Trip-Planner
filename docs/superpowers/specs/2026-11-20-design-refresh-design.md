@@ -1,6 +1,6 @@
 # 전체 화면 디자인 정리: 노선도 (#53)
 
-2026-11-20. 초안(사용자 승인 전). 시안: 디자인 방향 https://claude.ai/artifact/9WdXd5NFaMih8i1hKEBCYg , 날짜 탭 비교 https://claude.ai/artifact/LetFNVKL85toT6M6XZxSBe (사용자 비공개 페이지)
+2026-11-20. 사용자 승인. 시안: 디자인 방향 https://claude.ai/artifact/9WdXd5NFaMih8i1hKEBCYg , 날짜 탭 비교 https://claude.ai/artifact/LetFNVKL85toT6M6XZxSBe (사용자 비공개 페이지)
 
 ## 1. 왜
 
