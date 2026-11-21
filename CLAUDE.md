@@ -61,6 +61,12 @@
 - 막지 않는 지적은 맞으면 고친다. 고치지 않은 것은 PR 본문 "남은 지적"에 적는다.
 - Codex 지적을 고쳐 커밋을 올렸으면 막든 막지 않든 PR 에 `@codex review` 로 마지막 커밋 기준 재리뷰를 요청하고, 그 결과를 본 뒤 자동 머지를 켠다(사용자 요청, 2026-11-21). 끝낼지는 위 기준(막는 지적 0건)으로 정한다.
 
+**Dependabot PR.** `.github/dependabot.yml` 이 주 1회(월 09:00) 새 버전 PR 을 연다(#65). 모두 위험 경로라 `human-approved` 가 필요하고, 자동 머지는 켜지 않는다. 머지는 사용자가 한다.
+- CI 만 보고 넣는 PR(`npm-minor-and-patch`, `actions` 묶음): 사용자가 CI 통과를 보고 라벨을 붙여 머지한다. 빨간불이면 세션에 맡긴다. 문제 패키지만 빼려면 PR 에 `@dependabot ignore <패키지>`.
+- 그 밖(큰 버전, 짝 묶음 `react`·`tailwind`·`dnd-kit`, `auth-db`, Biome): 사용자가 새 세션에 "Dependabot PR #N" 을 맡긴다. 세션은 릴리스 노트·마이그레이션 안내를 읽고, PR 브랜치에서 lint·typecheck·test·build, 화면에 영향이 있으면 브라우저 확인을 한다. `auth-db` 는 Better Auth 의 스키마 변경 요구와 `npm run db:generate` 결과(새 마이그레이션이 생기지 않는지)도 본다. 결과는 PR 댓글로 남긴다.
+- 코드를 고쳐야 하면 Dependabot 브랜치에 push 하지 않고, 세션 브랜치에 올림과 수정을 함께 담아 새 PR 을 연다(본문에 Dependabot PR 번호. 올림이 main 에 들어가면 Dependabot PR 은 저절로 닫힌다). 스키마 변경이 필요하면 마이그레이션 PR 규칙을 따른다.
+- 받지 않기로 하면 PR 에 `@dependabot ignore this major version`(또는 `this minor version`).
+
 **마이그레이션 PR.** 자동 머지를 켜지 않는다. 사람이 SQL 을 보고 `human-approved` 라벨을 붙이면 `npm run db:migrate` 를 실행하고(실행 직전 사람 확인), 적용이 성공하면 자동 머지를 켠다. 적용 뒤 PR 을 포기하게 되면 되돌리는 방법을 보고한다.
 
 **위험 경로.** 아래를 바꾼 PR 은 `human-approved` 라벨이 있어야 `human-gate` 검사가 통과한다. 기준은 `.github/scripts/human-gate.mjs` 이다. 승인 뒤 위험 경로를 다시 바꾸면 게이트가 라벨을 떼므로, PR 에 무엇이 바뀌었는지 적고 사람에게 다시 확인을 요청한다.
