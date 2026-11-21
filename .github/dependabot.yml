@@ -72,6 +72,8 @@ updates:
     commit-message:
       prefix: ci
     groups:
-      # CI 통과만 보고 넣는 묶음.
+      # CI 통과만 보고 넣는 묶음. major 는 묶지 않아 action 마다 PR 로 오고 세션이 확인한다:
+      # human-gate.yml 은 pull_request_target 이라 PR 에서는 main 의 옛 워크플로가 돌아, 바뀐 단계를 CI 가 시험하지 못한다.
       actions:
         patterns: ["*"]
+        update-types: [minor, patch]

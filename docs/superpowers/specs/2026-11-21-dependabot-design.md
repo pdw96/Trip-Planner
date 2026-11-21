@@ -14,7 +14,7 @@
 - 버린 것: Renovate — 기능은 많지만 외부 앱 설치와 설정이 더 필요하고, 이 저장소 규모에서 얻는 게 적다.
 - 처리 방식(사용자 결정, A안): PR 을 두 종류로 나눈다.
   - **CI 만 보고 넣는 PR** — `npm-minor-and-patch` 묶음, `actions` 묶음. 사용자가 GitHub 에서 CI `check` 통과를 보고 `human-approved` 를 붙여 머지한다. 세션 없음.
-  - **세션이 확인하는 PR** — 그 밖 모두(큰 버전, 인증·DB 묶음, Biome). 사용자가 새 Claude 세션에 맡기고, 세션이 확인한 뒤 결과를 알리면 사용자가 라벨을 붙여 머지한다.
+  - **세션이 확인하는 PR** — 그 밖 모두(npm·Actions 큰 버전, 인증·DB 묶음, Biome). 사용자가 새 Claude 세션에 맡기고, 세션이 확인한 뒤 결과를 알리면 사용자가 라벨을 붙여 머지한다.
   - CI 만 보고 넣는 PR 이 빨간불이면 세션에 맡긴다.
 
 ## 설정 (`.github/dependabot.yml`)
@@ -41,16 +41,19 @@
 ### github-actions (커밋·PR 제목 `prefix: "ci"`)
 | 묶음 | 대상 | 업데이트 | 처리 |
 |---|---|---|---|
-| `actions` | `*` | 전부 | CI 만 |
+| `actions` | `*` | minor·patch | CI 만 |
+| (묶음 없음) | action 의 major | — | 세션, action 마다 PR |
+
+- Actions major 를 묶지 않는 이유: `human-gate.yml` 은 `pull_request_target` 이라 PR 에서는 main 의 옛 워크플로가 돈다. 바뀐 단계가 CI 로 시험되지 않은 채 머지되면 게이트가 깨져 그 뒤 모든 PR(고치는 PR 포함)이 막힐 수 있다(`/code-review` 지적).
 
 ## 함께 바꾸는 것
 - `vercel.json`: `git.deploymentEnabled` 에 `"dependabot/**": false`. 이유: 미리보기마다 Neon 에 `preview/…` DB 브랜치가 생기고 지워지지 않는다(2026-11-17–18 것 6개가 아직 남음) → Dependabot PR 이 쌓이면 Neon 브랜치 한도에 걸릴 수 있다. 미리보기는 Vercel 로그인(SSO)으로 막혀 있고 Google 로그인도 미리보기 주소에서는 안 될 가능성이 커 쓸모가 적다. 빌드는 CI `check` 가 확인한다. 브랜치 이름이 `dependabot/npm_and_yarn/…` 처럼 `/` 가 둘이라 `*` 가 아니라 `**`(minimatch).
 - `human-gate.yml` 의 Node 22 → 26(CI·Vercel 과 맞춤, 22 는 2027-04 지원 종료). Dependabot 은 `node-version` 을 올려 주지 않는다.
 - `CLAUDE.md` '작업 흐름'에 **Dependabot PR** 단락:
-  - CI 만 보고 넣는 PR(`npm-minor-and-patch`, `actions`)은 사용자가 CI 통과를 보고 라벨·머지. 빨간불이면 세션에 맡긴다. 문제 패키지만 빼려면 PR 에 `@dependabot ignore <패키지>`.
+  - CI 만 보고 넣는 PR(`npm-minor-and-patch`, `actions`)은 사용자가 CI 통과를 보고 라벨·머지. 빨간불이면 세션에 맡긴다. 문제 패키지의 그 업데이트만 빼려면 `@dependabot ignore <패키지> minor version`(범위 없는 `ignore <패키지>` 는 영영 받지 않게 되므로 쓰지 않음), 걸면 `docs/status.md` 에 적는다.
   - 그 밖 PR 은 사용자가 새 세션에 "Dependabot PR #N" 을 맡긴다. 세션은 릴리스 노트·마이그레이션 안내를 읽고, PR 브랜치에서 lint·typecheck·test·build, 화면에 영향이 있으면 브라우저 확인, `auth-db` 는 Better Auth 스키마 변경 요구와 drizzle-kit 생성 결과(`npm run db:generate` 로 빈 마이그레이션인지)를 보고, 결과를 PR 댓글로 남긴다.
   - 코드를 고쳐야 하면 Dependabot 브랜치에 push 하지 않고, 세션 브랜치에 올림+수정을 담아 새 PR 을 연다(본문에 Dependabot PR 번호. 올림이 main 에 들어가면 Dependabot PR 은 저절로 닫힌다). 스키마 변경이 필요하면 마이그레이션 PR 규칙을 따른다.
-  - 받지 않기로 하면 PR 에 `@dependabot ignore this major version`(또는 `… minor version`).
+  - 받지 않기로 하면 패키지 하나짜리 PR 은 `@dependabot ignore this major version`(또는 `… minor version`), 묶음 PR 은 패키지마다 `@dependabot ignore <패키지> major version`(GitHub 문서 'Dependabot pull request comment commands').
   - Dependabot PR 은 자동 머지를 켜지 않는다. 머지는 사용자가.
 - `docs/status.md`: 끝난 것·알아 둘 것.
 

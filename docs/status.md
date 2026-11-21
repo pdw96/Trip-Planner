@@ -1,6 +1,6 @@
 # 지금 상태
 
-2026-11-21 기준(#65 끝). 이슈 하나가 끝날 때마다(PR 머지, 배포 확인) 고친다. 새 세션은 이 파일부터 읽는다(`CLAUDE.md` '작업 흐름').
+2026-11-21 기준(#22 끝). 이슈 하나가 끝날 때마다(PR 머지, 배포 확인) 고친다. 새 세션은 이 파일부터 읽는다(`CLAUDE.md` '작업 흐름').
 
 ## 끝나서 배포된 것
 
@@ -21,7 +21,6 @@
 | #15 | #54 | 지인과 여행 함께 보기·고치기(`trip_members`, `trips.invite_token_hash`, 마이그레이션 0007). 주인이 초대 링크(`/invite/<비밀값>`, DB 에는 SHA-256 만)를 만들고, 받은 사람이 로그인 뒤 [참여]. 함께하는 사람은 주인과 똑같이 고치고, 삭제·링크·내보내기는 주인만, 본인은 나가기. 카톡 앱 안 브라우저는 바깥 브라우저로 넘김. 설계 `docs/superpowers/specs/2026-11-20-trip-sharing-design.md` |
 | #53 | #57·#58·#60 | 전체 화면 디자인 정리(노선도). 색·글꼴 토큰, 공용 조각, 여행 목록 짧은 노선(PR 1). 여행 화면(PR 2): 위에 붙는 날짜 줄이 지도·예산·일정·가 볼 곳을 함께 거름, 노선 일정(레일·역 동그라미 = 완료, 손잡이 오른쪽), 지도 선·핀 날짜 색, 예산 카드 머리, 휴대폰 아래 예산 줄 + [+ 지출] 시트, 함께하는 사람 한 줄 접기. DB 변경 없음. 설계 `docs/superpowers/specs/2026-11-20-design-refresh-design.md` |
 | #22 | #63 | 단위 시험(`npm test`, `src/**/*.test.mjs`)을 CI `check` 에서 돌림. CI Node 22 → 26(Vercel `nodeVersion: 26.x` 와 맞춤). `.ts` 를 바로 읽어 나던 `MODULE_TYPELESS_PACKAGE_JSON` 경고는 `--disable-warning` 으로 끔(`"type": "module"` 은 빌드 영향이 커서 택하지 않음). 설계 `docs/superpowers/specs/2026-11-20-unit-tests-in-ci-design.md` |
-| #65 | #66 | Dependabot 버전 업데이트(`.github/dependabot.yml`, 주 1회 월 09:00, 7일 기다림). CI 만 보고 넣는 묶음(`npm-minor-and-patch`·`actions`)과 세션이 확인하는 PR(큰 버전, 짝 묶음, `auth-db`, Biome)로 나눔. 처리 규칙은 `CLAUDE.md` 'Dependabot PR'. Dependabot 브랜치는 Vercel 미리보기 끔, `human-gate.yml` Node 26. 설계 `docs/superpowers/specs/2026-11-21-dependabot-design.md` |
 
 ## 다음 할 일
 
@@ -37,7 +36,8 @@
 ## 알아 둘 것
 
 - **Dependabot(#65)**:
-  - 묶음: `auth-db`(better-auth·drizzle-orm·drizzle-kit·`@neondatabase/serverless`, 모든 업데이트), 짝 묶음 `react`·`tailwind`·`dnd-kit`(major 만), `npm-minor-and-patch`(그 밖 minor·patch, Biome 제외), `actions`(전부). 묶음에 안 맞는 업데이트(그 밖 major, Biome)는 패키지마다 PR. 한 패키지가 여러 묶음 패턴에 맞아도 `update-types` 가 겹치지 않으면 함께 받는다(dependabot-core `dependency_group_engine.rb`).
+  - 걸어 둔 ignore: 없음(`@dependabot ignore …` 를 쓰면 여기 적는다. 확인은 `@dependabot show <패키지> ignore conditions`).
+  - 묶음: `auth-db`(better-auth·drizzle-orm·drizzle-kit·`@neondatabase/serverless`, 모든 업데이트), 짝 묶음 `react`·`tailwind`·`dnd-kit`(major 만), `npm-minor-and-patch`(그 밖 minor·patch, Biome 제외), `actions`(minor·patch). 묶음에 안 맞는 업데이트(그 밖 npm major, Actions major, Biome)는 패키지마다 PR. 한 패키지가 여러 묶음 패턴에 맞아도 `update-types` 가 겹치지 않으면 함께 받는다(dependabot-core `dependency_group_engine.rb`).
   - `@types/node` 는 `>=27` 을 무시한다. Node 런타임(Vercel `nodeVersion`, CI·`human-gate.yml` 의 `node-version`)을 올릴 때 이 줄도 함께 올린다.
   - Biome 2.6 은 Markdown 서식까지 검사해 지금 저장소에서 `npm run lint` 가 실패한다(`docs/`·`CLAUDE.md` 등 18개 파일, `biome.json` `$schema` 버전). 올릴 때 `biome migrate`·서식 정리(또는 Markdown 제외)를 함께 한다.
   - Dependabot 브랜치(`dependabot/**`)는 Vercel 미리보기가 없다. Vercel 미리보기는 Neon 에 `preview/<브랜치>` DB 브랜치를 만들고 저절로 지우지 않는다.
@@ -83,7 +83,7 @@
   - production 빌드(`next build` + `next start`, 로컬 전용 `BETTER_AUTH_SECRET` 지정): 이름 앞에 `__Secure-`, 그 시크릿으로 서명
   - 테스트 서버를 다시 띄울 때는 이전 `next-server` 가 포트를 쥐고 있지 않은지 먼저 확인한다(#21 에서 고치기 전 빌드를 다시 시험할 뻔했다)
 - **Next 16 Activity**: 지나온 화면을 `display:none` 으로 보관한다. Playwright 는 보이는 `main` 만 읽고(`main:visible`), 양식은 화면을 떠날 때 초기화한다(`trip-form.tsx`).
-- **단위 시험**: `npm test`(`src/**/*.test.mjs`, `.ts` 를 바로 읽어 나는 `MODULE_TYPELESS_PACKAGE_JSON` 경고는 옵션으로 끔). CI `check` 에서 돈다(#22). CI Node 는 Vercel 과 같은 26(`human-gate.yml` 은 22 그대로). 순수 모듈(`src/lib/*.ts` 중 시험 대상)은 다른 모듈을 import 하지 않는다.
+- **단위 시험**: `npm test`(`src/**/*.test.mjs`, `.ts` 를 바로 읽어 나는 `MODULE_TYPELESS_PACKAGE_JSON` 경고는 옵션으로 끔). CI `check` 에서 돈다(#22). CI·`human-gate.yml` Node 는 Vercel 과 같은 26(#65 에서 게이트도 올림). 순수 모듈(`src/lib/*.ts` 중 시험 대상)은 다른 모듈을 import 하지 않는다.
 - **소유권 브라우저 확인(#12)**: Playwright `page.route` 로 A 화면에서 나가는 Server Action 요청(헤더 `next-action`)의 본문 속 id 를 B 의 것으로 바꿔 보내고, 실패 반응과 DB 에서 B 의 행이 그대로인지 본다. Neon MCP 는 읽기 전용이라 테스트 행 넣기·지우기는 `DATABASE_URL` 로 `@neondatabase/serverless` 를 쓰는 node 스크립트로 한다.
 - **Playwright 와 Suspense**: 페이지 이동 직후에는 스트리밍이 덜 끝났을 수 있다. 읽기 전에 마지막 요소(예: 마지막 날 칸)를 `waitFor` 한다.
 - **그 자리 입력칸 닫기**: 저장하면 줄이 다른 자리로 옮겨 갈 수 있다(일정 날짜 옮기기). 닫기는 양식의 effect 가 아니라 저장 action 안에서(같은 전환), 그리고 그 입력칸이 아직 열려 있을 때만 한다(`schedule-editor.tsx`).
