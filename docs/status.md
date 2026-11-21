@@ -1,6 +1,6 @@
 # 지금 상태
 
-2026-11-21 기준(#22 끝). 이슈 하나가 끝날 때마다(PR 머지, 배포 확인) 고친다. 새 세션은 이 파일부터 읽는다(`CLAUDE.md` '작업 흐름').
+2026-11-21 기준(#65 끝). 이슈 하나가 끝날 때마다(PR 머지, 배포 확인) 고친다. 새 세션은 이 파일부터 읽는다(`CLAUDE.md` '작업 흐름').
 
 ## 끝나서 배포된 것
 
@@ -21,6 +21,7 @@
 | #15 | #54 | 지인과 여행 함께 보기·고치기(`trip_members`, `trips.invite_token_hash`, 마이그레이션 0007). 주인이 초대 링크(`/invite/<비밀값>`, DB 에는 SHA-256 만)를 만들고, 받은 사람이 로그인 뒤 [참여]. 함께하는 사람은 주인과 똑같이 고치고, 삭제·링크·내보내기는 주인만, 본인은 나가기. 카톡 앱 안 브라우저는 바깥 브라우저로 넘김. 설계 `docs/superpowers/specs/2026-11-20-trip-sharing-design.md` |
 | #53 | #57·#58·#60 | 전체 화면 디자인 정리(노선도). 색·글꼴 토큰, 공용 조각, 여행 목록 짧은 노선(PR 1). 여행 화면(PR 2): 위에 붙는 날짜 줄이 지도·예산·일정·가 볼 곳을 함께 거름, 노선 일정(레일·역 동그라미 = 완료, 손잡이 오른쪽), 지도 선·핀 날짜 색, 예산 카드 머리, 휴대폰 아래 예산 줄 + [+ 지출] 시트, 함께하는 사람 한 줄 접기. DB 변경 없음. 설계 `docs/superpowers/specs/2026-11-20-design-refresh-design.md` |
 | #22 | #63 | 단위 시험(`npm test`, `src/**/*.test.mjs`)을 CI `check` 에서 돌림. CI Node 22 → 26(Vercel `nodeVersion: 26.x` 와 맞춤). `.ts` 를 바로 읽어 나던 `MODULE_TYPELESS_PACKAGE_JSON` 경고는 `--disable-warning` 으로 끔(`"type": "module"` 은 빌드 영향이 커서 택하지 않음). 설계 `docs/superpowers/specs/2026-11-20-unit-tests-in-ci-design.md` |
+| #65 | #66 | Dependabot 버전 업데이트(`.github/dependabot.yml`, 주 1회 월 09:00, 7일 기다림). CI 만 보고 넣는 묶음(`npm-minor-and-patch`·`actions` minor·patch)과 세션이 확인하는 PR(npm·Actions 큰 버전, 짝 묶음, `auth-db`, Biome). 처리 규칙은 `CLAUDE.md` 'Dependabot PR'. Dependabot 브랜치는 Vercel 미리보기 끔, `human-gate.yml` Node 26. 설계 `docs/superpowers/specs/2026-11-21-dependabot-design.md` |
 
 ## 다음 할 일
 
@@ -106,7 +107,9 @@
 
 ## 남은 확인
 
-- #65 첫 Dependabot PR 들(머지 직후, 그 뒤 월요일 09:00): 묶음이 설계 표대로 나뉘는지, `human-gate` 가 Dependabot PR 에서 실패 결과를 내고 사람이 라벨을 붙이면 승인 기록 댓글을 남기는지, Vercel 미리보기가 생기지 않는지.
+- #65 첫 실행(2026-11-21 머지 직후) 확인함: 묶음대로 PR 6개 — #69 `npm-minor-and-patch`(check 통과), #67 setup-node 7·#68 checkout 7(Actions major, 통과), #71 `@types/node` 26(통과), #70 Biome 2.6.7(lint 실패, 예상), #72 TypeScript 7(typecheck 실패: `Cannot find namespace 'google'` — TS 7 에서 `@types/google.maps` 가 저절로 포함되지 않는 듯, `tsconfig.json` `types` 확인 필요). Vercel 미리보기 없음, 프로덕션 배포 READY. `auth-db` 는 better-auth 1.7.27 이 7일 기다림 안이라 아직 없음.
+  - `human-gate` 는 Dependabot PR 마다 3번 돈다(열기 + Dependabot 이 붙이는 라벨 2개의 `labeled`). 실패 사유는 모두 "라벨 필요"이고 권한 오류 없음. 사용자와 상의해 그대로 둔다(라벨 기능 유지, 다른 라벨 이벤트를 건너뛰면 건너뛴 검사가 통과로 쳐져 게이트가 뚫린다).
+  - 남은 것: #69 는 사용자가 라벨·머지, 나머지 5개는 새 세션에 "Dependabot PR #N". 사람이 라벨을 붙였을 때 Dependabot PR 에서 승인 기록 댓글이 남는지는 #69 머지 때 본다.
 - #65 사용자: Neon 에 남은 `preview/…` 브랜치 6개(2026-11-17–18, `ccr-454f0d35-4gr8vb`·`claude/*` 5개)를 콘솔에서 지운다(Neon MCP 읽기 전용).
 
 - #53 프로덕션: 사용자가 실제 기기로 여행 화면 전체가 정상 동작함을 확인함(2026-11-21).
