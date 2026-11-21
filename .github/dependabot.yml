@@ -1,0 +1,79 @@
+# 의존성 새 버전 PR 을 주 1회 받는다(#65). 누가 어떻게 처리하는지는 CLAUDE.md '작업 흐름'의 'Dependabot PR'.
+# 설계: docs/superpowers/specs/2026-11-21-dependabot-design.md
+#
+# CI 만 보고 넣는 PR: npm-minor-and-patch, actions. 그 밖(큰 버전, auth-db, Biome)은 세션이 확인한다.
+# 한 패키지가 여러 묶음 패턴에 맞아도 update-types 가 겹치지 않는 묶음끼리는 함께 받는다
+# (예: react 의 minor 는 npm-minor-and-patch, major 는 react). 어느 묶음에도 맞지 않는 업데이트는 패키지마다 PR.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Seoul
+    # 갓 올라온 버전(오염된 배포 등)을 피한다. 보안 업데이트에는 걸리지 않는다.
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: deps
+    ignore:
+      # 런타임(Vercel nodeVersion 26.x, CI Node 26)보다 앞선 타입은 받지 않는다. 런타임을 올릴 때 함께 올린다.
+      - dependency-name: "@types/node"
+        versions: [">=27"]
+    groups:
+      # 작은 버전에서도 DB 칸 추가(Better Auth)·마이그레이션 생성 변화(drizzle-kit, 0.x)가 있을 수 있어
+      # 모든 업데이트를 세션이 확인한다. 넷이 서로 엮여(Drizzle 어댑터) 한 PR 로 받는다.
+      auth-db:
+        patterns:
+          - better-auth
+          - drizzle-orm
+          - drizzle-kit
+          - "@neondatabase/serverless"
+      # 큰 버전이 짝과 따로 오면 둘 다 깨진다. 작은 버전은 npm-minor-and-patch 로 간다.
+      react:
+        patterns:
+          - react
+          - react-dom
+          - "@types/react"
+          - "@types/react-dom"
+        update-types: [major]
+      tailwind:
+        patterns:
+          - tailwindcss
+          - "@tailwindcss/*"
+        update-types: [major]
+      dnd-kit:
+        patterns:
+          - "@dnd-kit/*"
+        update-types: [major]
+      # CI 통과만 보고 넣는 묶음. Biome 은 올릴 때마다 설정 옮기기·서식 정리가 따를 수 있어 따로 받는다
+      # (2.6 은 Markdown 서식까지 검사해 lint 가 실패했다).
+      npm-minor-and-patch:
+        patterns: ["*"]
+        exclude-patterns:
+          - better-auth
+          - drizzle-orm
+          - drizzle-kit
+          - "@neondatabase/serverless"
+          - "@biomejs/biome"
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Seoul
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: ci
+    groups:
+      # CI 통과만 보고 넣는 묶음. major 는 묶지 않아 action 마다 PR 로 오고 세션이 확인한다:
+      # human-gate.yml 은 pull_request_target 이라 PR 에서는 main 의 옛 워크플로가 돌아, 바뀐 단계를 CI 가 시험하지 못한다.
+      actions:
+        patterns: ["*"]
+        update-types: [minor, patch]

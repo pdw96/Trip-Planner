@@ -32,7 +32,8 @@ jobs:
       - run: git fetch --no-tags https://github.com/${{ github.repository }} +refs/pull/${{ github.event.pull_request.number }}/head:refs/remotes/pr/head
       - uses: actions/setup-node@v5
         with:
-          node-version: 22
+          # CI(ci.yml)·Vercel(nodeVersion 26.x)과 맞춘다.
+          node-version: 26
       - run: node .github/scripts/human-gate.mjs
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -3,7 +3,8 @@
   "git": {
     "deploymentEnabled": {
       "claude/*": false,
-      "ccr-*": false
+      "ccr-*": false,
+      "dependabot/**": false
     }
   },
   "ignoreCommand": "[ \"$VERCEL_GIT_PREVIOUS_SHA\" != \"$VERCEL_GIT_COMMIT_SHA\" ] && git diff --quiet \"$VERCEL_GIT_PREVIOUS_SHA\" HEAD -- . ':!docs' ':(exclude,glob)*.md' ':!.claude' ':!.github' ':!*.test.mjs' || exit 1"
