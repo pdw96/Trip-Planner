@@ -1,6 +1,6 @@
 # 지금 상태
 
-2026-11-21 기준(#65 끝). 이슈 하나가 끝날 때마다(PR 머지, 배포 확인) 고친다. 새 세션은 이 파일부터 읽는다(`CLAUDE.md` '작업 흐름').
+2026-11-22 기준(Dependabot #72 → #74 끝). 이슈 하나가 끝날 때마다(PR 머지, 배포 확인) 고친다. 새 세션은 이 파일부터 읽는다(`CLAUDE.md` '작업 흐름').
 
 ## 끝나서 배포된 것
 
@@ -22,6 +22,7 @@
 | #53 | #57·#58·#60 | 전체 화면 디자인 정리(노선도). 색·글꼴 토큰, 공용 조각, 여행 목록 짧은 노선(PR 1). 여행 화면(PR 2): 위에 붙는 날짜 줄이 지도·예산·일정·가 볼 곳을 함께 거름, 노선 일정(레일·역 동그라미 = 완료, 손잡이 오른쪽), 지도 선·핀 날짜 색, 예산 카드 머리, 휴대폰 아래 예산 줄 + [+ 지출] 시트, 함께하는 사람 한 줄 접기. DB 변경 없음. 설계 `docs/superpowers/specs/2026-11-20-design-refresh-design.md` |
 | #22 | #63 | 단위 시험(`npm test`, `src/**/*.test.mjs`)을 CI `check` 에서 돌림. CI Node 22 → 26(Vercel `nodeVersion: 26.x` 와 맞춤). `.ts` 를 바로 읽어 나던 `MODULE_TYPELESS_PACKAGE_JSON` 경고는 `--disable-warning` 으로 끔(`"type": "module"` 은 빌드 영향이 커서 택하지 않음). 설계 `docs/superpowers/specs/2026-11-20-unit-tests-in-ci-design.md` |
 | #65 | #66 | Dependabot 버전 업데이트(`.github/dependabot.yml`, 주 1회 월 09:00, 7일 기다림). CI 만 보고 넣는 묶음(`npm-minor-and-patch`·`actions` minor·patch)과 세션이 확인하는 PR(npm·Actions 큰 버전, 짝 묶음, `auth-db`, Biome). 처리 규칙은 `CLAUDE.md` 'Dependabot PR'. Dependabot 브랜치는 Vercel 미리보기 끔, `human-gate.yml` Node 26. 설계 `docs/superpowers/specs/2026-11-21-dependabot-design.md` |
+| Dependabot #72 | #74 | TypeScript 5.9 → 7.0. TS 6 부터 `types` 를 적지 않으면 `@types/*` 를 저절로 넣지 않아 전역 `google.maps` 가 빠짐 → `tsconfig.json` `types: ["node", "google.maps"]`, `@types/google.maps` 직접 devDependency. Next 16.4 는 TS 7 에서 `tsc` CLI 로 타입 검사(`experimental.useTypeScriptCli` 기본 true) |
 
 ## 다음 할 일
 
@@ -30,7 +31,7 @@
 - #36·#23·#24 는 노선도 틀(#53)에 맞춰 넣는다.
 - 기능: #36 구간 경로 후보 2–3개
 - 개선: #23 달력 키보드 이동, #24 자잘한 개선 모음
-- Dependabot PR 이 오면 `CLAUDE.md` 'Dependabot PR' 대로 처리한다(세션이 확인할 PR 은 사용자가 새 세션에 맡긴다).
+- Dependabot PR 이 오면 `CLAUDE.md` 'Dependabot PR' 대로 처리한다(세션이 확인할 PR 은 사용자가 새 세션에 맡긴다). 남은 것: #69(라벨 붙음, 사용자 머지), #71 `@types/node` 26, #70 Biome 2.6(lint 실패, 아래 '알아 둘 것'), #67·#68 Actions major.
 
 여행 접근 조건은 `src/db/queries/trips.ts` 의 `accessibleTrips(userId)`(주인 또는 함께하는 사람) 하나, 주인만 하는 일은 `ownedTrips(userId)`. 하위 데이터 쿼리는 `schedule-items.ts`·`places.ts`·`budget.ts` 처럼 이 조건을 같은 SQL 문 안에 넣는다(하위 id 와 여행 id 를 함께 묶어 섞어 보내기를 막는다). `accessibleTrips` 는 `trips` 를 별칭 없이 FROM 에 둔 쿼리에서만 쓴다(안의 EXISTS 가 바깥 `trips.id` 를 가리킨다). 여러 테이블을 함께 쓰려면 neon-http 에 트랜잭션이 없으므로 데이터를 바꾸는 CTE 한 문으로 한다(`updatePlace`, `createScheduleItemWithNewPlace`).
 
@@ -42,7 +43,14 @@
   - `@types/node` 는 `>=27` 을 무시한다. Node 런타임(Vercel `nodeVersion`, CI·`human-gate.yml` 의 `node-version`)을 올릴 때 이 줄도 함께 올린다.
   - Biome 2.6 은 Markdown 서식까지 검사해 지금 저장소에서 `npm run lint` 가 실패한다(`docs/`·`CLAUDE.md` 등 18개 파일, `biome.json` `$schema` 버전). 올릴 때 `biome migrate`·서식 정리(또는 Markdown 제외)를 함께 한다.
   - Dependabot 브랜치(`dependabot/**`)는 Vercel 미리보기가 없다. Vercel 미리보기는 Neon 에 `preview/<브랜치>` DB 브랜치를 만들고 저절로 지우지 않는다.
+  - #72 처럼 코드를 고쳐야 하는 Dependabot PR 은 세션 브랜치에 Dependabot 커밋을 cherry-pick 하고 수정을 더해 새 PR(#74)을 연다. Dependabot lock 은 플랫폼별 패키지의 `"dev": true` 를 빠뜨릴 수 있다(#72 에서 75줄) — `npm install` 로 lock 을 다시 쓰면 되살아난다. 사용자가 세션에 머지를 맡기면 세션이 squash 머지한다(#74).
   - 설정 검증: `.github/dependabot.yml` 은 schemastore 의 `dependabot-2.0.json` 스키마로 확인했다(Biome 은 YAML 을 검사하지 않는다).
+
+- **TypeScript 7(#74)**:
+  - 전역 타입(import 없이 쓰는 `google.maps` 등)은 `tsconfig.json` `types` 에 적어야 들어온다(TS 6 부터 기본으로 `@types/*` 를 모두 넣지 않음). 새 전역 타입 패키지를 쓰면 여기에 더하고 devDependency 로도 넣는다.
+  - TS 7 패키지에는 예전 JS 컴파일러 API·`tsserver` 가 없다(`require("typescript")` 는 `version` 만). Next 는 `tsc` CLI 로 검사하므로 `next.config.ts` 의 `experimental.useTypeScriptCli` 를 false 로 두지 않는다. 편집기는 내장 버전이나 TS 7 네이티브 확장을 쓴다(tsconfig `plugins` 의 `next` 플러그인은 쓰이지 않음).
+  - 증분 캐시: TS 7 이 만든 tsbuildinfo 는 `types` 에 항목을 **더하는** 변경을 무효화하지 않는다(옛 오류가 그대로 나옴. 빼는 변경은 무효화함). `types` 에 항목을 더하면 로컬 `tsconfig.tsbuildinfo` 를 지우고, Vercel 빌드에서 옛 오류가 나면 캐시 없이 다시 배포한다(`next build` 는 `.next/cache/.tsbuildinfo` 를 쓰고 Vercel 은 `.next/cache` 를 이어 쓴다). CI 는 매번 새로 받아 영향 없음.
+  - Biome 2.6(#70)·`@types/node` 26(#71)과는 무관하다.
 
 - **디자인 토큰(#53)**:
   - 색은 `src/app/globals.css` 의 CSS 변수 + `@theme inline` 하나(`bg-surface`, `text-sub`, `border-rule`, `bg-field`·`border-field-line`, `text-danger`, `text-ok`, `text-warn`·`bg-warn-surface`, `text-on-ink`, 날짜 색 `line-1…8`). 다크 모드는 변수만 바꾼다. 컴포넌트에 `dark:` 클래스·`zinc-*`·`black/[.08]` 같은 값을 쓰지 않는다.
@@ -107,9 +115,11 @@
 
 ## 남은 확인
 
-- #65 첫 실행(2026-11-21 머지 직후) 확인함: 묶음대로 PR 6개 — #69 `npm-minor-and-patch`(check 통과), #67 setup-node 7·#68 checkout 7(Actions major, 통과), #71 `@types/node` 26(통과), #70 Biome 2.6.7(lint 실패, 예상), #72 TypeScript 7(typecheck 실패: `Cannot find namespace 'google'` — TS 7 에서 `@types/google.maps` 가 저절로 포함되지 않는 듯, `tsconfig.json` `types` 확인 필요). Vercel 미리보기 없음, 프로덕션 배포 READY. `auth-db` 는 better-auth 1.7.27 이 7일 기다림 안이라 아직 없음.
+- #74 프로덕션: 머지 커밋 `7569b84` 배포 READY(타입만 바뀌어 실행 코드 변화 없음).
+
+- #65 첫 실행(2026-11-21 머지 직후) 확인함: 묶음대로 PR 6개 — #69 `npm-minor-and-patch`(check 통과), #67 setup-node 7·#68 checkout 7(Actions major, 통과), #71 `@types/node` 26(통과), #70 Biome 2.6.7(lint 실패, 예상), #72 TypeScript 7(typecheck 실패 → #74 로 고쳐 머지, 끝). Vercel 미리보기 없음, 프로덕션 배포 READY. `auth-db` 는 better-auth 1.7.27 이 7일 기다림 안이라 아직 없음.
   - `human-gate` 는 Dependabot PR 마다 3번 돈다(열기 + Dependabot 이 붙이는 라벨 2개의 `labeled`). 실패 사유는 모두 "라벨 필요"이고 권한 오류 없음. 사용자와 상의해 그대로 둔다(라벨 기능 유지, 다른 라벨 이벤트를 건너뛰면 건너뛴 검사가 통과로 쳐져 게이트가 뚫린다).
-  - 남은 것: #69 는 사용자가 라벨·머지, 나머지 5개는 새 세션에 "Dependabot PR #N". 사람이 라벨을 붙였을 때 Dependabot PR 에서 승인 기록 댓글이 남는지는 #69 머지 때 본다.
+  - 남은 것: #69 는 사용자가 라벨·머지, #67·#68·#70·#71 은 새 세션에 "Dependabot PR #N"(#72 는 #74 로 끝). 사람이 라벨을 붙였을 때 Dependabot PR 에서 승인 기록 댓글이 남는지는 #69 머지 때 본다.
 - #65 사용자: Neon 에 남은 `preview/…` 브랜치 6개(2026-11-17–18, `ccr-454f0d35-4gr8vb`·`claude/*` 5개)를 콘솔에서 지운다(Neon MCP 읽기 전용).
 
 - #53 프로덕션: 사용자가 실제 기기로 여행 화면 전체가 정상 동작함을 확인함(2026-11-21).
