@@ -30,7 +30,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - run: git fetch --no-tags https://github.com/${{ github.repository }} +refs/pull/${{ github.event.pull_request.number }}/head:refs/remotes/pr/head
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           # CI(ci.yml)·Vercel(nodeVersion 26.x)과 맞춘다.
           node-version: 26
