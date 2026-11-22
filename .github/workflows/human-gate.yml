@@ -25,7 +25,7 @@ jobs:
     timeout-minutes: 5
     steps:
       # 기준 브랜치를 체크아웃합니다(pull_request_target 의 기본값). PR 쪽은 git 객체로만 가져옵니다.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
