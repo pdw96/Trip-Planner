@@ -1,6 +1,6 @@
 # 지금 상태
 
-2026-11-23 기준(#83 → #84 끝). 이슈 하나가 끝날 때마다(PR 머지, 배포 확인) 고친다. 새 세션은 이 파일부터 읽는다(`CLAUDE.md` '작업 흐름').
+2026-11-23 기준(#91 → #92 끝). 이슈 하나가 끝날 때마다(PR 머지, 배포 확인) 고친다. 새 세션은 이 파일부터 읽는다(`CLAUDE.md` '작업 흐름').
 
 ## 끝나서 배포된 것
 
@@ -27,12 +27,17 @@
 | Dependabot #70 | #76 | Biome 2.4.2 → 2.6.7. `biome migrate`(`$schema` 2.6.7, `linter.rules.recommended` → `preset: "recommended"`), Markdown 서식 끔(`markdown.formatter.enabled: false`, lint 는 켬), 새 진단 정리(쓰지 않는 `useEffect` import, `useOptionalChain` 3곳), 쓰지 않는 create-next-app 템플릿 `public/*.svg` 5개 삭제(`noSvgWithoutTitle`) |
 | #80 | #82 | 워크플로 액션(`actions/checkout` v7.0.1, `actions/setup-node` v7.1.0)을 태그 대신 40자리 커밋 SHA + `# vX.Y.Z` 주석으로 고정(공급망 강화, 동작 변화 없음). `dependabot.yml` 은 그대로. 설계 `docs/superpowers/specs/2026-11-23-pin-actions-sha-design.md` |
 | #83 | #84 | Dependabot #78(Biome 2.6.7 → 2.6.8)이 `biome migrate` 없이 머지돼 `npm run lint` 가 `$schema` 불일치 info 진단을 냄. `npx biome migrate --write` 로 `biome.json` `$schema` 한 줄만 2.6.8 로 맞춤 |
+| #91 | #92 | 기준점 = "그날 밤 묵는 곳". N일차 동선 = 전날 밤 숙소 → 일정들 → 그날 밤 숙소(첫날은 첫 일정에서 시작, 마지막 날은 마지막 일정에서 끝, 숙소 옮기는 날은 A → B). 지도 N일차 탭 "N일차 밤 숙소"(마지막 날·당일치기는 숨김) + "아침엔 🏨 X에서 출발". DB 변경 없음(기존 `trip_bases` 행을 새 뜻으로 읽음). 설계 `docs/superpowers/specs/2026-11-23-base-night-lodging-design.md` |
 
 ## 다음 할 일
 
 사용자가 열린 이슈에서 고른다.
 
 - #36·#23·#24 는 노선도 틀(#53)에 맞춰 넣는다.
+- 2026-11-23 사용자 생각에서 만든 이슈(권하는 순서 #88 → #89 → #90, 사용자가 고름):
+  - #88 예산을 지도 칸에서 빼서 따로 보기(날짜 줄 연동, DB 변경 없음)
+  - #89 지출을 모임 통장·개인 통장으로(개인 지출은 본인만, 마이그레이션·`/security-review`). 미리 결제한 일정의 실제 지출(지금은 완료해야 적을 수 있음)도 여기서 다룰 수 있다
+  - #90 사람별 출발·귀가 동선과 합류 동선(일정마다 대상 사람, 마이그레이션). #91 의 밤 숙소 규칙과 닿는다
 - 기능: #36 구간 경로 후보 2–3개
 - 개선: #23 달력 키보드 이동, #24 자잘한 개선 모음
 - Dependabot PR 이 오면 `CLAUDE.md` 'Dependabot PR' 대로 처리한다(세션이 확인할 PR 은 사용자가 새 세션에 맡긴다). 첫 실행 PR 6개는 모두 끝났다.
@@ -94,13 +99,14 @@
   - 카드 양식은 저장 동작 안에서 닫는다(`budget-forms.tsx` 의 `closingOnSave`). 저장으로 카드 모양이 바뀌면(예산 없음 → 있음) 양식이 새 자리에서 다시 그려져 effect 로는 닫히지 않는다(#14 브라우저 확인).
   - 지도 첫 탭은 여행 중이면 "오늘"이다. 예산이 없으면 N일차 탭에는 카드가 없어서 [전체] 를 눌러야 "예산 정하기" 가 보인다.
   - 클라우드 환경 허용 호스트에 `api.frankfurter.dev` 를 더했다(2026-11-20). 응답 `{"date","rates":{"KRW":8.3572}}`.
+- **밤 숙소(#91)**: 규칙은 `src/lib/day-route.ts` 의 `basesForDay(rows, date, trip)` 하나(시작 = 첫날이 아니면 `baseForDate(전날)`, 끝 = 마지막 날이 아니면 `baseForDate(그날)`). `routesByDate` 는 여행 시작·끝일(`TripRange`)을 받는다 — 하루 동선 Route Handler 는 날짜 하나만 넘기므로 여기서 전날을 계산해야 지도 칸과 서명이 맞는다. `DayRoute` 는 `start`·`end`(좌표 있는 것만), 패널은 `nightBaseId`·`morningBaseId`·`hasNight`·`routeBaseIds`. `setTripBaseAction` 은 마지막 날(밤 없음) 저장을 거절한다. 일정이 없는 날은 일정표가 구간을 묻지 않는다(숙소 이동 A → B 는 지도 탭에만, PR #92 남은 지적).
 - **브라우저 확인 스크립트**: scratchpad 의 ESM 스크립트에서는 `import "playwright"` 가 안 된다 → `createRequire(import.meta.url)("playwright")`. DB 를 읽는 스크립트(`@neondatabase/serverless`)는 프로젝트 루트에 복사해 실행한다. 테스트 계정 넣기는 자동 권한 검사기가 막을 수 있다(#14: 사용자가 승인 창에서 허용).
 
 - **일정 순서(#41)**: 정렬은 `date, position NULLS LAST, time NULLS LAST, created_at, id` 하나를 `listScheduleItems`(SQL)와 `compareScheduleItems`(`src/lib/schedule.ts`)가 같이 쓴다. 규칙은 `src/lib/schedule-order.ts`(`keepsTimeOrder`·`insertByTime`·`orderWithItem`) 하나. 순서에 영향을 주는 쓰기(끌어 놓기, 넣기, 날짜·시각 고치기)는 그날 전체 position 을 0..n-1 로 한 문(`writeDayOrder`)에 다시 쓴다. 손대지 않은 날은 모두 NULL 이라 예전 시각 순과 같다. 넣기·고치기는 쓰기 **전에** `listDayOrder` 로 그날 순서를 읽어 둔다(같은 날 시각 지우기는 "그 자리" 유지).
 - **useOptimistic 과 router.refresh**: 낙관 갱신 전환 안에서 `router.refresh()` 를 부르면 새로 고침이 끝날 때까지 낙관 값이 남는다(실패한 순서가 1–2초 그대로 보임). 되돌린 뒤 effect 에서 부른다(`schedule-day-items.tsx`, #41 브라우저 확인).
 - **Playwright 로 끌기**: 손잡이를 `scrollIntoViewIfNeeded` 한 뒤 `mouse.down` → 몇 px 이동(PointerSensor 4px) → 대상으로 `steps` 이동 → `mouse.up`. 화면 밖 좌표는 아무 일도 안 일어난다. 터치는 CDP `Input.dispatchTouchEvent`(iPhone 13 흉내)로 확인했다. 일정 추가 양식은 저장 뒤에도 열려 있다(연달아 넣기) — 줄 수로 저장 완료를 기다린다.
 
-- **로그인한 화면의 브라우저 확인**: 클라우드 세션에는 Google 로그인용 키가 없고 `DATABASE_URL` 은 프로덕션 DB 다. 사용자 승인을 받아 임시 테스트 계정(`user`·`session` 행, id 접두어 `e2e-test-`, 이메일 `@example.invalid`)을 넣고, 끝나면 지운다(넣기·지우기 전 SQL 전문을 보이고 각각 확인). 쿠키:
+- **로그인한 화면의 브라우저 확인**: 클라우드 세션에는 Google 로그인용 키가 없고 `DATABASE_URL` 은 프로덕션 DB 다. 사용자 승인을 받아 임시 테스트 계정(`user`·`session` 행, id 접두어 `e2e-test-`, 이메일 `@example.invalid`; `session.updated_at` 은 DB 기본값이 없어 `now()` 를 함께 넣는다)을 넣고, 끝나면 지운다(넣기·지우기 전 SQL 전문을 보이고 각각 확인). 쿠키:
   - `npm run dev`: 이름 `better-auth.session_token`, 값 `encodeURIComponent(token + "." + base64(HMAC-SHA256("better-auth-secret-12345678901234567890", token)))`
   - production 빌드(`next build` + `next start`, 로컬 전용 `BETTER_AUTH_SECRET` 지정): 이름 앞에 `__Secure-`, 그 시크릿으로 서명
   - 테스트 서버를 다시 띄울 때는 이전 `next-server` 가 포트를 쥐고 있지 않은지 먼저 확인한다(#21 에서 고치기 전 빌드를 다시 시험할 뻔했다)
@@ -128,6 +134,10 @@
 
 ## 남은 확인
 
+- #91 프로덕션 확인: 사용자가 실제 여행(숙소를 옮긴 부산 여행)에서 1일차 첫 일정 → 숙소, 2일차 A → B, 마지막 날 숙소 → 귀가가 맞는지, "N일차 밤 숙소"·"아침엔 … 출발" 문구가 자연스러운지 본다.
+- #91 남은 지적(PR #92 본문): 일정 없는 숙소 이동일은 일정표에 이동 줄이 없음(지도 탭에만), 좌표 없는 숙소도 "아침엔 … 출발"에는 이름이 남음, 위치 정보 없음 안내가 이동 구간과 함께 보이는 경우는 브라우저로 띄워 보지 않음.
+- 클라우드 컨테이너의 `node_modules` 가 lock 보다 낡을 수 있다(#91 에서 Biome 2.4.2 → lint 설정 오류). lint 가 `biome.json` 을 못 읽으면 `npm ci`.
+
 - #80 프로덕션: 머지 커밋 `29a0b75`(`.github`·문서만 바뀌어 Vercel 빌드는 건너뜀). main CI 에서 SHA 로 고정한 액션이 정상으로 받아져 돌았고, 새 `human-gate.yml` 은 #85 에서 처음 돌아 통과했다.
 - #80: 첫 Dependabot Actions PR 에서 SHA 와 `# vX.Y.Z` 주석이 함께 바뀌는지 본다.
 - #80: 사용자가 저장소 설정 Actions → General "full-length commit SHA 고정 요구"를 켰다(2026-11-23). 켠 뒤 첫 PR(#86)에서 CI `check`·CodeQL 기본 설정(동적 워크플로, Analyze actions·javascript-typescript)·`human-gate`(`pull_request_target`)가 모두 통과했다. 동적 워크플로도 이 정책에 막히지 않는다. 앞으로 태그로 쓴 액션이 있는 워크플로는 실패하니 새 액션은 SHA 로 넣는다.
@@ -152,7 +162,6 @@
 - #41 남은 지적(PR #47 본문): 저장된 순서가 이미 시각 순과 어긋나면(두 창 동시 고치기) 그날 끌기가 모두 거절됨 — 시각을 한 번 고치면 풀림. 넣기·고치기 뒤 순서 쓰기만 실패하면 그 줄이 맨 뒤·옛 자리에 보임(로그 `[schedule-order]`).
 
 - #37 프로덕션: 사용자가 이동 줄이 뜨는 것을 확인함(부산 여행). 남은 것: 지도 N일차 탭과 같은 날을 두 번 묻지 않는지(Vercel 로그의 `day-route` 요청 수).
-- 도착·출발일 동선: 도착하는 날은 숙소가 아니라 첫 일정에서 시작하는 게 자연스럽다(지금은 N일차 기준점을 "없음"으로, 다음 날을 숙소로 두 번 바꿔야 함). #44 때 이슈로 정리할지 물었으나 사용자가 고르지 않음(필요해지면 사용자가 요청).
 - #37 남은 지적(PR #42 본문): 좌표 30일 갱신 순간 지도·일정표 서명이 달라 한 번 더 물을 수 있음(설계 §4.5), 지도 로딩 자리가 짧아 처음에 1–2일 미리 물을 수 있음, 저장소가 옛 서명 결과를 지우지 않음, 탭을 넘겨도 진행 중 요청을 끊지 않음, 아직 묻지 않은 날도 "불러오는 중…", 쓰지 않는 대비 코드 2곳.
 
 - #35 프로덕션 확인: 일정 장소 칸에서 Google 장소 검색·저장, 제목 없이 저장. (할당량은 확인함: 자동완성이 막힐 걱정은 없다. 위 'Google 지도 플랫폼' 참고)
