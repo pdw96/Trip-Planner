@@ -1,6 +1,6 @@
 # 지금 상태
 
-2026-11-23 기준(#80 → #82 끝). 이슈 하나가 끝날 때마다(PR 머지, 배포 확인) 고친다. 새 세션은 이 파일부터 읽는다(`CLAUDE.md` '작업 흐름').
+2026-11-23 기준(#83 → #84 끝). 이슈 하나가 끝날 때마다(PR 머지, 배포 확인) 고친다. 새 세션은 이 파일부터 읽는다(`CLAUDE.md` '작업 흐름').
 
 ## 끝나서 배포된 것
 
@@ -26,6 +26,7 @@
 | Dependabot #67·#68·#71 | 같음 | `actions/setup-node` 5 → 7, `actions/checkout` 5 → 7, `@types/node` 20 → 26(런타임 Node 26 과 맞춤). 코드 수정 없음. checkout v7 은 `pull_request_target` 에서 포크 PR 체크아웃을 거절하지만, `human-gate.yml` 은 `ref`·`repository` 없이 기준 브랜치만 받아 검사 자체를 건너뜀(`isDefaultCheckout`, v7.0.1). PR head 는 뒤의 `git fetch` 로 받으므로 그대로 |
 | Dependabot #70 | #76 | Biome 2.4.2 → 2.6.7. `biome migrate`(`$schema` 2.6.7, `linter.rules.recommended` → `preset: "recommended"`), Markdown 서식 끔(`markdown.formatter.enabled: false`, lint 는 켬), 새 진단 정리(쓰지 않는 `useEffect` import, `useOptionalChain` 3곳), 쓰지 않는 create-next-app 템플릿 `public/*.svg` 5개 삭제(`noSvgWithoutTitle`) |
 | #80 | #82 | 워크플로 액션(`actions/checkout` v7.0.1, `actions/setup-node` v7.1.0)을 태그 대신 40자리 커밋 SHA + `# vX.Y.Z` 주석으로 고정(공급망 강화, 동작 변화 없음). `dependabot.yml` 은 그대로. 설계 `docs/superpowers/specs/2026-11-23-pin-actions-sha-design.md` |
+| #83 | #84 | Dependabot #78(Biome 2.6.7 → 2.6.8)이 `biome migrate` 없이 머지돼 `npm run lint` 가 `$schema` 불일치 info 진단을 냄. `npx biome migrate --write` 로 `biome.json` `$schema` 한 줄만 2.6.8 로 맞춤 |
 
 ## 다음 할 일
 
@@ -45,7 +46,7 @@
   - 묶음: `auth-db`(better-auth·drizzle-orm·drizzle-kit·`@neondatabase/serverless`, 모든 업데이트), 짝 묶음 `react`·`tailwind`·`dnd-kit`(major 만), `npm-minor-and-patch`(그 밖 minor·patch, Biome 제외), `actions`(minor·patch). 묶음에 안 맞는 업데이트(그 밖 npm major, Actions major, Biome)는 패키지마다 PR. 한 패키지가 여러 묶음 패턴에 맞아도 `update-types` 가 겹치지 않으면 함께 받는다(dependabot-core `dependency_group_engine.rb`).
   - 액션은 40자리 커밋 SHA + `# vX.Y.Z` 주석으로 고정한다(#80). 새 액션을 넣을 때도 `git ls-remote --tags` 로 확인한 SHA 를 쓴다. Dependabot 은 SHA 와 주석을 함께 올린다고 알려져 있다(이 저장소에서는 아직 못 봄, '남은 확인').
   - `@types/node` 는 `>=27` 을 무시한다. Node 런타임(Vercel `nodeVersion`, CI·`human-gate.yml` 의 `node-version`)을 올릴 때 이 줄도 함께 올린다.
-  - Biome 2.6(#76) 은 Markdown·YAML·SVG 도 기본으로 검사한다(Markdown·YAML 은 2.6.2 부터). Markdown 서식은 꺼 두었다(표 칸 채우기가 행 하나만 길어져도 표 전체를 다시 써 `docs/status.md` diff 가 커짐). YAML(`.github/*.yml`)은 서식 검사가 켜져 있으니 고친 뒤 `npm run lint`. `public/` 에 SVG 를 넣으면 `<title>` 이 있어야 한다(`noSvgWithoutTitle`). Biome 을 올릴 때마다 `npx biome migrate --write` 로 `$schema` 를 맞춘다(안 맞으면 info 진단).
+  - Biome 2.6(#76) 은 Markdown·YAML·SVG 도 기본으로 검사한다(Markdown·YAML 은 2.6.2 부터). Markdown 서식은 꺼 두었다(표 칸 채우기가 행 하나만 길어져도 표 전체를 다시 써 `docs/status.md` diff 가 커짐). YAML(`.github/*.yml`)은 서식 검사가 켜져 있으니 고친 뒤 `npm run lint`. `public/` 에 SVG 를 넣으면 `<title>` 이 있어야 한다(`noSvgWithoutTitle`). Biome 을 올릴 때마다 `npx biome migrate --write` 로 `$schema` 를 맞춘다(안 맞으면 info 진단, lint 는 통과해 CI 가 잡지 않는다). Dependabot Biome PR 은 migrate 를 하지 않으므로, 맡은 세션이 올림과 migrate 결과를 세션 브랜치에 함께 담는다(#78 은 그대로 머지돼 #84 로 따로 맞춤).
   - Dependabot 브랜치(`dependabot/**`)는 Vercel 미리보기가 없다. Vercel 미리보기는 Neon 에 `preview/<브랜치>` DB 브랜치를 만들고 저절로 지우지 않는다.
   - 같은 워크플로 파일의 붙은 줄을 바꾸는 Actions PR 두 개(#67·#68)는 하나를 머지하면 다른 쪽이 충돌해 Dependabot 이 리베이스한다. 주변 줄이 달라져 `human-gate` 가 라벨을 떼므로, 하나를 머지하고 리베이스된 뒤 다시 라벨을 붙인다.
   - lock 의 `"dev": true`·`libc` 는 npm 버전마다 다르게 쓰인다(#76 에서 확인). npm 10(클라우드 컨테이너 Node 22)은 drizzle-kit 아래 esbuild 플랫폼 패키지 75곳에 `"dev": true` 를 붙이고 `libc` 12곳을 지운다. npm 11(CI·`human-gate` 의 Node 26, Dependabot)은 그 반대다. #74 는 npm 10, #69·#76 은 npm 11 결과다. 지금 main 은 npm 11 결과로, CI 와 같다(CI·Vercel 동작 영향 없음). 세션에서 lock 을 다시 쓸 때는 `npx -y npm@11 install` 을 쓴다.
