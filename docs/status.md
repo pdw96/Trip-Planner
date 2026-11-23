@@ -127,8 +127,9 @@
 
 ## 남은 확인
 
-- #80 프로덕션: 머지 커밋 `29a0b75`(`.github`·문서만 바뀌어 Vercel 빌드는 건너뜀). 새 `human-gate.yml`(SHA 고정)이 처음 도는 것은 이 status 갱신 PR 이다.
-- #80: 첫 Dependabot Actions PR 에서 SHA 와 `# vX.Y.Z` 주석이 함께 바뀌는지 본다. 머지 뒤 사용자가 저장소 설정 Actions → General "full-length commit SHA 고정 요구"를 켜고, 다음 PR 에서 CodeQL 분석·CI·`human-gate` 가 통과하는지 본다(깨지면 끈다).
+- #80 프로덕션: 머지 커밋 `29a0b75`(`.github`·문서만 바뀌어 Vercel 빌드는 건너뜀). main CI 에서 SHA 로 고정한 액션이 정상으로 받아져 돌았고, 새 `human-gate.yml` 은 #85 에서 처음 돌아 통과했다.
+- #80: 첫 Dependabot Actions PR 에서 SHA 와 `# vX.Y.Z` 주석이 함께 바뀌는지 본다.
+- #80: 사용자가 저장소 설정 Actions → General "full-length commit SHA 고정 요구"를 켰다(2026-11-23). 켠 뒤 첫 PR(이 status 갱신)에서 CI·CodeQL 기본 설정·`human-gate` 결과를 본다(깨지면 끈다).
 - #74 프로덕션: 머지 커밋 `7569b84` 배포 READY(타입만 바뀌어 실행 코드 변화 없음).
 - #67·#68·#71 프로덕션: #71·#67 배포 READY(`b8bee1d`, 타입·CI 만 바뀌어 실행 코드 변화 없음). #68 은 `.github` 만 바뀌어 `ignoreCommand` 가 빌드를 건너뜀(CANCELED, 정상). main CI 는 #67 통과(#71 실행은 다음 push 에 밀려 취소됨). `human-gate` 의 setup-node v7 은 #68 리베이스 뒤 실행에서 실제로 돌아 정상(Node 26.13.1, 캐시 꺼짐). checkout v7 이 `human-gate` 에서 처음 도는 것은 이 status 갱신 PR 이다.
 - #76 프로덕션: 머지 커밋 `a2d8df5` 배포 READY(개발 도구·쓰지 않는 SVG·동작이 같은 코드 정리라 화면 변화 없음). #76 은 #71·#67·#68·#77 보다 앞선 main 에서 검사했으므로, 머지 뒤 main 에서 lint·typecheck·test 를 다시 돌려 통과를 확인함.
