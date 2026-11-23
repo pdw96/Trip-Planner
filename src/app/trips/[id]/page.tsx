@@ -7,7 +7,7 @@ import { tripDays } from "@/lib/schedule";
 import { getCurrentUser } from "@/lib/session";
 import { formatLongRange, stayLength, todayInSeoul } from "@/lib/trip-dates";
 import { DeleteTripButton } from "../delete-trip-button";
-import { BudgetDockSection } from "./budget-dock-section";
+import { BudgetSection } from "./budget-section";
 import { DayRouteProvider } from "./day-route-store";
 import { MapSection } from "./map-section";
 import { MembersSection } from "./members-section";
@@ -74,7 +74,7 @@ async function TripDetail({
       </header>
       {/* 지도 N일차 탭과 일정표(#37)가 구간 이동 정보를 함께 쓴다. */}
       <DayRouteProvider key={trip.id} tripId={trip.id}>
-        {/* 날짜 줄·지도·예산·일정이 같은 고른 날을 읽는다(#53 §5.4.1). 처음 값: 여행 중이면 오늘. */}
+        {/* 날짜 줄·지도·일정·예산이 같은 고른 날을 읽는다(#53 §5.4.1). 처음 값: 여행 중이면 오늘. */}
         <SelectedDayProvider
           startDate={trip.startDate}
           endDate={trip.endDate}
@@ -93,9 +93,9 @@ async function TripDetail({
             <MapSection userId={user.id} trip={trip} />
           </Suspense>
           <ScheduleSection userId={user.id} trip={trip} today={today} />
-          {/* 휴대폰 아래 예산 줄(§5.4.2). article 마지막이라 끝까지 내리면 제자리에 놓인다. */}
+          {/* 예산 칸과 아래 예산 줄(#88). article 마지막이라 줄이 끝까지 내리면 제자리에 놓인다. */}
           <Suspense fallback={null}>
-            <BudgetDockSection userId={user.id} trip={trip} today={today} />
+            <BudgetSection userId={user.id} trip={trip} today={today} />
           </Suspense>
         </SelectedDayProvider>
       </DayRouteProvider>
