@@ -43,6 +43,7 @@
 - **Dependabot(#65)**:
   - 걸어 둔 ignore: 없음(`@dependabot ignore …` 를 쓰면 여기 적는다. 확인은 `@dependabot show <패키지> ignore conditions`).
   - 묶음: `auth-db`(better-auth·drizzle-orm·drizzle-kit·`@neondatabase/serverless`, 모든 업데이트), 짝 묶음 `react`·`tailwind`·`dnd-kit`(major 만), `npm-minor-and-patch`(그 밖 minor·patch, Biome 제외), `actions`(minor·patch). 묶음에 안 맞는 업데이트(그 밖 npm major, Actions major, Biome)는 패키지마다 PR. 한 패키지가 여러 묶음 패턴에 맞아도 `update-types` 가 겹치지 않으면 함께 받는다(dependabot-core `dependency_group_engine.rb`).
+  - 액션은 40자리 커밋 SHA + `# vX.Y.Z` 주석으로 고정한다(#80). 새 액션을 넣을 때도 `git ls-remote --tags` 로 확인한 SHA 를 쓴다. Dependabot 은 SHA 와 주석을 함께 올린다고 알려져 있다(이 저장소에서는 아직 못 봄, '남은 확인').
   - `@types/node` 는 `>=27` 을 무시한다. Node 런타임(Vercel `nodeVersion`, CI·`human-gate.yml` 의 `node-version`)을 올릴 때 이 줄도 함께 올린다.
   - Biome 2.6(#76) 은 Markdown·YAML·SVG 도 기본으로 검사한다(Markdown·YAML 은 2.6.2 부터). Markdown 서식은 꺼 두었다(표 칸 채우기가 행 하나만 길어져도 표 전체를 다시 써 `docs/status.md` diff 가 커짐). YAML(`.github/*.yml`)은 서식 검사가 켜져 있으니 고친 뒤 `npm run lint`. `public/` 에 SVG 를 넣으면 `<title>` 이 있어야 한다(`noSvgWithoutTitle`). Biome 을 올릴 때마다 `npx biome migrate --write` 로 `$schema` 를 맞춘다(안 맞으면 info 진단).
   - Dependabot 브랜치(`dependabot/**`)는 Vercel 미리보기가 없다. Vercel 미리보기는 Neon 에 `preview/<브랜치>` DB 브랜치를 만들고 저절로 지우지 않는다.
@@ -126,6 +127,7 @@
 
 ## 남은 확인
 
+- #80: 첫 Dependabot Actions PR 에서 SHA 와 `# vX.Y.Z` 주석이 함께 바뀌는지 본다. 머지 뒤 사용자가 저장소 설정 Actions → General "full-length commit SHA 고정 요구"를 켜고, 다음 PR 에서 CodeQL 분석·CI·`human-gate` 가 통과하는지 본다(깨지면 끈다).
 - #74 프로덕션: 머지 커밋 `7569b84` 배포 READY(타입만 바뀌어 실행 코드 변화 없음).
 - #67·#68·#71 프로덕션: #71·#67 배포 READY(`b8bee1d`, 타입·CI 만 바뀌어 실행 코드 변화 없음). #68 은 `.github` 만 바뀌어 `ignoreCommand` 가 빌드를 건너뜀(CANCELED, 정상). main CI 는 #67 통과(#71 실행은 다음 push 에 밀려 취소됨). `human-gate` 의 setup-node v7 은 #68 리베이스 뒤 실행에서 실제로 돌아 정상(Node 26.13.1, 캐시 꺼짐). checkout v7 이 `human-gate` 에서 처음 도는 것은 이 status 갱신 PR 이다.
 - #76 프로덕션: 머지 커밋 `a2d8df5` 배포 READY(개발 도구·쓰지 않는 SVG·동작이 같은 코드 정리라 화면 변화 없음). #76 은 #71·#67·#68·#77 보다 앞선 main 에서 검사했으므로, 머지 뒤 main 에서 lint·typecheck·test 를 다시 돌려 통과를 확인함.
