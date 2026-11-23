@@ -43,6 +43,7 @@
 - **Dependabot(#65)**:
   - 걸어 둔 ignore: 없음(`@dependabot ignore …` 를 쓰면 여기 적는다. 확인은 `@dependabot show <패키지> ignore conditions`).
   - 묶음: `auth-db`(better-auth·drizzle-orm·drizzle-kit·`@neondatabase/serverless`, 모든 업데이트), 짝 묶음 `react`·`tailwind`·`dnd-kit`(major 만), `npm-minor-and-patch`(그 밖 minor·patch, Biome 제외), `actions`(minor·patch). 묶음에 안 맞는 업데이트(그 밖 npm major, Actions major, Biome)는 패키지마다 PR. 한 패키지가 여러 묶음 패턴에 맞아도 `update-types` 가 겹치지 않으면 함께 받는다(dependabot-core `dependency_group_engine.rb`).
+  - 액션은 40자리 커밋 SHA + `# vX.Y.Z` 주석으로 고정한다(#80). 새 액션을 넣을 때도 `git ls-remote --tags` 로 확인한 SHA 를 쓴다. Dependabot 이 SHA 와 주석을 함께 올린다.
   - `@types/node` 는 `>=27` 을 무시한다. Node 런타임(Vercel `nodeVersion`, CI·`human-gate.yml` 의 `node-version`)을 올릴 때 이 줄도 함께 올린다.
   - Biome 2.6(#76) 은 Markdown·YAML·SVG 도 기본으로 검사한다(Markdown·YAML 은 2.6.2 부터). Markdown 서식은 꺼 두었다(표 칸 채우기가 행 하나만 길어져도 표 전체를 다시 써 `docs/status.md` diff 가 커짐). YAML(`.github/*.yml`)은 서식 검사가 켜져 있으니 고친 뒤 `npm run lint`. `public/` 에 SVG 를 넣으면 `<title>` 이 있어야 한다(`noSvgWithoutTitle`). Biome 을 올릴 때마다 `npx biome migrate --write` 로 `$schema` 를 맞춘다(안 맞으면 info 진단).
   - Dependabot 브랜치(`dependabot/**`)는 Vercel 미리보기가 없다. Vercel 미리보기는 Neon 에 `preview/<브랜치>` DB 브랜치를 만들고 저절로 지우지 않는다.
