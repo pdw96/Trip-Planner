@@ -44,8 +44,12 @@ export type PanelDay = {
   dayNumber: number;
   // "2일차 · 12월 4일 (금)"
   label: string;
-  // 이 날 저장된 기준점(좌표가 없어도 그대로). 기준점 고르기의 현재 값.
-  baseId: string | null;
+  // 그날 밤이 있는지(마지막 날·당일치기는 false, 밤 숙소 고르기 없음, #91).
+  hasNight: boolean;
+  // 이 날 저장된 그날 밤 숙소(좌표가 없어도 그대로). 밤 숙소 고르기의 현재 값. hasNight 가 false 면 null.
+  nightBaseId: string | null;
+  // 전날 밤 숙소("아침엔 … 에서 출발"). 첫날·전날 밤 숙소 없음이면 null.
+  morningBaseId: string | null;
   // 동선에 들어간 시작·끝 숙소(좌표가 있을 때만, 중복 없이 [시작, 끝] 순서).
   routeBaseIds: string[];
   // 구간 결과 저장소 키(daySignature). 바뀌면 다시 묻는다(#37).

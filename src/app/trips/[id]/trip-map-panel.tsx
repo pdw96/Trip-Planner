@@ -112,7 +112,7 @@ function PanelBody({
       let next: Record<string, BaseChoice> | null = null;
       for (const [date, choice] of Object.entries(prev)) {
         if (choice.saving) continue;
-        const serverBase = days.find((d) => d.date === date)?.baseId;
+        const serverBase = days.find((d) => d.date === date)?.nightBaseId;
         const placeGone =
           choice.value !== null && !placesById.has(choice.value);
         if (
@@ -246,24 +246,36 @@ function PanelBody({
         )}
         {day ? (
           <div className="flex flex-col gap-3">
-            {places.length > 0 && (
-              <DayBasePicker
-                key={day.date}
-                day={day}
-                places={places}
-                value={
-                  baseChoices[day.date]
-                    ? baseChoices[day.date].value
-                    : day.baseId
-                }
-                saving={baseChoices[day.date]?.saving ?? false}
-                error={baseError?.date === day.date ? SAVE_FAILED : null}
-                onChange={(value) => void chooseBase(day.date, value)}
-              />
-            )}
-            {/* 위치 정보 문구는 좌표가 없어 빠진 장소가 있을 때만. 기준점만 이어진 날도 번호 장소가 없으므로
-                아래 문구가 보인다(지도에는 기준점이 보인다). */}
-            {day.stops.length === 0 ? (
+            {(day.hasNight && places.length > 0) ||
+            day.morningBaseId !== null ? (
+              <div className="flex flex-col gap-1">
+                {day.hasNight && places.length > 0 && (
+                  <DayBasePicker
+                    key={day.date}
+                    day={day}
+                    places={places}
+                    value={
+                      baseChoices[day.date]
+                        ? baseChoices[day.date].value
+                        : day.nightBaseId
+                    }
+                    saving={baseChoices[day.date]?.saving ?? false}
+                    error={baseError?.date === day.date ? SAVE_FAILED : null}
+                    onChange={(value) => void chooseBase(day.date, value)}
+                  />
+                )}
+                <MorningLine
+                  place={
+                    day.morningBaseId === null
+                      ? undefined
+                      : placesById.get(day.morningBaseId)
+                  }
+                />
+              </div>
+            ) : null}
+            {/* 번호 장소도 구간도 없을 때만 문구. 일정 없이 숙소만 옮기는 날(A → B)도 구간 목록이 보인다(#91).
+                위치 정보 문구는 좌표가 없어 빠진 장소가 있을 때만. */}
+            {day.stops.length === 0 && day.legs.length === 0 ? (
               <p className="text-sm text-sub">
                 {day.unlocatedCount > 0
                   ? "고른 장소의 위치 정보가 없어요"
@@ -460,7 +472,7 @@ function overviewView(
   return { pins, lines };
 }
 
-// 기준점은 🏨, 들르는 장소는 ①② 순서. 번호는 buildDayRoute 와 같이 기준점이 아닌 점을 차례로 센다.
+// 숙소(시작·끝)는 🏨, 들르는 장소는 ①② 순서. 번호는 buildDayRoute 와 같이 기준점이 아닌 점을 차례로 센다.
 function legRows(
   day: PanelDay,
   placesById: Map<string, PanelPlace>,
@@ -494,7 +506,8 @@ function legRows(
       key: `${i}:${leg.fromId}>${leg.toId}`,
       fromMarker: markers[i],
       toMarker: markers[i + 1],
-      toLabel: leg.toIsBase ? null : to.label,
+      // 끝 숙소가 시작 숙소와 다를 수 있어 숙소에도 이름표를 붙인다(#91).
+      toLabel: to.label,
       text,
       distanceText: leg.distanceText,
       directionsUrl: directionsUrl(from, to),
@@ -555,7 +568,7 @@ function DayBasePicker({
     <div className="flex flex-col gap-1">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <label htmlFor={id} className="text-sm font-medium">
-          {day.dayNumber}일차 기준점
+          {day.dayNumber}일차 밤 숙소
         </label>
         <select
           id={id}
@@ -579,6 +592,16 @@ function DayBasePicker({
         </p>
       )}
     </div>
+  );
+}
+
+// 전날 밤 숙소에서 하루를 시작한다는 한 줄(#91). 마지막 날은 고르기 칸 없이 이 줄만.
+function MorningLine({ place }: { place: PanelPlace | undefined }) {
+  if (!place) return null;
+  return (
+    <p className="text-xs text-sub">
+      아침엔 {CATEGORY_ICONS[place.category]} {place.label}에서 출발
+    </p>
   );
 }
 

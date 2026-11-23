@@ -5,6 +5,7 @@ import type { TripRow as Trip } from "@/db/queries/trips";
 import type { Place } from "@/db/schema";
 import {
   baseForDate,
+  basesForDay,
   daySignature,
   needsCoordsRefresh,
   type RoutePlace,
@@ -73,12 +74,13 @@ export async function MapSection({
     ]),
   );
 
+  const tripRange = { startDate: trip.startDate, endDate: trip.endDate };
   // 동선 순서는 #12 정렬(listScheduleItems 순서) 그대로. day-route-loader·일정 칸과 같은 함수다.
   const routes = routesByDate(
     days.map((d) => d.date),
     itemRows,
     baseRows,
-    { startDate: trip.startDate, endDate: trip.endDate },
+    tripRange,
     routePlaces,
     distanceMeters,
   );
@@ -86,7 +88,10 @@ export async function MapSection({
     const dayItems = itemRows.filter(
       (item) => item.date === day.date && item.placeId !== null,
     );
-    const baseId = baseForDate(baseRows, day.date);
+    // 저장된 시작·끝 숙소(#91). 장소 목록에서 사라진 id 는 없음으로 본다.
+    const bases = basesForDay(baseRows, day.date, tripRange);
+    const known = (id: string | null) =>
+      id !== null && routePlaces.has(id) ? id : null;
     const route = routes.get(day.date) ?? {
       start: null,
       end: null,
@@ -97,7 +102,9 @@ export async function MapSection({
       date: day.date,
       dayNumber: day.dayNumber,
       label: day.label,
-      baseId: baseId !== null && routePlaces.has(baseId) ? baseId : null,
+      hasNight: day.date < trip.endDate,
+      nightBaseId: known(bases.end),
+      morningBaseId: known(bases.start),
       routeBaseIds: [
         ...new Set(
           [route.start?.id, route.end?.id].filter(
