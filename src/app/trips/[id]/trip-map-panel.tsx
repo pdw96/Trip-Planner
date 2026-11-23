@@ -112,11 +112,13 @@ function PanelBody({
       let next: Record<string, BaseChoice> | null = null;
       for (const [date, choice] of Object.entries(prev)) {
         if (choice.saving) continue;
-        const serverBase = days.find((d) => d.date === date)?.nightBaseId;
+        const serverDay = days.find((d) => d.date === date);
+        const serverBase = serverDay?.nightBaseId;
         const placeGone =
           choice.value !== null && !placesById.has(choice.value);
         if (
-          serverBase === undefined ||
+          serverDay === undefined ||
+          !serverDay.hasNight ||
           serverBase === choice.value ||
           placeGone
         ) {
