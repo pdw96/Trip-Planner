@@ -14,7 +14,6 @@ import {
 import { distanceMeters, formatDistance } from "@/lib/geo";
 import { fetchPlaceCoords } from "@/lib/google-maps-server";
 import { tripDays } from "@/lib/schedule";
-import { loadBudget, toPanelBudget } from "./budget-data";
 import { type PanelDay, type PanelPlace, toCategory } from "./map-types";
 import { TripMapPanel } from "./trip-map-panel";
 
@@ -29,11 +28,10 @@ export async function MapSection({
   userId: string;
   trip: Trip;
 }) {
-  const [placeRows, baseRows, itemRows, budget] = await Promise.all([
+  const [placeRows, baseRows, itemRows] = await Promise.all([
     listPlaces(userId, trip.id),
     listTripBases(userId, trip.id),
     listScheduleItems(userId, trip.id),
-    loadBudget(userId, trip),
   ]);
   const placesNow = await refreshStaleCoords(userId, placeRows);
 
@@ -162,7 +160,6 @@ export async function MapSection({
           : null
       }
       maps={maps}
-      budget={toPanelBudget(budget, trip)}
     />
   );
 }

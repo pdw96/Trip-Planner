@@ -15,7 +15,7 @@ import {
 } from "@/lib/budget";
 import type { PanelBudget } from "./map-types";
 
-// 여행 화면의 예산 데이터(#14). 지도 칸(예산 카드)과 일정 칸(양식·체크칸)이 같은 cache 결과를 쓴다.
+// 여행 화면의 예산 데이터(#14). 예산 칸(예산 카드·아래 줄)과 일정 칸(양식·체크칸)이 같은 cache 결과를 쓴다.
 // 호출하는 쪽이 이미 getTrip 으로 이 사용자의 여행임을 확인했다. 쿼리들도 같은 접근 조건을 다시 건다.
 
 export type LoadedBudget = {

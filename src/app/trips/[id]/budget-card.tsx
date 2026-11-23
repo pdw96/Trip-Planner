@@ -16,17 +16,17 @@ import {
   toBudgetMinor,
 } from "@/lib/budget";
 import { lineClass } from "@/lib/day-line";
-import { dateLabel } from "@/lib/schedule";
+import { dateLabel, type TripDay } from "@/lib/schedule";
 import {
   BudgetSettingsForm,
   ExtraItemForm,
   tripDateChoices,
 } from "./budget-forms";
 import { BalanceText, BudgetBar } from "./budget-meter";
-import type { PanelBudget, PanelDay, PanelExtra } from "./map-types";
+import type { PanelBudget, PanelExtra } from "./map-types";
 import { RATE_SOURCE_LABELS } from "./money-fields";
 
-// 지도 칸 탭 아래의 예산 카드(#14 설계 §5.7.1). [전체]는 총 예산·예상 총지출·날짜별 표·여행 전체 항목·설정,
+// 예산 칸의 예산 카드(#14 설계 §5.7.1, 자리는 #88). [전체]는 총 예산·예상 총지출·날짜별 표·여행 전체 항목·설정,
 // [N일차]는 그날 예상·실제와 일정 밖 지출. 숫자는 서버가 계산해 넘긴다. 금액은 일정 줄에 보이지 않는다.
 
 const budgetCardClass = `flex flex-col gap-3 ${cardClass}`;
@@ -39,7 +39,7 @@ type Props = {
   budget: PanelBudget;
   // "all" 또는 날짜.
   tab: string;
-  days: PanelDay[];
+  days: TripDay[];
   onSelectTab: (tab: string) => void;
 };
 
@@ -54,7 +54,6 @@ function CardBody({ tripId, budget, tab, days, onSelectTab }: Props) {
   const close = () => setOpen(null);
 
   if (!budget) {
-    if (tab !== "all") return null;
     return (
       <section
         aria-label="예산"
@@ -150,7 +149,7 @@ function CardBody({ tripId, budget, tab, days, onSelectTab }: Props) {
   return (
     <section aria-label="예산" className={budgetCardClass}>
       <div className="flex items-center justify-between gap-2">
-        <h3 className="font-semibold">예산</h3>
+        <h3 className="font-semibold">전체 예산</h3>
         {open !== "settings" && (
           <button
             type="button"
@@ -285,7 +284,7 @@ function DayTable({
   onSelectTab,
 }: {
   budget: NonNullable<PanelBudget>;
-  days: PanelDay[];
+  days: TripDay[];
   onSelectTab: (tab: string) => void;
 }) {
   const { settings, periods } = budget;

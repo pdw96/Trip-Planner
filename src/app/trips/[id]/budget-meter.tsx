@@ -1,6 +1,6 @@
 import { type BudgetSettings, budgetMeter, formatMoney } from "@/lib/budget";
 
-// 예산 카드 머리와 휴대폰 아래 예산 줄이 같이 쓰는 막대·여유 문구(#53 설계 §5.5, §5.4.2).
+// 예산 카드 머리와 아래 예산 줄이 같이 쓰는 막대·여유 문구(#53 설계 §5.5, §5.4.2).
 
 // 잉크색 채움(예상 총지출 ÷ 총 예산, 100% 상한). 넘으면 막대 전체가 빨강.
 export function BudgetBar({
@@ -14,16 +14,17 @@ export function BudgetBar({
 }) {
   const { percent, over } = budgetMeter(projected, total);
   return (
-    <div
+    // span: 아래 예산 줄에서는 버튼 안에 들어간다(버튼 안에는 div 를 둘 수 없다).
+    <span
       role="img"
       aria-label={over ? "예산 초과" : `예산의 ${Math.round(percent)}%`}
-      className={`w-full overflow-hidden rounded-full bg-rule ${thin ? "h-1" : "h-2"}`}
+      className={`block w-full overflow-hidden rounded-full bg-rule ${thin ? "h-1" : "h-2"}`}
     >
-      <div
-        className={`h-full rounded-full ${over ? "bg-danger" : "bg-foreground"}`}
+      <span
+        className={`block h-full rounded-full ${over ? "bg-danger" : "bg-foreground"}`}
         style={{ width: `${percent}%` }}
       />
-    </div>
+    </span>
   );
 }
 
