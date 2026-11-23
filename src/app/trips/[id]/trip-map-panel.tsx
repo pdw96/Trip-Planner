@@ -457,7 +457,7 @@ function overviewView(
       position,
       text: CATEGORY_ICONS[place.category],
       kind: isBase ? "base" : "place",
-      title: isBase ? `기준점: ${place.label}` : place.label,
+      title: isBase ? `가까운 순 기준: ${place.label}` : place.label,
       dayNumber: null,
     });
     if (baseCoords && !isBase) {
@@ -635,7 +635,7 @@ function OverviewBasePicker({
         ))}
       </select>
       <span className="text-xs text-sub">
-        고르면 가까운 순으로 보여요. 일정 동선의 기준점은 N일차 탭에서 정해요.
+        고르면 가까운 순으로 보여요. 일정 동선의 밤 숙소는 N일차 탭에서 정해요.
       </span>
     </div>
   );
