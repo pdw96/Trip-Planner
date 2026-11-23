@@ -86,7 +86,7 @@ export function BudgetArea({
           id="budget-heading"
           ref={headingRef}
           tabIndex={-1}
-          className={`${sectionTitleClass} outline-none`}
+          className={sectionTitleClass}
         >
           예산
         </h2>
