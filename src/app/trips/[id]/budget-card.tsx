@@ -26,7 +26,7 @@ import { BalanceText, BudgetBar } from "./budget-meter";
 import type { PanelBudget, PanelExtra } from "./map-types";
 import { RATE_SOURCE_LABELS } from "./money-fields";
 
-// 예산 칸의 예산 카드(#14 설계 §5.7.1, 자리는 #88). [전체]는 총 예산·예상 총지출·날짜별 표·여행 전체 항목·설정,
+// 예산 카드(#14 설계 §5.7.1, 자리는 예산 시트 #97). [전체]는 총 예산·예상 총지출·날짜별 표·여행 전체 항목·설정,
 // [N일차]는 그날 예상·실제와 일정 밖 지출. 숫자는 서버가 계산해 넘긴다. 금액은 일정 줄에 보이지 않는다.
 
 const budgetCardClass = `flex flex-col gap-3 ${cardClass}`;
@@ -41,16 +41,34 @@ type Props = {
   tab: string;
   days: TripDay[];
   onSelectTab: (tab: string) => void;
+  // 이 양식이 열린 채로 시작한다(예산 없는 여행의 "예산 정하기", #97). 처음 연 탭에서만.
+  initialForm?: "settings";
 };
 
 export function BudgetCard(props: Props) {
+  // 처음 연 탭. 탭을 한 번 바꾸면 null 이 되어, 돌아와도 처음 양식이 저절로 다시 열리지 않는다.
+  const [firstTab, setFirstTab] = useState<string | null>(props.tab);
+  if (firstTab !== null && props.tab !== firstTab) setFirstTab(null);
   // 탭을 바꾸면 열린 양식을 닫는다.
-  return <CardBody key={props.tab} {...props} />;
+  return (
+    <CardBody
+      key={props.tab}
+      {...props}
+      initialForm={props.tab === firstTab ? props.initialForm : undefined}
+    />
+  );
 }
 
-function CardBody({ tripId, budget, tab, days, onSelectTab }: Props) {
+function CardBody({
+  tripId,
+  budget,
+  tab,
+  days,
+  onSelectTab,
+  initialForm,
+}: Props) {
   // 한 번에 한 양식: "settings" | "add" | "edit:<id>"
-  const [open, setOpen] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(initialForm ?? null);
   const close = () => setOpen(null);
 
   if (!budget) {
@@ -147,7 +165,7 @@ function CardBody({ tripId, budget, tab, days, onSelectTab }: Props) {
   }
 
   return (
-    <section aria-label="예산" className={budgetCardClass}>
+    <section aria-label="전체 예산" className={budgetCardClass}>
       <div className="flex items-center justify-between gap-2">
         <h3 className="font-semibold">전체 예산</h3>
         {open !== "settings" && (

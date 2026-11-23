@@ -93,7 +93,7 @@ async function TripDetail({
             <MapSection userId={user.id} trip={trip} />
           </Suspense>
           <ScheduleSection userId={user.id} trip={trip} today={today} />
-          {/* 예산 칸과 아래 예산 줄(#88). article 마지막이라 줄이 끝까지 내리면 제자리에 놓인다. */}
+          {/* 아래 예산 줄과 예산 시트(#97). article 마지막이라 줄이 끝까지 내리면 제자리에 놓인다. */}
           <Suspense fallback={null}>
             <BudgetSection userId={user.id} trip={trip} today={today} />
           </Suspense>
