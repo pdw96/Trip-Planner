@@ -275,15 +275,17 @@ function PanelBody({
                 />
               </div>
             ) : null}
-            {/* 번호 장소도 구간도 없을 때만 문구. 일정 없이 숙소만 옮기는 날(A → B)도 구간 목록이 보인다(#91).
-                위치 정보 문구는 좌표가 없어 빠진 장소가 있을 때만. */}
-            {day.stops.length === 0 && day.legs.length === 0 ? (
-              <p className="text-sm text-sub">
-                {day.unlocatedCount > 0
-                  ? "고른 장소의 위치 정보가 없어요"
-                  : "이 날 일정에 고른 장소가 없어요"}
-              </p>
-            ) : (
+            {/* 번호 장소가 없을 때의 문구. 위치 정보 문구는 좌표가 없어 빠진 장소가 있을 때만 — 일정 없이 숙소만
+                옮기는 날(A → B, #91)은 구간 목록과 함께 보인다. 고른 장소가 없다는 문구는 구간도 없을 때만. */}
+            {day.stops.length === 0 &&
+              (day.unlocatedCount > 0 || day.legs.length === 0) && (
+                <p className="text-sm text-sub">
+                  {day.unlocatedCount > 0
+                    ? "고른 장소의 위치 정보가 없어요"
+                    : "이 날 일정에 고른 장소가 없어요"}
+                </p>
+              )}
+            {(day.stops.length > 0 || day.legs.length > 0) && (
               <DayLegs
                 dayNumber={day.dayNumber}
                 rows={legRows(day, placesById, routeResult)}
