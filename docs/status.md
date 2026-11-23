@@ -33,6 +33,7 @@
 - #36·#23·#24 는 노선도 틀(#53)에 맞춰 넣는다.
 - 기능: #36 구간 경로 후보 2–3개
 - 개선: #23 달력 키보드 이동, #24 자잘한 개선 모음
+- 보안 강화: #80 워크플로 액션을 커밋 SHA 로 고정(`.github/**` 라 위험 경로 PR)
 - Dependabot PR 이 오면 `CLAUDE.md` 'Dependabot PR' 대로 처리한다(세션이 확인할 PR 은 사용자가 새 세션에 맡긴다). 첫 실행 PR 6개는 모두 끝났다.
 
 여행 접근 조건은 `src/db/queries/trips.ts` 의 `accessibleTrips(userId)`(주인 또는 함께하는 사람) 하나, 주인만 하는 일은 `ownedTrips(userId)`. 하위 데이터 쿼리는 `schedule-items.ts`·`places.ts`·`budget.ts` 처럼 이 조건을 같은 SQL 문 안에 넣는다(하위 id 와 여행 id 를 함께 묶어 섞어 보내기를 막는다). `accessibleTrips` 는 `trips` 를 별칭 없이 FROM 에 둔 쿼리에서만 쓴다(안의 EXISTS 가 바깥 `trips.id` 를 가리킨다). 여러 테이블을 함께 쓰려면 neon-http 에 트랜잭션이 없으므로 데이터를 바꾸는 CTE 한 문으로 한다(`updatePlace`, `createScheduleItemWithNewPlace`).
@@ -50,6 +51,12 @@
   - 제안(사용자가 고르지 않음): `human-gate.yml` setup-node 에 `package-manager-cache: false`. 지금은 `packageManager` 필드가 없어 캐시가 켜지지 않지만, 필드를 넣으면 `pull_request_target` 에서 저절로 켜진다(setup-node README 권고).
   - #72 처럼 코드를 고쳐야 하는 Dependabot PR 은 세션 브랜치에 Dependabot 커밋을 cherry-pick 하고 수정을 더해 새 PR(#74·#76)을 연다. 사용자가 세션에 머지를 맡기면 세션이 squash 머지한다(#74).
   - 설정 검증: `.github/dependabot.yml` 은 schemastore 의 `dependabot-2.0.json` 스키마로 확인했다(Biome 2.6 의 YAML 검사는 서식만 보고 스키마는 보지 않는다).
+
+- **code scanning(CodeQL 기본 설정, 2026-11-21 부터)**:
+  - 저장소 설정의 기본 설정(동적 워크플로 `dynamic/github-code-scanning/codeql`)이 PR·main push 마다 Actions 워크플로와 JS/TS 를 검사한다. 경고 목록은 세션 도구(GitHub MCP)로 읽을 수 없다. 사용자에게 제목·링크를 받고, 규칙 원문은 같은 버전 CodeQL 번들(`github/codeql-action` 릴리스 `codeql-bundle-v<버전>`, 버전은 분석 로그에 있음)의 `qlpacks/codeql/actions-*` 에서 읽는다. 세션에서 CodeQL 분석을 돌리는 것은 자동 권한 검사기가 막았다.
+  - 경고 #1 `actions/untrusted-checkout/high`(`human-gate.yml` 의 `git fetch … refs/pull/<번호>/head`)은 **오탐**이다. 규칙은 `pull_request_target` 안에서 PR 번호·head ref·head SHA 가 들어간 `git fetch|pull` 을 모두 체크아웃으로 본다(`UntrustedCheckoutQuery.qll` 의 `GitMutableRefCheckout`). PR head 는 git 객체(`refs/remotes/pr/head`)로만 받고 작업 트리는 main 이며, 실행되는 것은 main 의 `human-gate.mjs` 뿐이다. 이 스크립트는 PR 쪽에 `git merge-base`·`git diff` 만 쓴다(`.gitattributes` 도 작업 트리 = main 에서 읽음). 받는 방법을 바꿔도 같은 규칙에 걸리므로 고치지 않고 dismiss(False positive)한다(사용자가 GitHub 화면에서).
+  - 뒤에 PR 코드를 실행하는 단계(`npm install`, `node <경로>.js|.ts` 등)가 붙으면 같은 규칙이 Critical 로 올라간다. `human-gate.yml` 에 단계를 더할 때는 PR 쪽 파일을 실행하지 않는지 본다(`node .github/scripts/human-gate.mjs` 는 확장자가 `.mjs` 라 실행 단계로 세지 않지만, main 의 파일이라 실제로도 안전하다).
+  - 액션 SHA 고정은 #80(사용자가 고르면 진행).
 
 - **TypeScript 7(#74)**:
   - 전역 타입(import 없이 쓰는 `google.maps` 등)은 `tsconfig.json` `types` 에 적어야 들어온다(TS 6 부터 기본으로 `@types/*` 를 모두 넣지 않음). 새 전역 타입 패키지를 쓰면 여기에 더하고 devDependency 로도 넣는다.
