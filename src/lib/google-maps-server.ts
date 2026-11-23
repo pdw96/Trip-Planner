@@ -143,7 +143,7 @@ export async function fetchPlaceRegion(
     "addressComponents,timeZone",
     { method: "GET" },
   );
-  if (!res || !res.ok || !isRecord(res.body)) return null;
+  if (!res?.ok || !isRecord(res.body)) return null;
 
   let countryCode: string | null = null;
   if (Array.isArray(res.body.addressComponents)) {
@@ -195,7 +195,7 @@ export async function fetchTransit(
     TRANSIT_FIELD_MASK,
     { method: "POST", body },
   );
-  if (!res || !res.ok) return { ok: false };
+  if (!res?.ok) return { ok: false };
   return { ok: true, summary: summarizeTransit(res.body) };
 }
 
@@ -214,6 +214,6 @@ export async function fetchWalk(
       languageCode: "ko",
     },
   });
-  if (!res || !res.ok) return { ok: false };
+  if (!res?.ok) return { ok: false };
   return { ok: true, summary: summarizeWalk(res.body) };
 }
