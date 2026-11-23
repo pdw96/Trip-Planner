@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   baseForDate,
+  basesForDay,
   buildDayRoute,
   DEFAULT_DEPART,
   daySignature,
   needsCoordsRefresh,
+  previousDate,
   routesByDate,
 } from "./day-route.ts";
 
@@ -23,6 +25,8 @@ const places = new Map([
   ["D", mk("D", null, null)],
 ]);
 const dist = () => 1;
+const AA = { start: "A", end: "A" };
+const NONE = { start: null, end: null };
 const summary = (r) =>
   r.legs.map(
     (l) => `${l.from.id}>${l.to.id} ${l.timing.kind} ${l.timing.time}`,
@@ -50,7 +54,7 @@ test("base 있음: base → stops → base", () => {
       { placeId: "B", time: "09:30" },
       { placeId: "C", time: null },
     ],
-    "A",
+    AA,
     places,
     dist,
   );
@@ -66,7 +70,8 @@ test("base 있음: base → stops → base", () => {
       ["C", 2],
     ],
   );
-  assert.equal(r.base.id, "A");
+  assert.equal(r.start.id, "A");
+  assert.equal(r.end.id, "A");
   assert.equal(r.legs[0].fromIsBase, true);
   assert.equal(r.legs[0].toIsBase, false);
   assert.equal(r.legs[2].toIsBase, true);
@@ -79,11 +84,12 @@ test("base 없음", () => {
       { placeId: "B", time: null },
       { placeId: "C", time: null },
     ],
-    null,
+    NONE,
     places,
     dist,
   );
-  assert.equal(r.base, null);
+  assert.equal(r.start, null);
+  assert.equal(r.end, null);
   assert.deepEqual(summary(r), ["B>C departure 10:00"]);
   assert.equal(DEFAULT_DEPART, "10:00");
 });
@@ -94,7 +100,7 @@ test("첫 stop 이 base 와 같음", () => {
       { placeId: "A", time: "12:00" },
       { placeId: "B", time: null },
     ],
-    "A",
+    AA,
     places,
     dist,
   );
@@ -113,7 +119,7 @@ test("연달아 같은 stop 은 합치고 번호를 건너뛰지 않는다", () 
       { placeId: "B", time: "11:00" },
       { placeId: "C", time: null },
     ],
-    null,
+    NONE,
     places,
     dist,
   );
@@ -128,18 +134,25 @@ test("연달아 같은 stop 은 합치고 번호를 건너뛰지 않는다", () 
 });
 
 test("좌표 없는 장소는 뺀다", () => {
-  const r = buildDayRoute([{ placeId: "D", time: null }], "A", places, dist);
+  const r = buildDayRoute([{ placeId: "D", time: null }], AA, places, dist);
   assert.deepEqual(r.legs, []);
   assert.deepEqual(r.stops, []);
-  assert.equal(r.base.id, "A");
-  const r2 = buildDayRoute([{ placeId: "X", time: null }], "D", places, dist);
-  assert.equal(r2.base, null);
+  assert.equal(r.start.id, "A");
+  assert.equal(r.end.id, "A");
+  const r2 = buildDayRoute(
+    [{ placeId: "X", time: null }],
+    { start: "D", end: "D" },
+    places,
+    dist,
+  );
+  assert.equal(r2.start, null);
+  assert.equal(r2.end, null);
   assert.deepEqual(r2.legs, []);
 });
 
 test("비어 있음", () => {
-  const r = buildDayRoute([], null, places, dist);
-  assert.deepEqual(r, { base: null, stops: [], legs: [] });
+  const r = buildDayRoute([], NONE, places, dist);
+  assert.deepEqual(r, { start: null, end: null, stops: [], legs: [] });
 });
 
 test("needsCoordsRefresh", () => {
@@ -157,7 +170,7 @@ test("마지막 stop 이 base 와 합쳐져도 시각은 도착으로 남는다"
       { placeId: "B", time: null },
       { placeId: "A", time: "15:00" },
     ],
-    "A",
+    AA,
     places,
     dist,
   );
@@ -167,7 +180,7 @@ test("마지막 stop 이 base 와 합쳐져도 시각은 도착으로 남는다"
       { placeId: "B", time: "09:00" },
       { placeId: "A", time: null },
     ],
-    "A",
+    AA,
     places,
     dist,
   );
@@ -175,10 +188,11 @@ test("마지막 stop 이 base 와 합쳐져도 시각은 도착으로 남는다"
 });
 
 test("base 와 같은 stop 하나뿐이면 동선이 없다", () => {
-  const r = buildDayRoute([{ placeId: "A", time: "12:00" }], "A", places, dist);
+  const r = buildDayRoute([{ placeId: "A", time: "12:00" }], AA, places, dist);
   assert.deepEqual(r.legs, []);
   assert.deepEqual(r.stops, []);
-  assert.equal(r.base.id, "A");
+  assert.equal(r.start.id, "A");
+  assert.equal(r.end.id, "A");
 });
 
 test("가운데의 base 와 같은 stop 은 번호가 남는다", () => {
@@ -188,7 +202,7 @@ test("가운데의 base 와 같은 stop 은 번호가 남는다", () => {
       { placeId: "A", time: null },
       { placeId: "C", time: null },
     ],
-    "A",
+    AA,
     places,
     dist,
   );
@@ -210,7 +224,7 @@ test("같은 장소가 이어지면 들어오는 구간은 첫 시각, 나가는
       { placeId: "B", time: "11:00" },
       { placeId: "C", time: null },
     ],
-    "A",
+    AA,
     places,
     dist,
   );
@@ -228,7 +242,7 @@ test("합친 stop 중 나중 것만 시각이 있으면 그 시각이 도착·�
       { placeId: "B", time: "11:00" },
       { placeId: "C", time: null },
     ],
-    "A",
+    AA,
     places,
     dist,
   );
@@ -246,7 +260,7 @@ test("구간의 일정 id: 기준점은 null, 합친 점은 도착=처음·출�
       { itemId: "i2", placeId: "B", time: "11:00" },
       { itemId: "i3", placeId: "C", time: null },
     ],
-    "A",
+    AA,
     places,
     dist,
   );
@@ -267,7 +281,7 @@ test("기준점과 같은 장소의 첫·끝 일정은 일정 id 가 이긴다",
       { itemId: "i1", placeId: "B", time: null },
       { itemId: "in", placeId: "A", time: "18:00" },
     ],
-    "A",
+    AA,
     places,
     dist,
   );
@@ -287,7 +301,7 @@ test("좌표 없는 장소의 일정은 건너뛴다", () => {
       { itemId: "i2", placeId: "D", time: null },
       { itemId: "i3", placeId: "C", time: null },
     ],
-    null,
+    NONE,
     places,
     dist,
   );
@@ -307,14 +321,13 @@ test("routesByDate: 날짜별로 그날 장소 일정만, 시각은 앞 5자", (
     ["2026-12-03", "2026-12-04"],
     items,
     [{ startDate: "2026-12-03", placeId: "A" }],
+    { startDate: "2026-12-03", endDate: "2026-12-05" },
     places,
     dist,
   );
-  assert.deepEqual(summary(m.get("2026-12-03")), [
-    "A>B arrival 09:30",
-    "B>A departure 09:30",
-  ]);
-  assert.deepEqual(m.get("2026-12-03").legs[0].toItemId, "i1");
+  // 12-03 은 첫날이라 전날 밤 숙소가 없다: 첫 일정에서 시작해 그날 밤 숙소 A 로.
+  assert.deepEqual(summary(m.get("2026-12-03")), ["B>A departure 09:30"]);
+  assert.deepEqual(m.get("2026-12-03").legs[0].fromItemId, "i1");
   assert.deepEqual(summary(m.get("2026-12-04")), [
     "A>C departure 10:00",
     "C>A departure 10:00",
@@ -328,10 +341,146 @@ test("daySignature 은 일정 id 를 담는다", () => {
         { itemId: "i1", placeId: "B", time: null },
         { itemId: second, placeId: "C", time: null },
       ],
-      null,
+      NONE,
       places,
       dist,
     );
   assert.equal(daySignature(two("i2")), daySignature(two("i2")));
   assert.notEqual(daySignature(two("i2")), daySignature(two("i3")));
+});
+
+// --- 그날 밤 숙소(#91): 시작점은 전날 밤 숙소, 끝점은 그날 밤 숙소 ---
+
+const trip3 = { startDate: "2026-12-01", endDate: "2026-12-03" };
+const moved = [
+  { startDate: "2026-12-01", placeId: "A" },
+  { startDate: "2026-12-02", placeId: "B" },
+  { startDate: "2026-12-03", placeId: null },
+];
+
+test("previousDate", () => {
+  assert.equal(previousDate("2026-12-01"), "2026-11-30");
+  assert.equal(previousDate("2027-01-01"), "2026-12-31");
+  assert.equal(previousDate("2028-03-01"), "2028-02-29");
+});
+
+test("basesForDay: 첫날·옮기는 날·마지막 날", () => {
+  assert.deepEqual(basesForDay(moved, "2026-12-01", trip3), {
+    start: null,
+    end: "A",
+  });
+  assert.deepEqual(basesForDay(moved, "2026-12-02", trip3), {
+    start: "A",
+    end: "B",
+  });
+  assert.deepEqual(basesForDay(moved, "2026-12-03", trip3), {
+    start: "B",
+    end: null,
+  });
+});
+
+test("basesForDay: 마지막 날 행은 무시, 당일치기는 없음", () => {
+  const rows = [
+    { startDate: "2026-12-01", placeId: "A" },
+    { startDate: "2026-12-03", placeId: "C" },
+  ];
+  assert.deepEqual(basesForDay(rows, "2026-12-03", trip3), {
+    start: "A",
+    end: null,
+  });
+  const day = { startDate: "2026-12-01", endDate: "2026-12-01" };
+  assert.deepEqual(basesForDay(rows, "2026-12-01", day), {
+    start: null,
+    end: null,
+  });
+});
+
+test("basesForDay: 없음 행 = 그날 밤 숙소 없음", () => {
+  const rows = [
+    { startDate: "2026-12-01", placeId: "A" },
+    { startDate: "2026-12-02", placeId: null },
+  ];
+  const trip4 = { startDate: "2026-12-01", endDate: "2026-12-04" };
+  assert.deepEqual(basesForDay(rows, "2026-12-02", trip4), {
+    start: "A",
+    end: null,
+  });
+  assert.deepEqual(basesForDay(rows, "2026-12-03", trip4), {
+    start: null,
+    end: null,
+  });
+});
+
+test("buildDayRoute: 시작점과 끝점이 다르다", () => {
+  const r = buildDayRoute(
+    [{ itemId: "i1", placeId: "C", time: "13:00" }],
+    { start: "A", end: "B" },
+    places,
+    dist,
+  );
+  assert.deepEqual(summary(r), ["A>C arrival 13:00", "C>B departure 13:00"]);
+  assert.equal(r.start.id, "A");
+  assert.equal(r.end.id, "B");
+  assert.deepEqual([r.legs[0].fromIsBase, r.legs[1].toIsBase], [true, true]);
+});
+
+test("buildDayRoute: 일정 없이 A → B", () => {
+  const r = buildDayRoute([], { start: "A", end: "B" }, places, dist);
+  assert.deepEqual(summary(r), ["A>B departure 10:00"]);
+  assert.deepEqual(r.stops, []);
+});
+
+test("buildDayRoute: 시작점=끝점, 일정 없음", () => {
+  const r = buildDayRoute([], { start: "A", end: "A" }, places, dist);
+  assert.deepEqual(r.legs, []);
+  assert.equal(r.start.id, "A");
+});
+
+test("buildDayRoute: 좌표 없는 끝점은 빠진다", () => {
+  const r = buildDayRoute(
+    [{ itemId: "i1", placeId: "B", time: null }],
+    { start: "A", end: "D" },
+    places,
+    dist,
+  );
+  assert.deepEqual(summary(r), ["A>B departure 10:00"]);
+  assert.equal(r.end, null);
+});
+
+test("routesByDate: 날짜 하나만 넘겨도 전날 밤 숙소에서 시작", () => {
+  const items = [{ id: "i1", date: "2026-12-02", placeId: "C", time: null }];
+  const one = routesByDate(
+    ["2026-12-02"],
+    items,
+    moved,
+    trip3,
+    places,
+    dist,
+  ).get("2026-12-02");
+  const all = routesByDate(
+    ["2026-12-01", "2026-12-02", "2026-12-03"],
+    items,
+    moved,
+    trip3,
+    places,
+    dist,
+  ).get("2026-12-02");
+  assert.deepEqual(summary(one), [
+    "A>C departure 10:00",
+    "C>B departure 10:00",
+  ]);
+  assert.equal(daySignature(one), daySignature(all));
+});
+
+test("daySignature 는 시작점·끝점을 담는다", () => {
+  const s = (bases) =>
+    daySignature(
+      buildDayRoute(
+        [{ itemId: "i1", placeId: "C", time: null }],
+        bases,
+        places,
+        dist,
+      ),
+    );
+  assert.notEqual(s({ start: "A", end: "B" }), s({ start: "B", end: "A" }));
 });

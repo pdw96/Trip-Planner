@@ -8,7 +8,7 @@ export type LegRow = {
   key: string;
   fromMarker: string;
   toMarker: string;
-  // 도착이 기준점이 아니면 그 장소 이름표.
+  // 도착 장소 이름표(숙소 포함).
   toLabel: string | null;
   // null 이면 아직 이동 정보를 기다리는 중(직선 거리만 보인다).
   text: string | null;

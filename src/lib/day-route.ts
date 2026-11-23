@@ -1,4 +1,5 @@
-// 날의 기준점(숙소)과 하루 동선. 서버에서 쓰고 node --test 로 시험하므로 다른 모듈을 import 하지 않는다.
+// 그날 밤 숙소(기준점, #91)와 하루 동선. N일차 동선 = 전날 밤 숙소(시작점) → 그날 일정들 → 그날 밤 숙소(끝점).
+// 여행은 N박 N+1일이라 첫날은 시작점이, 마지막 날은 끝점이 없다. 서버에서 쓰고 node --test 로 시험하므로 다른 모듈을 import 하지 않는다.
 // 거리는 호출하는 쪽이 넘긴다(geo.ts 의 distanceMeters).
 // routesByDate: 지도 칸·일정 칸·loadDayRoute 가 같은 규칙으로 날짜별 뼈대를 만든다(#37).
 // daySignature: 구간 결과 저장소의 키. 동선 모양·시각·일정 id 가 바뀌면 달라진다(#37).
@@ -14,6 +15,11 @@ export type RoutePlace = {
 export type LatLng = { lat: number; lng: number };
 
 export type BaseRow = { startDate: string; placeId: string | null };
+
+export type TripRange = { startDate: string; endDate: string };
+
+// 그날 동선의 시작점·끝점으로 저장된 장소 id(좌표 여부와 무관).
+export type DayBases = { start: string | null; end: string | null };
 
 export type DayStop = { itemId: string; placeId: string; time: string | null };
 
@@ -42,7 +48,9 @@ export type DayLeg = {
 };
 
 export type DayRoute = {
-  base: RoutePlace | null;
+  // 동선에 들어간 시작점(전날 밤 숙소)·끝점(그날 밤 숙소). 좌표가 있을 때만.
+  start: RoutePlace | null;
+  end: RoutePlace | null;
   stops: { place: RoutePlace; number: number }[];
   legs: DayLeg[];
 };
@@ -63,6 +71,25 @@ export function baseForDate(rows: BaseRow[], date: string): string | null {
     }
   }
   return best ? best.placeId : null;
+}
+
+// "2026-12-01" → "2026-11-30". 날짜 문자열만 다룬다(UTC 로 계산해 시간대 영향 없음).
+export function previousDate(date: string): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+// N일차 시작점 = 전날 밤 숙소(첫날은 없음), 끝점 = 그날 밤 숙소(마지막 날은 밤이 없어 없음).
+export function basesForDay(
+  rows: BaseRow[],
+  date: string,
+  trip: TripRange,
+): DayBases {
+  return {
+    start: date > trip.startDate ? baseForDate(rows, previousDate(date)) : null,
+    end: date < trip.endDate ? baseForDate(rows, date) : null,
+  };
 }
 
 type Point = {
@@ -91,15 +118,16 @@ function locate(
 
 export function buildDayRoute(
   stops: DayStop[],
-  baseId: string | null,
+  bases: DayBases,
   places: Map<string, RoutePlace>,
   distance: (a: LatLng, b: LatLng) => number,
 ): DayRoute {
-  const base = locate(baseId, places);
+  const start = locate(bases.start, places);
+  const end = locate(bases.end, places);
   const sequence: Point[] = [];
-  if (base)
+  if (start)
     sequence.push({
-      ...base,
+      ...start,
       isBase: true,
       arriveTime: null,
       departTime: null,
@@ -119,9 +147,9 @@ export function buildDayRoute(
       });
     }
   }
-  if (base)
+  if (end)
     sequence.push({
-      ...base,
+      ...end,
       isBase: true,
       arriveTime: null,
       departTime: null,
@@ -175,7 +203,12 @@ export function buildDayRoute(
     });
   }
 
-  return { base: base ? base.place : null, stops: numbered, legs };
+  return {
+    start: start ? start.place : null,
+    end: end ? end.place : null,
+    stops: numbered,
+    legs,
+  };
 }
 
 // 날짜마다 그날 장소가 이어진 일정(items 순서 그대로, listScheduleItems 정렬)으로 뼈대를 만든다.
@@ -183,6 +216,7 @@ export function routesByDate(
   dates: string[],
   items: ScheduleRow[],
   bases: BaseRow[],
+  trip: TripRange,
   places: Map<string, RoutePlace>,
   distance: (a: LatLng, b: LatLng) => number,
 ): Map<string, DayRoute> {
@@ -200,7 +234,7 @@ export function routesByDate(
   for (const [date, stops] of stopsByDate) {
     routes.set(
       date,
-      buildDayRoute(stops, baseForDate(bases, date), places, distance),
+      buildDayRoute(stops, basesForDay(bases, date, trip), places, distance),
     );
   }
   return routes;
@@ -211,7 +245,7 @@ export function daySignature(route: DayRoute): string {
     (l) =>
       `${l.from.id}>${l.to.id}@${l.timing.kind} ${l.timing.time}#${l.fromItemId ?? "-"}>${l.toItemId ?? "-"}`,
   );
-  return `${route.base?.id ?? "-"}|${legs.join(",")}`;
+  return `${route.start?.id ?? "-"}>${route.end?.id ?? "-"}|${legs.join(",")}`;
 }
 
 // 좌표는 30일(30×24h)을 넘기면 다시 불러온다.

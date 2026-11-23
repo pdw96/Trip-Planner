@@ -99,6 +99,7 @@ export async function ScheduleSection({
     days.map(({ day }) => day.date),
     items,
     baseRows,
+    { startDate: trip.startDate, endDate: trip.endDate },
     routePlaces,
     distanceMeters,
   );
@@ -173,7 +174,12 @@ export async function ScheduleSection({
                 date={day.date}
                 items={dayItems.map(rowItem)}
                 dateOptions={dayOptions}
-                travel={dayTravel(day.date, routes.get(day.date), placeLabels)}
+                travel={
+                  // 일정 없이 숙소만 옮기는 날(A → B, #91)은 이동 줄을 그릴 자리가 없으니 묻지 않는다(지도 탭에는 보인다).
+                  dayItems.length > 0
+                    ? dayTravel(day.date, routes.get(day.date), placeLabels)
+                    : null
+                }
               />
               <AddScheduleItem tripId={trip.id} date={day.date} />
             </section>

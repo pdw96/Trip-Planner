@@ -15,7 +15,7 @@ export type PlacedLine<L extends LineLeg> = { leg: L; caption: string | null };
 export type PlacedLines<L extends LineLeg> = {
   // 일정 id → 그 줄 바로 위 이동 줄.
   before: Map<string, PlacedLine<L>>;
-  // 마지막 줄 아래(도착이 일정이 아닌 구간, 곧 기준점으로 돌아가는 구간).
+  // 마지막 줄 아래(도착이 일정이 아닌 구간, 곧 그날 밤 숙소로 가는 구간, #91).
   after: PlacedLine<L> | null;
 };
 

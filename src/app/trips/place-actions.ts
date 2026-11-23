@@ -177,7 +177,8 @@ export async function deletePlaceAction(
 
 // 화면에서 바로 부르는 선택이라, 대상 없음과 저장 실패를 똑같이 { ok: false } 로 돌려준다
 // (#12 완료 체크와 같은 이유: 반응이 같으므로 남의 여행·장소가 있는지 드러나지 않는다).
-// placeId 가 null 이면 "이날부터 기준점 없음" 행을 둔다.
+// 기준점은 "그날 밤 숙소"다(#91). placeId 가 null 이면 "이날 밤부터 숙소 없음" 행을 둔다.
+// 마지막 날(당일치기의 그날 포함)은 밤이 없어 동선에 쓰이지 않으므로 받지 않는다(화면도 고르기 칸을 숨김).
 export async function setTripBaseAction(
   tripId: string,
   date: string,
@@ -193,7 +194,7 @@ export async function setTripBaseAction(
 
   try {
     const trip = await getTrip(user.id, tripId);
-    if (!trip || date < trip.startDate || date > trip.endDate) {
+    if (!trip || date < trip.startDate || date >= trip.endDate) {
       return { ok: false };
     }
     if (!(await setTripBase(user.id, trip.id, date, placeId))) {
