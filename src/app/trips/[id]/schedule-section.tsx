@@ -99,6 +99,7 @@ export async function ScheduleSection({
     days.map(({ day }) => day.date),
     items,
     baseRows,
+    { startDate: trip.startDate, endDate: trip.endDate },
     routePlaces,
     distanceMeters,
   );

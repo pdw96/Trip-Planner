@@ -358,16 +358,18 @@ function dayView(
   result: DayRouteResult | null,
 ): { pins: MapPin[]; lines: MapLine[] } {
   const pins: MapPin[] = [];
-  const base = day.routeBaseId ? placesById.get(day.routeBaseId) : undefined;
-  const basePosition = positionOf(base);
-  if (base && basePosition) {
+  // 시작 숙소(전날 밤)와 끝 숙소(그날 밤). 같으면 하나(#91).
+  for (const baseId of day.routeBaseIds) {
+    const base = placesById.get(baseId);
+    const basePosition = positionOf(base);
+    if (!base || !basePosition) continue;
     pins.push({
       key: `base:${base.id}`,
       placeId: base.id,
       position: basePosition,
       text: CATEGORY_ICONS.lodging,
       kind: "base",
-      title: `기준점: ${base.label}`,
+      title: `숙소: ${base.label}`,
       dayNumber: null,
     });
   }

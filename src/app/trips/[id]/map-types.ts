@@ -46,8 +46,8 @@ export type PanelDay = {
   label: string;
   // 이 날 저장된 기준점(좌표가 없어도 그대로). 기준점 고르기의 현재 값.
   baseId: string | null;
-  // 동선에 들어간 기준점(좌표가 있을 때만).
-  routeBaseId: string | null;
+  // 동선에 들어간 시작·끝 숙소(좌표가 있을 때만, 중복 없이 [시작, 끝] 순서).
+  routeBaseIds: string[];
   // 구간 결과 저장소 키(daySignature). 바뀌면 다시 묻는다(#37).
   signature: string;
   stops: { placeId: string; number: number }[];

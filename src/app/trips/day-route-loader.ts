@@ -3,7 +3,12 @@ import { listPlaces } from "@/db/queries/places";
 import { listScheduleItems } from "@/db/queries/schedule-items";
 import { listTripBases } from "@/db/queries/trip-bases";
 import { getTrip } from "@/db/queries/trips";
-import { type DayLeg, type RoutePlace, routesByDate } from "@/lib/day-route";
+import {
+  type DayLeg,
+  type RoutePlace,
+  routesByDate,
+  type TripRange,
+} from "@/lib/day-route";
 import { distanceMeters, formatDistance, type LatLng } from "@/lib/geo";
 import {
   fetchPlaceRegion,
@@ -130,9 +135,11 @@ export async function loadDayRoute(
   let placeRows: Awaited<ReturnType<typeof listPlaces>>;
   let baseRows: Awaited<ReturnType<typeof listTripBases>>;
   let itemRows: Awaited<ReturnType<typeof listScheduleItems>>;
+  let tripRange: TripRange;
   try {
     const trip = await getTrip(userId, tripId);
     if (!trip || date < trip.startDate || date > trip.endDate) return null;
+    tripRange = { startDate: trip.startDate, endDate: trip.endDate };
     [placeRows, baseRows, itemRows] = await Promise.all([
       listPlaces(userId, trip.id),
       listTripBases(userId, trip.id),
@@ -159,6 +166,7 @@ export async function loadDayRoute(
     [date],
     itemRows,
     baseRows,
+    tripRange,
     placesById,
     distanceMeters,
   ).get(date);

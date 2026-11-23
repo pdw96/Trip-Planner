@@ -78,6 +78,7 @@ export async function MapSection({
     days.map((d) => d.date),
     itemRows,
     baseRows,
+    { startDate: trip.startDate, endDate: trip.endDate },
     routePlaces,
     distanceMeters,
   );
@@ -87,7 +88,8 @@ export async function MapSection({
     );
     const baseId = baseForDate(baseRows, day.date);
     const route = routes.get(day.date) ?? {
-      base: null,
+      start: null,
+      end: null,
       stops: [],
       legs: [],
     };
@@ -96,7 +98,13 @@ export async function MapSection({
       dayNumber: day.dayNumber,
       label: day.label,
       baseId: baseId !== null && routePlaces.has(baseId) ? baseId : null,
-      routeBaseId: route.base?.id ?? null,
+      routeBaseIds: [
+        ...new Set(
+          [route.start?.id, route.end?.id].filter(
+            (id): id is string => id !== undefined,
+          ),
+        ),
+      ],
       signature: daySignature(route),
       stops: route.stops.map((s) => ({
         placeId: s.place.id,
