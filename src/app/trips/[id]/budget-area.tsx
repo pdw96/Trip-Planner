@@ -22,8 +22,12 @@ export function BudgetArea({
 }) {
   const [request, setRequest] = useState<SheetRequest | null>(null);
   const openerRef = useRef<HTMLButtonElement>(null);
-  const open = (mode: SheetRequest["mode"]) =>
-    setRequest((prev) => ({ mode, id: (prev?.id ?? 0) + 1 }));
+  // 닫아도 줄지 않는 번호(시트가 열 때마다 안의 카드를 새로 만든다).
+  const openCount = useRef(0);
+  const open = (mode: SheetRequest["mode"]) => {
+    openCount.current += 1;
+    setRequest({ mode, id: openCount.current });
+  };
 
   return (
     <>

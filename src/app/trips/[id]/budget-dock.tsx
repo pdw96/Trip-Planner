@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { buttonClass } from "@/app/ui/styles";
 import { formatMoney } from "@/lib/budget";
 import type { TripDay } from "@/lib/schedule";
@@ -8,6 +8,7 @@ import { ExtraItemForm, tripDateChoices } from "./budget-forms";
 import { BalanceText, BudgetBar } from "./budget-meter";
 import type { PanelBudget } from "./map-types";
 import { useSelectedDay } from "./selected-day";
+import { isOnBackdrop, lockPageScroll } from "./sheet-dialog";
 
 // 화면 아래에 늘 떠 있는 예산 줄과 [+ 지출] 시트(#53 설계 §5.4.2, #88·#97 설계). 휴대폰·데스크톱 모두.
 // 요약을 누르면 예산 시트가 열린다(onOpen). 예산이 없으면 그 자리에 BudgetSetupDock 이 뜬다.
@@ -41,6 +42,10 @@ export function BudgetDock({
   const [open, setOpen] = useState(false);
   // 바깥 누르기 닫기는 누른 곳과 뗀 곳이 모두 바탕일 때만(양식 안에서 끌다 바깥에서 놓으면 닫지 않음).
   const downOnBackdrop = useRef(false);
+  const unlockScroll = useRef<(() => void) | null>(null);
+
+  // 판이 열린 채로 사라지면(뒤로 가기 등) close 이벤트가 오지 않으므로 여기서 푼다.
+  useEffect(() => () => unlockScroll.current?.(), []);
 
   const { settings, summary: s } = budget;
   const money = (minor: number) => formatMoney(minor, settings.currency);
@@ -51,6 +56,7 @@ export function BudgetDock({
     setOpenCount((n) => n + 1);
     setOpen(true);
     dialogRef.current?.showModal();
+    unlockScroll.current = lockPageScroll();
   }
   function closeSheet() {
     dialogRef.current?.close();
@@ -99,19 +105,22 @@ export function BudgetDock({
           </button>
         </div>
       </div>
-      {/* 바깥(바탕 가림막)을 누르면 닫는다: 그때 event.target 이 dialog 자신이다. 키보드는 Esc 로 닫는다. */}
+      {/* 바깥(바탕 가림막)을 누르면 닫는다(isOnBackdrop). 키보드는 Esc 로 닫는다. */}
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: Esc 는 dialog 가 처리한다 */}
       <dialog
         ref={dialogRef}
         aria-label="일정 밖 지출 넣기"
         onPointerDown={(event) => {
-          downOnBackdrop.current = event.target === event.currentTarget;
+          downOnBackdrop.current = isOnBackdrop(event);
         }}
         onClick={(event) => {
-          if (event.target === event.currentTarget && downOnBackdrop.current)
-            closeSheet();
+          if (downOnBackdrop.current && isOnBackdrop(event)) closeSheet();
         }}
-        onClose={() => setOpen(false)}
+        onClose={() => {
+          setOpen(false);
+          unlockScroll.current?.();
+          unlockScroll.current = null;
+        }}
         className="m-0 mt-auto max-h-[85dvh] w-full max-w-none sm:mx-auto sm:max-w-2xl overflow-y-auto rounded-t-[14px] bg-background p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-foreground backdrop:bg-foreground/30"
       >
         {open && (
