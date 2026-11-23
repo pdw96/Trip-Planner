@@ -21,15 +21,18 @@ export function BudgetDock({
   today,
   hidden,
   onJump,
+  ref,
 }: {
   tripId: string;
   budget: NonNullable<PanelBudget>;
   days: TripDay[];
   // 여행 중이면 오늘, 아니면 null.
   today: string | null;
-  // 예산 칸이 화면에 보이는 동안 true.
+  // 예산 칸이 화면에 보이는 동안(또는 아직 모를 때) true.
   hidden: boolean;
   onJump: () => void;
+  // 줄(시트 제외). 숨기기 전에 안에 초점이 있는지 볼 때 쓴다.
+  ref?: React.Ref<HTMLDivElement>;
 }) {
   const { selected } = useSelectedDay();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -56,6 +59,7 @@ export function BudgetDock({
   return (
     <>
       <div
+        ref={ref}
         inert={hidden}
         className={`sticky bottom-0 z-20 -mx-4 border-t border-rule bg-background px-4 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] transition-[translate,opacity] duration-200 motion-reduce:transition-none sm:-mx-6 sm:px-6 ${
           hidden ? "pointer-events-none translate-y-full opacity-0" : ""

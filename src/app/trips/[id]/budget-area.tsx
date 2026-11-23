@@ -25,7 +25,9 @@ export function BudgetArea({
   const { selected, select, onBeforeSelect } = useSelectedDay();
   const sectionRef = useRef<HTMLElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const [sectionVisible, setSectionVisible] = useState(false);
+  const dockRef = useRef<HTMLDivElement>(null);
+  // null: 아직 모름(서버 렌더·첫 관찰 전). 그동안 줄을 숨겨, 예산 칸이 처음부터 보이는 짧은 여행에서 줄이 잠깐 떴다 사라지지 않게 한다.
+  const [sectionVisible, setSectionVisible] = useState<boolean | null>(null);
   // 날을 바꾸기 직전 예산 칸의 화면 위치. 바뀐 뒤 위의 일정·가 볼 곳 높이가 달라져도 칸을 제자리에 둔다.
   const before = useRef<{ top: number; visible: boolean } | null>(null);
 
@@ -33,6 +35,13 @@ export function BudgetArea({
     const section = sectionRef.current;
     if (!section) return;
     const observer = new IntersectionObserver(([entry]) => {
+      // 줄이 inert 가 되면 안의 초점이 body 로 떨어진다. 그 전에 예산 칸 제목으로 옮긴다.
+      if (
+        entry.isIntersecting &&
+        dockRef.current?.contains(document.activeElement)
+      ) {
+        headingRef.current?.focus({ preventScroll: true });
+      }
       setSectionVisible(entry.isIntersecting);
     });
     observer.observe(section);
@@ -104,7 +113,8 @@ export function BudgetArea({
           budget={budget}
           days={days}
           today={today}
-          hidden={sectionVisible}
+          ref={dockRef}
+          hidden={sectionVisible !== false}
           onJump={jump}
         />
       )}

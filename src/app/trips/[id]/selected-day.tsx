@@ -13,7 +13,7 @@ type SelectedDay = {
   select: (value: string) => void;
   // 이미 고른 값을 다시 고를 때마다 1 늘어난다(지도 칸이 그날 구간을 다시 묻는다).
   reselectCount: number;
-  // 고르기 직전(상태가 바뀌기 전)에 동기로 불린다. 해제 함수를 돌려준다.
+  // 고른 날이 바뀌기 직전(상태가 바뀌기 전)에 동기로 불린다. 해제 함수를 돌려준다.
   onBeforeSelect: (listener: () => void) => () => void;
 };
 
@@ -35,9 +35,10 @@ export function SelectedDayProvider({
   const beforeSelect = useRef(new Set<() => void>());
   const selected = resolveSelection(raw, startDate, endDate);
   // raw 는 늘 고른 값으로 둔다(기간에서 사라진 옛 날짜가 남아 있다가 날짜를 되돌리면 그날로 튀지 않게).
+  // 같은 날을 다시 고르면 고른 날이 바뀌지 않으므로 고르기 직전 알림을 보내지 않는다(받는 쪽이 바뀔 때만 기록을 비운다).
   function select(value: string) {
-    for (const listener of beforeSelect.current) listener();
     if (value === selected) setReselectCount((n) => n + 1);
+    else for (const listener of beforeSelect.current) listener();
     setRaw(value);
   }
   // 늘 같은 함수(구독하는 쪽 effect 가 렌더마다 다시 돌지 않게).
