@@ -23,6 +23,7 @@ export function BudgetDock({
   days,
   today,
   onOpen,
+  openerRef,
 }: {
   tripId: string;
   budget: NonNullable<PanelBudget>;
@@ -30,12 +31,16 @@ export function BudgetDock({
   // 여행 중이면 오늘, 아니면 null.
   today: string | null;
   onOpen: () => void;
+  // 요약 버튼. 예산 시트를 닫았는데 연 버튼이 사라졌을 때(예산을 처음 정함) 초점을 여기로 돌린다.
+  openerRef?: React.Ref<HTMLButtonElement>;
 }) {
   const { selected } = useSelectedDay();
   const dialogRef = useRef<HTMLDialogElement>(null);
   // 열 때마다 양식을 새로 만든다(지난 입력·오류가 남지 않게).
   const [openCount, setOpenCount] = useState(0);
   const [open, setOpen] = useState(false);
+  // 바깥 누르기 닫기는 누른 곳과 뗀 곳이 모두 바탕일 때만(양식 안에서 끌다 바깥에서 놓으면 닫지 않음).
+  const downOnBackdrop = useRef(false);
 
   const { settings, summary: s } = budget;
   const money = (minor: number) => formatMoney(minor, settings.currency);
@@ -56,7 +61,9 @@ export function BudgetDock({
       <div className={dockClass}>
         <div className="flex items-center gap-3">
           <button
+            ref={openerRef}
             type="button"
+            aria-haspopup="dialog"
             onClick={onOpen}
             className="flex min-w-0 flex-1 flex-col gap-1.5 rounded-md text-left"
           >
@@ -97,8 +104,12 @@ export function BudgetDock({
       <dialog
         ref={dialogRef}
         aria-label="일정 밖 지출 넣기"
+        onPointerDown={(event) => {
+          downOnBackdrop.current = event.target === event.currentTarget;
+        }}
         onClick={(event) => {
-          if (event.target === event.currentTarget) closeSheet();
+          if (event.target === event.currentTarget && downOnBackdrop.current)
+            closeSheet();
         }}
         onClose={() => setOpen(false)}
         className="m-0 mt-auto max-h-[85dvh] w-full max-w-none sm:mx-auto sm:max-w-2xl overflow-y-auto rounded-t-[14px] bg-background p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-foreground backdrop:bg-foreground/30"
@@ -128,6 +139,7 @@ export function BudgetSetupDock({ onOpen }: { onOpen: () => void }) {
     <div className={dockClass}>
       <button
         type="button"
+        aria-haspopup="dialog"
         onClick={onOpen}
         className="flex w-full flex-col gap-0.5 rounded-md text-left"
       >

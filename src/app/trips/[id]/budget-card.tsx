@@ -165,7 +165,7 @@ function CardBody({
   }
 
   return (
-    <section aria-label="예산" className={budgetCardClass}>
+    <section aria-label="전체 예산" className={budgetCardClass}>
       <div className="flex items-center justify-between gap-2">
         <h3 className="font-semibold">전체 예산</h3>
         {open !== "settings" && (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { TripDay } from "@/lib/schedule";
 import { BudgetDock, BudgetSetupDock } from "./budget-dock";
 import { BudgetSheet, type SheetRequest } from "./budget-sheet";
@@ -21,6 +21,7 @@ export function BudgetArea({
   today: string | null;
 }) {
   const [request, setRequest] = useState<SheetRequest | null>(null);
+  const openerRef = useRef<HTMLButtonElement>(null);
   const open = (mode: SheetRequest["mode"]) =>
     setRequest((prev) => ({ mode, id: (prev?.id ?? 0) + 1 }));
 
@@ -33,6 +34,7 @@ export function BudgetArea({
           days={days}
           today={today}
           onOpen={() => open("view")}
+          openerRef={openerRef}
         />
       ) : (
         <BudgetSetupDock onOpen={() => open("settings")} />
@@ -42,7 +44,12 @@ export function BudgetArea({
         budget={budget}
         days={days}
         request={request}
-        onClose={() => setRequest(null)}
+        onClose={() => {
+          setRequest(null);
+          // "예산 정하기" 로 열어 예산을 정했으면 연 버튼이 사라져 브라우저가 초점을 돌려줄 곳이 없다.
+          if (document.activeElement === document.body)
+            openerRef.current?.focus();
+        }}
       />
     </>
   );
