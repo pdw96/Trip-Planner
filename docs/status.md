@@ -1,6 +1,6 @@
 # 지금 상태
 
-2026-11-23 기준(Dependabot #70 → #76 끝). 이슈 하나가 끝날 때마다(PR 머지, 배포 확인) 고친다. 새 세션은 이 파일부터 읽는다(`CLAUDE.md` '작업 흐름').
+2026-11-23 기준(#80 → #82 끝). 이슈 하나가 끝날 때마다(PR 머지, 배포 확인) 고친다. 새 세션은 이 파일부터 읽는다(`CLAUDE.md` '작업 흐름').
 
 ## 끝나서 배포된 것
 
@@ -25,6 +25,7 @@
 | Dependabot #72 | #74 | TypeScript 5.9 → 7.0. TS 6 부터 `types` 를 적지 않으면 `@types/*` 를 저절로 넣지 않아 전역 `google.maps` 가 빠짐 → `tsconfig.json` `types: ["node", "google.maps"]`, `@types/google.maps` 직접 devDependency. Next 16.4 는 TS 7 에서 `tsc` CLI 로 타입 검사(`experimental.useTypeScriptCli` 기본 true) |
 | Dependabot #67·#68·#71 | 같음 | `actions/setup-node` 5 → 7, `actions/checkout` 5 → 7, `@types/node` 20 → 26(런타임 Node 26 과 맞춤). 코드 수정 없음. checkout v7 은 `pull_request_target` 에서 포크 PR 체크아웃을 거절하지만, `human-gate.yml` 은 `ref`·`repository` 없이 기준 브랜치만 받아 검사 자체를 건너뜀(`isDefaultCheckout`, v7.0.1). PR head 는 뒤의 `git fetch` 로 받으므로 그대로 |
 | Dependabot #70 | #76 | Biome 2.4.2 → 2.6.7. `biome migrate`(`$schema` 2.6.7, `linter.rules.recommended` → `preset: "recommended"`), Markdown 서식 끔(`markdown.formatter.enabled: false`, lint 는 켬), 새 진단 정리(쓰지 않는 `useEffect` import, `useOptionalChain` 3곳), 쓰지 않는 create-next-app 템플릿 `public/*.svg` 5개 삭제(`noSvgWithoutTitle`) |
+| #80 | #82 | 워크플로 액션(`actions/checkout` v7.0.1, `actions/setup-node` v7.1.0)을 태그 대신 40자리 커밋 SHA + `# vX.Y.Z` 주석으로 고정(공급망 강화, 동작 변화 없음). `dependabot.yml` 은 그대로. 설계 `docs/superpowers/specs/2026-11-23-pin-actions-sha-design.md` |
 
 ## 다음 할 일
 
@@ -33,7 +34,6 @@
 - #36·#23·#24 는 노선도 틀(#53)에 맞춰 넣는다.
 - 기능: #36 구간 경로 후보 2–3개
 - 개선: #23 달력 키보드 이동, #24 자잘한 개선 모음
-- 보안 강화: #80 워크플로 액션을 커밋 SHA 로 고정(`.github/**` 라 위험 경로 PR)
 - Dependabot PR 이 오면 `CLAUDE.md` 'Dependabot PR' 대로 처리한다(세션이 확인할 PR 은 사용자가 새 세션에 맡긴다). 첫 실행 PR 6개는 모두 끝났다.
 
 여행 접근 조건은 `src/db/queries/trips.ts` 의 `accessibleTrips(userId)`(주인 또는 함께하는 사람) 하나, 주인만 하는 일은 `ownedTrips(userId)`. 하위 데이터 쿼리는 `schedule-items.ts`·`places.ts`·`budget.ts` 처럼 이 조건을 같은 SQL 문 안에 넣는다(하위 id 와 여행 id 를 함께 묶어 섞어 보내기를 막는다). `accessibleTrips` 는 `trips` 를 별칭 없이 FROM 에 둔 쿼리에서만 쓴다(안의 EXISTS 가 바깥 `trips.id` 를 가리킨다). 여러 테이블을 함께 쓰려면 neon-http 에 트랜잭션이 없으므로 데이터를 바꾸는 CTE 한 문으로 한다(`updatePlace`, `createScheduleItemWithNewPlace`).
@@ -57,7 +57,7 @@
   - 저장소 설정의 기본 설정(동적 워크플로 `dynamic/github-code-scanning/codeql`)이 PR·main push 마다 Actions 워크플로와 JS/TS 를 검사한다. 경고 목록은 세션 도구(GitHub MCP)로 읽을 수 없다. 사용자에게 제목·링크를 받고, 규칙 원문은 같은 버전 CodeQL 번들(`github/codeql-action` 릴리스 `codeql-bundle-v<버전>`, 버전은 분석 로그에 있음)의 `qlpacks/codeql/actions-*` 에서 읽는다. 세션에서 CodeQL 분석을 돌리는 것은 자동 권한 검사기가 막았다.
   - 경고 #1 `actions/untrusted-checkout/high`(`human-gate.yml` 의 `git fetch … refs/pull/<번호>/head`)은 **오탐**이다. 규칙은 `pull_request_target` 안에서 PR 번호·head ref·head SHA 가 들어간 `git fetch|pull` 을 모두 체크아웃으로 본다(`UntrustedCheckoutQuery.qll` 의 `GitMutableRefCheckout`). PR head 는 git 객체(`refs/remotes/pr/head`)로만 받고 작업 트리는 main 이며, 실행되는 것은 main 의 `human-gate.mjs` 뿐이다. 이 스크립트는 PR 쪽에 `git merge-base`·`git diff` 만 쓴다(`.gitattributes` 도 작업 트리 = main 에서 읽음). 받는 방법을 바꿔도 같은 규칙에 걸리므로 고치지 않고 dismiss(False positive)한다(사용자가 GitHub 화면에서).
   - 뒤에 PR 코드를 실행하는 단계(`npm install`, `node <경로>.js|.ts` 등)가 붙으면 같은 규칙이 Critical 로 올라간다. `human-gate.yml` 에 단계를 더할 때는 PR 쪽 파일을 실행하지 않는지 본다(`node .github/scripts/human-gate.mjs` 는 확장자가 `.mjs` 라 실행 단계로 세지 않지만, main 의 파일이라 실제로도 안전하다).
-  - 액션 SHA 고정은 #80(사용자가 고르면 진행).
+  - 액션은 SHA 로 고정돼 있다(#80, 위 'Dependabot' 항목).
 
 - **TypeScript 7(#74)**:
   - 전역 타입(import 없이 쓰는 `google.maps` 등)은 `tsconfig.json` `types` 에 적어야 들어온다(TS 6 부터 기본으로 `@types/*` 를 모두 넣지 않음). 새 전역 타입 패키지를 쓰면 여기에 더하고 devDependency 로도 넣는다.
@@ -127,6 +127,7 @@
 
 ## 남은 확인
 
+- #80 프로덕션: 머지 커밋 `29a0b75`(`.github`·문서만 바뀌어 Vercel 빌드는 건너뜀). 새 `human-gate.yml`(SHA 고정)이 처음 도는 것은 이 status 갱신 PR 이다.
 - #80: 첫 Dependabot Actions PR 에서 SHA 와 `# vX.Y.Z` 주석이 함께 바뀌는지 본다. 머지 뒤 사용자가 저장소 설정 Actions → General "full-length commit SHA 고정 요구"를 켜고, 다음 PR 에서 CodeQL 분석·CI·`human-gate` 가 통과하는지 본다(깨지면 끈다).
 - #74 프로덕션: 머지 커밋 `7569b84` 배포 READY(타입만 바뀌어 실행 코드 변화 없음).
 - #67·#68·#71 프로덕션: #71·#67 배포 READY(`b8bee1d`, 타입·CI 만 바뀌어 실행 코드 변화 없음). #68 은 `.github` 만 바뀌어 `ignoreCommand` 가 빌드를 건너뜀(CANCELED, 정상). main CI 는 #67 통과(#71 실행은 다음 push 에 밀려 취소됨). `human-gate` 의 setup-node v7 은 #68 리베이스 뒤 실행에서 실제로 돌아 정상(Node 26.13.1, 캐시 꺼짐). checkout v7 이 `human-gate` 에서 처음 도는 것은 이 status 갱신 PR 이다.
