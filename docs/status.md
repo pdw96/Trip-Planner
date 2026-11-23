@@ -1,6 +1,6 @@
 # 지금 상태
 
-2026-11-23 기준(#91 → #92 끝). 이슈 하나가 끝날 때마다(PR 머지, 배포 확인) 고친다. 새 세션은 이 파일부터 읽는다(`CLAUDE.md` '작업 흐름').
+2026-11-23 기준(#88 → #95 끝). 이슈 하나가 끝날 때마다(PR 머지, 배포 확인) 고친다. 새 세션은 이 파일부터 읽는다(`CLAUDE.md` '작업 흐름').
 
 ## 끝나서 배포된 것
 
@@ -28,15 +28,15 @@
 | #80 | #82 | 워크플로 액션(`actions/checkout` v7.0.1, `actions/setup-node` v7.1.0)을 태그 대신 40자리 커밋 SHA + `# vX.Y.Z` 주석으로 고정(공급망 강화, 동작 변화 없음). `dependabot.yml` 은 그대로. 설계 `docs/superpowers/specs/2026-11-23-pin-actions-sha-design.md` |
 | #83 | #84 | Dependabot #78(Biome 2.6.7 → 2.6.8)이 `biome migrate` 없이 머지돼 `npm run lint` 가 `$schema` 불일치 info 진단을 냄. `npx biome migrate --write` 로 `biome.json` `$schema` 한 줄만 2.6.8 로 맞춤 |
 | #91 | #92 | 기준점 = "그날 밤 묵는 곳". N일차 동선 = 전날 밤 숙소 → 일정들 → 그날 밤 숙소(첫날은 첫 일정에서 시작, 마지막 날은 마지막 일정에서 끝, 숙소 옮기는 날은 A → B). 지도 N일차 탭 "N일차 밤 숙소"(마지막 날·당일치기는 숨김) + "아침엔 🏨 X에서 출발". DB 변경 없음(기존 `trip_bases` 행을 새 뜻으로 읽음). 설계 `docs/superpowers/specs/2026-11-23-base-night-lodging-design.md` |
+| #88 | #95 | 예산 카드를 지도 칸에서 빼서 일정 다음 독립 "예산" 칸으로(고른 날 연동 그대로). 아래 예산 줄을 PC·휴대폰 모두에 두고, 예산 칸이 보이면 숨김(`inert`)·요약을 누르면 예산 칸으로. 예산 없는 여행은 [N일차]에서도 "예산 정하기". 날을 바꿔도 보던 예산 칸이 제자리(`onBeforeSelect`). DB 변경 없음. 설계 `docs/superpowers/specs/2026-11-23-budget-section-design.md` |
 
 ## 다음 할 일
 
 사용자가 열린 이슈에서 고른다.
 
 - #36·#23·#24 는 노선도 틀(#53)에 맞춰 넣는다.
-- 2026-11-23 사용자 생각에서 만든 이슈(권하는 순서 #88 → #89 → #90, 사용자가 고름):
-  - #88 예산을 지도 칸에서 빼서 따로 보기(날짜 줄 연동, DB 변경 없음)
-  - #89 지출을 모임 통장·개인 통장으로(개인 지출은 본인만, 마이그레이션·`/security-review`). 미리 결제한 일정의 실제 지출(지금은 완료해야 적을 수 있음)도 여기서 다룰 수 있다
+- 2026-11-23 사용자 생각에서 만든 이슈(권하는 순서 #89 → #90, 사용자가 고름. #88 은 끝):
+  - #89 지출을 모임 통장·개인 통장으로(개인 지출은 본인만, 마이그레이션·`/security-review`). 미리 결제한 일정의 실제 지출(지금은 완료해야 적을 수 있음)도 여기서 다룰 수 있다. 예산 칸은 이제 맨 아래 독립 칸이라(#88) 커져도 다른 칸을 밀지 않는다. 정말 커지면 #88 설계의 B(화면 위 [일정·지도]/[예산] 전환 탭)를 다시 본다
   - #90 사람별 출발·귀가 동선과 합류 동선(일정마다 대상 사람, 마이그레이션). #91 의 밤 숙소 규칙과 닿는다
 - 기능: #36 구간 경로 후보 2–3개
 - 개선: #23 달력 키보드 이동, #24 자잘한 개선 모음
@@ -76,10 +76,11 @@
   - 날짜 색은 `src/lib/day-line.ts` 의 `lineClass(dayNumber, "bg"|"text"|"border")` — Tailwind 가 찾도록 클래스 이름을 표로 적어 두었다(문자열 조립 금지). 8색을 돌려 쓴다.
   - 글꼴 IBM Plex Sans KR(`next/font/google`, 가변 글꼴이 아니라 굵기 400–700 을 적음, 한글 조각은 빌드 때 받는다).
   - 짧은 노선 `src/app/ui/mini-line.tsx`(목록·홈). 남은 날 `tripCountdown`, 날 수 `tripDayCount`(`src/lib/trip-dates.ts`) — 여행 기간 상한이 없으니 날을 펼치는 `tripDays` 를 목록에서 쓰지 않는다.
-  - 여행 화면의 고른 날은 `src/app/trips/[id]/selected-day.tsx` 하나(`useSelectedDay()` → `selected`·`select`·`reselectCount`, 기간에서 사라진 날은 `resolveSelection` 이 "all" 로). 날짜 줄(`trip-day-bar.tsx`)·지도 칸·예산 카드·일정·아래 예산 줄이 같이 읽는다. 고르지 않은 날·[전체] 전용 칸은 `ShownWhen`(`<div hidden>`)으로 그리되 감춘다(열린 칸 유지, 숨긴 날은 IntersectionObserver 가 못 보니 이동 시간을 묻지 않음).
+  - 여행 화면의 고른 날은 `src/app/trips/[id]/selected-day.tsx` 하나(`useSelectedDay()` → `selected`·`select`·`reselectCount`·`onBeforeSelect`, 기간에서 사라진 날은 `resolveSelection` 이 "all" 로). 날짜 줄(`trip-day-bar.tsx`)·지도 칸·일정·예산 칸·아래 예산 줄이 같이 읽는다. `onBeforeSelect` 는 고른 날이 **바뀌기 직전**에만 불린다(같은 날 다시 고르기는 안 부름) — 예산 칸(`budget-area.tsx`)이 바뀌기 전 위치를 재고 바뀐 뒤 `useLayoutEffect` 에서 `scrollBy` 로 제자리를 지킨다(#88). 고르지 않은 날·[전체] 전용 칸은 `ShownWhen`(`<div hidden>`)으로 그리되 감춘다(열린 칸 유지, 숨긴 날은 IntersectionObserver 가 못 보니 이동 시간을 묻지 않음).
   - 일정 노선 색은 날 묶음 `section` 의 `style={{"--line": lineVar(n)}}` 를 자식이 `bg-(--line)`·`border-(--line)` 으로 읽는다. **`lineVar` 는 `:root` 의 `--line-N` 을 가리킨다** — `@theme inline` 은 `--color-*` 를 CSS 변수로 내보내지 않아 `var(--color-line-N)` 은 비어 있다(#53 브라우저 확인). 노선 줄 칸은 `schedule-editor.tsx` 의 `ROW_GRID`·`RAIL`(일정 줄·이동 줄·일정 추가 줄이 같이 씀).
   - 지도 선만 hex 가 필요해 `LINE_HEX`·`lineHex`(`src/lib/day-line.ts`)를 둔다. `globals.css` 와 어긋나면 `day-line.test.mjs` 가 실패한다. 노선 색은 글자에 쓰지 않는다(주황·노랑이 본문 대비 4.5:1 미만) — 이동 줄 글자는 본문 색, 색은 옆 레일.
-  - 날짜 줄 "붙음" 판정은 줄 자체를 `rootMargin: -1px` · `threshold: 1` IntersectionObserver 로 본다(제목으로 보면 줄이 제자리일 때도 작은 제목이 뜸). 휴대폰 아래 예산 줄(`budget-dock.tsx`)은 article 마지막의 `sticky bottom-0 sm:hidden`, 시트 `<dialog>` 는 그 줄 **밖**에 둔다(안에 두면 가로로 돌려 sm 이상이 될 때 보이지 않는 모달이 페이지를 막는다, #53 `/code-review`).
+  - 날짜 줄 "붙음" 판정은 줄 자체를 `rootMargin: -1px` · `threshold: 1` IntersectionObserver 로 본다(제목으로 보면 줄이 제자리일 때도 작은 제목이 뜸). 아래 예산 줄(`budget-dock.tsx`)은 예산 칸과 함께 `budget-area.tsx` 가 fragment 로 그려 article 의 직계 자식(sticky bottom-0, PC·휴대폰 모두, #88). 예산 칸이 보이면 transform·opacity + `inert` 로 숨는다(자리는 그대로라 레이아웃이 들썩이지 않음). 시트 `<dialog>` 는 그 줄 **밖**에 둔다(줄이 inert 가 되면 안의 열린 모달도 막힌다).
+  - 전역 `:focus-visible` 외곽선은 레이어 밖 CSS 라 Tailwind `outline-none` 유틸리티가 이기지 못한다(#88 브라우저 확인).
   - 브라우저 확인: dev 서버의 화면 갱신이 늦어 고친 직후 사진이 옛 모양일 수 있다. 이상하면 요소 크기를 직접 재 보고(`getBoundingClientRect`) 다시 찍는다(#53).
 
 - **공유(#15)**:
@@ -150,6 +151,8 @@
   - 끝: #69(사용자 머지), #72(#74), #67·#68·#71(세션 확인 뒤 사용자 라벨, 세션 머지), #70(#76). 사람이 라벨을 붙이면 Dependabot PR 에도 `github-actions[bot]` 승인 기록 댓글이 남는다(#68 에서 확인).
 - #65 사용자: Neon 에 남은 `preview/…` 브랜치 6개(2026-11-17–18, `ccr-454f0d35-4gr8vb`·`claude/*` 5개)를 콘솔에서 지운다(Neon MCP 읽기 전용).
 
+- #88 프로덕션: 머지 커밋 `47b55cb` 배포 READY. 남은 것: 사용자가 실제 휴대폰·PC 로 예산 칸 자리, 아래 줄 숨김·누르기, PC [+ 지출] 판을 써 본다(브라우저 확인은 로컬 dev + 임시 테스트 계정으로만, 계정은 지움).
+- #88 남은 지적(PR #95 본문): 예산 칸이 페이지 끝 가까이 있을 때 날을 바꿔 페이지가 짧아지면 더 내릴 곳이 없어 칸이 조금 밀림(화면 안에는 남음), 숨은 아래 줄 자리만큼 맨 아래 빈 공간, 하이드레이션 전에는 아래 줄이 숨어 있음.
 - #53 프로덕션: 사용자가 실제 기기로 여행 화면 전체가 정상 동작함을 확인함(2026-11-21).
 - #53 남은 지적(PR #60 본문): 실제 없이 예상만 있을 때 [전체] 예산 카드에 여유·초과 문구가 두 번(설계대로 둠), 예상 0원뿐인 날의 "—".
 
