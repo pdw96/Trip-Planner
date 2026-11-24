@@ -21,7 +21,7 @@ export function RemoveMemberButton({
   function onClick() {
     if (
       !window.confirm(
-        `${name}님을 내보낼까요? 링크가 켜져 있으면 다시 들어올 수 있어요. 막으려면 새 링크를 만드세요.`,
+        `${name}님을 내보낼까요? 링크가 켜져 있으면 다시 들어올 수 있어요. 막으려면 새 링크를 만드세요. 그 사람이 나만 보기로 적은 지출과 내 예산도 지워져요.`,
       )
     ) {
       return;
@@ -58,7 +58,7 @@ export function LeaveTripButton({ tripId }: { tripId: string }) {
   function onClick() {
     if (
       !window.confirm(
-        "이 여행에서 나갈까요? 다시 들어오려면 새 초대 링크가 필요해요.",
+        "이 여행에서 나갈까요? 다시 들어오려면 새 초대 링크가 필요해요. 내가 나만 보기로 적은 지출과 내 예산도 지워져요.",
       )
     ) {
       return;

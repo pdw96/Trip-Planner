@@ -35,7 +35,9 @@ import { accessibleTrips } from "./trips";
 // neon-http 는 대화형 트랜잭션이 없으므로 조건 확인과 쓰기를 한 문(조건부 insert/update, 데이터를 바꾸는 CTE)으로 한다.
 // 금액의 통화는 그 여행 설정의 예산·현지 통화여야 한다(쓰기 문이 trip_budgets 와 함께 확인).
 
-// 한 여행에 넣을 수 있는 예산 행 수(일정에 붙은 행 포함). 넣기 전에 센다(장소 상한과 같은 방식).
+// 예산 행 상한(일정에 붙은 행 포함). 넣기 전에 센다(장소 상한과 같은 방식).
+// 여행 전체 행 수가 아니라 넣는 사람에게 보이는 행(모임 행 + 본인 행)만 센다(countBudgetItems, #89 §5.3).
+// 그래서 여러 사람이 각자 내 돈 행을 적으면 여행 전체로는 300행을 넘을 수 있다.
 export const MAX_BUDGET_ITEMS_PER_TRIP = 300;
 
 export type AmountWrite = {
