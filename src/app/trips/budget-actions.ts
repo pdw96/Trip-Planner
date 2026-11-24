@@ -38,6 +38,7 @@ import {
   BUDGET_CURRENCY_LOCKED,
   BUDGET_ITEM_LIMIT,
   BUDGET_NOT_SET,
+  PERSONAL_BUDGET_SAVE_FAILED,
   SAVE_FAILED,
 } from "./messages";
 
@@ -153,13 +154,18 @@ export async function saveBudgetSettingsAction(
   if (result === "locked") return fail(BUDGET_CURRENCY_LOCKED);
 
   // 내 예산은 내 돈을 쓰는 방식일 때만 쓴다(빈칸이면 지움). 모임 통장으로 바꿀 때는 그대로 둔다.
-  if (mode !== "shared") {
+  // 내 예산 칸을 그린 양식(myTotal 칸이 있음)일 때만 쓴다. 칸이 없던 낡은 양식이 내 예산을 지우지 않게.
+  if (mode !== "shared" && formData.has("myTotal")) {
+    let saved: boolean;
     try {
-      if (!(await setPersonalBudget(user.id, tripId, myTotal))) {
-        return fail(SAVE_FAILED);
-      }
+      saved = await setPersonalBudget(user.id, tripId, myTotal);
     } catch {
-      return fail(SAVE_FAILED);
+      saved = false;
+    }
+    if (!saved) {
+      // 설정은 이미 저장됐다. 화면을 새로 그리고, 내 예산만 못 했다고 알린다.
+      revalidatePath(tripPath(tripId));
+      return fail(PERSONAL_BUDGET_SAVE_FAILED);
     }
   }
 

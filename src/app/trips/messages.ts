@@ -26,6 +26,9 @@ export const MONEY_SAVE_FAILED = "일정은 저장했지만 금액은 저장하�
 
 export const BUDGET_NOT_SET = "예산을 먼저 정해 주세요.";
 
+export const PERSONAL_BUDGET_SAVE_FAILED =
+  "설정은 저장했지만 내 예산은 저장하지 못했어요. 다시 저장해 주세요.";
+
 // --- 공유 (#15) ---
 
 export const INVITE_INVALID =
