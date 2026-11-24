@@ -1,5 +1,6 @@
 import "server-only";
 import { and, asc, eq, inArray, isNotNull, type SQL, sql } from "drizzle-orm";
+import { cache } from "react";
 import { db } from "@/db";
 import { tripMembers, trips, user } from "@/db/schema";
 import { isUuid } from "@/lib/ids";
@@ -18,7 +19,8 @@ export type TripPerson = {
 };
 
 // 접근할 수 없으면 null. 주인 먼저, 그다음 참여한 순서.
-export async function listTripPeople(
+// 한 화면 요청 안에서 함께하는 사람 칸과 일정 칸(#90 "누구")이 같은 결과를 나눠 쓰도록 cache 로 감싼다.
+export const listTripPeople = cache(async function listTripPeople(
   userId: string,
   tripId: string,
 ): Promise<TripPerson[] | null> {
@@ -60,7 +62,7 @@ export async function listTripPeople(
     },
     ...members.map((m) => ({ ...m, image: m.image ?? null, isOwner: false })),
   ];
-}
+});
 
 // 주인이고 링크가 켜져 있을 때만 만든 시각.
 export async function getInviteCreatedAt(

@@ -9,6 +9,7 @@ import {
   daySignature,
   needsCoordsRefresh,
   type RoutePlace,
+  routeItemsFor,
   routesByDate,
 } from "@/lib/day-route";
 import { distanceMeters, formatDistance } from "@/lib/geo";
@@ -81,9 +82,11 @@ export async function MapSection({
     tripRange,
     routePlaces,
     distanceMeters,
+    userId,
   );
   const panelDays: PanelDay[] = days.map((day) => {
-    const dayItems = itemRows.filter(
+    // 내 동선에 드는 일정만(#90). [전체] 탭의 scheduleDays 는 모든 일정 그대로.
+    const dayItems = routeItemsFor(itemRows, userId).filter(
       (item) => item.date === day.date && item.placeId !== null,
     );
     // 저장된 시작·끝 숙소(#91). 장소 목록에서 사라진 id 는 없음으로 본다.

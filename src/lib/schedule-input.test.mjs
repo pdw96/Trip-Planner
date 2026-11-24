@@ -7,6 +7,7 @@ import {
 } from "./place-input.ts";
 import {
   EMPTY_SCHEDULE_FIELDS,
+  FOR_USER_INVALID,
   parseScheduleInput,
   SCHEDULE_GOOGLE_LABEL_MAX,
   SCHEDULE_GOOGLE_PLACE_ID_PATTERN,
@@ -30,6 +31,7 @@ const valid = {
   actualCurrency: "",
   actualPaidOn: "",
   actualRate: "",
+  forUserId: "",
 };
 
 const googlePick = {
@@ -71,6 +73,7 @@ test("empty fields are all blank", () => {
     mineActualCurrency: "",
     mineActualPaidOn: "",
     mineActualRate: "",
+    forUserId: "",
   });
 });
 
@@ -85,6 +88,7 @@ test("accepts valid input", () => {
       placeId: null,
       memo: null,
       google: null,
+      forUserId: null,
     },
   });
 });
@@ -104,6 +108,7 @@ test("trims and nulls optional fields", () => {
       placeId: null,
       memo: null,
       google: null,
+      forUserId: null,
     },
   });
 });
@@ -252,4 +257,20 @@ test("금액 칸은 일정 검증이 보지 않는다(#14, 금액은 budget-inpu
   );
   assert.equal(result.ok, true);
   assert.equal("estimateAmount" in result.value, false);
+});
+
+test("forUserId: 빈 값은 모두(null), 형식 맞으면 그 값", () => {
+  const ok = parseScheduleInput({ ...valid, forUserId: "  " }, range);
+  assert.equal(ok.value.forUserId, null);
+  const one = parseScheduleInput({ ...valid, forUserId: "AbC_12-x" }, range);
+  assert.equal(one.value.forUserId, "AbC_12-x");
+});
+
+test("forUserId: 공백·특수문자·100자 초과는 필드 오류", () => {
+  for (const bad of ["a b", "a;drop", "x".repeat(101)]) {
+    const r = parseScheduleInput({ ...valid, forUserId: bad }, range);
+    assert.equal(r.ok, false, bad);
+    assert.equal(r.errors.forUserId, FOR_USER_INVALID, bad);
+  }
+  assert.equal(isOk({ ...valid, forUserId: "x".repeat(100) }), true);
 });

@@ -8,6 +8,7 @@ import {
   daySignature,
   needsCoordsRefresh,
   previousDate,
+  routeItemsFor,
   routesByDate,
 } from "./day-route.ts";
 
@@ -324,6 +325,7 @@ test("routesByDate: 날짜별로 그날 장소 일정만, 시각은 앞 5자", (
     { startDate: "2026-12-03", endDate: "2026-12-05" },
     places,
     dist,
+    "me",
   );
   // 12-03 은 첫날이라 전날 밤 숙소가 없다: 첫 일정에서 시작해 그날 밤 숙소 A 로.
   assert.deepEqual(summary(m.get("2026-12-03")), ["B>A departure 09:30"]);
@@ -456,6 +458,7 @@ test("routesByDate: 날짜 하나만 넘겨도 전날 밤 숙소에서 시작", 
     trip3,
     places,
     dist,
+    "me",
   ).get("2026-12-02");
   const all = routesByDate(
     ["2026-12-01", "2026-12-02", "2026-12-03"],
@@ -464,6 +467,7 @@ test("routesByDate: 날짜 하나만 넘겨도 전날 밤 숙소에서 시작", 
     trip3,
     places,
     dist,
+    "me",
   ).get("2026-12-02");
   assert.deepEqual(summary(one), [
     "A>C departure 10:00",
@@ -483,4 +487,125 @@ test("daySignature 는 시작점·끝점을 담는다", () => {
       ),
     );
   assert.notEqual(s({ start: "A", end: "B" }), s({ start: "B", end: "A" }));
+});
+
+test("routeItemsFor: 모두 + 나만, 순서 유지", () => {
+  const items = [
+    { id: "a", forUserId: "me" },
+    { id: "b", forUserId: "friend" },
+    { id: "c", forUserId: null },
+    { id: "d" },
+  ];
+  assert.deepEqual(
+    routeItemsFor(items, "me").map((i) => i.id),
+    ["a", "c", "d"],
+  );
+  assert.deepEqual(
+    routeItemsFor(items, "friend").map((i) => i.id),
+    ["b", "c", "d"],
+  );
+});
+
+test("routesByDate: 첫날 각자 오는 길 → 합류, 사람마다 동선이 다름", () => {
+  // B = 부산역, C = 동대구역, A = 서울역(모두). 첫날, 밤 숙소 없음.
+  const items = [
+    {
+      id: "me1",
+      date: "2026-12-03",
+      placeId: "B",
+      time: "08:00:00",
+      forUserId: "me",
+    },
+    {
+      id: "fr1",
+      date: "2026-12-03",
+      placeId: "C",
+      time: "08:30:00",
+      forUserId: "friend",
+    },
+    {
+      id: "all",
+      date: "2026-12-03",
+      placeId: "A",
+      time: "11:00:00",
+      forUserId: null,
+    },
+  ];
+  const run = (viewer) =>
+    routesByDate(
+      ["2026-12-03"],
+      items,
+      [],
+      { startDate: "2026-12-03", endDate: "2026-12-03" },
+      places,
+      dist,
+      viewer,
+    ).get("2026-12-03");
+  assert.deepEqual(summary(run("me")), ["B>A arrival 11:00"]);
+  assert.deepEqual(summary(run("friend")), ["C>A arrival 11:00"]);
+  assert.deepEqual(
+    run("me").stops.map((s) => s.place.id),
+    ["B", "A"],
+  );
+});
+
+test("routesByDate: 마지막 날 해산 → 각자", () => {
+  const items = [
+    {
+      id: "all",
+      date: "2026-12-05",
+      placeId: "A",
+      time: "15:00:00",
+      forUserId: null,
+    },
+    {
+      id: "me2",
+      date: "2026-12-05",
+      placeId: "B",
+      time: "18:00:00",
+      forUserId: "me",
+    },
+    {
+      id: "fr2",
+      date: "2026-12-05",
+      placeId: "C",
+      time: "18:30:00",
+      forUserId: "friend",
+    },
+  ];
+  const r = routesByDate(
+    ["2026-12-05"],
+    items,
+    [],
+    { startDate: "2026-12-03", endDate: "2026-12-05" },
+    places,
+    dist,
+    "friend",
+  ).get("2026-12-05");
+  assert.deepEqual(summary(r), ["A>C arrival 18:30"]);
+});
+
+test("routesByDate: 모두뿐이면 viewer 와 상관없이 같은 결과", () => {
+  const items = [
+    {
+      id: "i1",
+      date: "2026-12-03",
+      placeId: "B",
+      time: "09:30:00",
+      forUserId: null,
+    },
+    { id: "i2", date: "2026-12-03", placeId: "C", time: null, forUserId: null },
+  ];
+  const args = [
+    ["2026-12-03"],
+    items,
+    [{ startDate: "2026-12-03", placeId: "A" }],
+    { startDate: "2026-12-03", endDate: "2026-12-05" },
+    places,
+    dist,
+  ];
+  assert.deepEqual(
+    daySignature(routesByDate(...args, "me").get("2026-12-03")),
+    daySignature(routesByDate(...args, "x").get("2026-12-03")),
+  );
 });

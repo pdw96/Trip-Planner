@@ -1,7 +1,11 @@
 import { sectionTitleClass } from "@/app/ui/styles";
 import { listPlaces } from "@/db/queries/places";
-import { listScheduleItems } from "@/db/queries/schedule-items";
+import {
+  listScheduleForUserNames,
+  listScheduleItems,
+} from "@/db/queries/schedule-items";
 import { listTripBases } from "@/db/queries/trip-bases";
+import { listTripPeople } from "@/db/queries/trip-members";
 import type { TripRow as Trip } from "@/db/queries/trips";
 import type { ScheduleItem } from "@/db/schema";
 import type { BudgetLine } from "@/lib/budget";
@@ -10,6 +14,7 @@ import {
   type DayRoute,
   daySignature,
   type RoutePlace,
+  routeItemsFor,
   routesByDate,
 } from "@/lib/day-route";
 import { distanceMeters, formatDistance } from "@/lib/geo";
@@ -23,6 +28,8 @@ import {
   type DateOption,
   type RowItem,
   ScheduleEditorProvider,
+  type Who,
+  type WhoPerson,
 } from "./schedule-editor";
 import { ShownWhen } from "./selected-day";
 
@@ -66,12 +73,39 @@ export async function ScheduleSection({
   trip: Trip;
   today: string;
 }) {
-  const [items, placeRows, baseRows, budget] = await Promise.all([
-    listScheduleItems(userId, trip.id),
-    listPlaces(userId, trip.id),
-    listTripBases(userId, trip.id),
-    loadBudget(userId, trip),
-  ]);
+  const [items, placeRows, baseRows, budget, tripPeople, forUserNames] =
+    await Promise.all([
+      listScheduleItems(userId, trip.id),
+      listPlaces(userId, trip.id),
+      listTripBases(userId, trip.id),
+      loadBudget(userId, trip),
+      listTripPeople(userId, trip.id),
+      listScheduleForUserNames(userId, trip.id),
+    ]);
+  // 일정 양식 "누구"의 사람(#90 §5.6): 보는 사람("나") 먼저, 그다음 여행 사람 순서(주인 먼저).
+  const people: WhoPerson[] = [
+    { userId, label: "나" },
+    ...(tripPeople ?? [])
+      .filter((person) => person.userId !== userId)
+      .map((person) => ({ userId: person.userId, label: person.name })),
+  ];
+  const currentIds = new Set(people.map((person) => person.userId));
+  // 일정의 "누구" → 이름표. 지금 여행 사람이 아니면 나간 사람이다(§5.4).
+  function whoOf(forUserId: string | null): Who {
+    if (forUserId === null) return { kind: "all" };
+    if (forUserId === userId) return { kind: "me" };
+    if (currentIds.has(forUserId)) {
+      const label =
+        people.find((person) => person.userId === forUserId)?.label ?? "";
+      return { kind: "other", userId: forUserId, label };
+    }
+    const name = forUserNames.get(forUserId);
+    return {
+      kind: "other",
+      userId: forUserId,
+      label: name ? `${name} (나감)` : "나간 사람",
+    };
+  }
   // 일정 양식의 장소 고르기(숙소 먼저)와 이어진 장소의 링크에 쓴다.
   const placeOptions: PlaceOption[] = lodgingFirst(
     placeRows.map((p) => ({
@@ -103,6 +137,7 @@ export async function ScheduleSection({
     { startDate: trip.startDate, endDate: trip.endDate },
     routePlaces,
     distanceMeters,
+    userId,
   );
   const dayOptions: DateOption[] = days.map(({ day }) => ({
     value: day.date,
@@ -125,6 +160,7 @@ export async function ScheduleSection({
       placeId: item.placeId,
       memo: item.memo,
       done: item.done,
+      who: whoOf(item.forUserId),
       money: {
         shared: moneyOf(budget?.bySchedule.get(item.id)?.shared ?? null),
         mine: moneyOf(budget?.bySchedule.get(item.id)?.mine ?? null),
@@ -140,6 +176,8 @@ export async function ScheduleSection({
       <ScheduleEditorProvider
         places={placeOptions}
         browserKey={browserKey}
+        viewerId={userId}
+        people={people}
         budget={
           budget
             ? {
@@ -182,8 +220,8 @@ export async function ScheduleSection({
                 items={dayItems.map(rowItem)}
                 dateOptions={dayOptions}
                 travel={
-                  // 일정 없이 숙소만 옮기는 날(A → B, #91)은 이동 줄을 그릴 자리가 없으니 묻지 않는다(지도 탭에는 보인다).
-                  dayItems.length > 0
+                  // 일정 없이 숙소만 옮기는 날(A → B, #91)이나 남의 일정뿐인 날은 이동 줄을 그릴 자리가 없으니 묻지 않는다(지도 탭에는 보인다).
+                  routeItemsFor(dayItems, userId).length > 0
                     ? dayTravel(day.date, routes.get(day.date), placeLabels)
                     : null
                 }

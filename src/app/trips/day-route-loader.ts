@@ -169,6 +169,7 @@ export async function loadDayRoute(
     tripRange,
     placesById,
     distanceMeters,
+    userId,
   ).get(date);
   if (!route) return { ok: false };
 

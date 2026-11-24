@@ -219,6 +219,11 @@ export const scheduleItems = pgTable(
     // 그날 안의 순서(작을수록 위). 비어 있으면 그날은 아직 순서를 저장한 적이 없어 시각 순 정렬을 쓴다(#41).
     // 순서에 영향을 주는 쓰기는 그날 전체를 0, 1, 2, … 로 다시 쓴다.
     position: integer("position"),
+    // 이 일정이 누구의 것인지(#90). null = 모두, 값 = 그 사람만(내 동선에 들어간다).
+    // 그 사람이 여행을 나가도 행은 남는다. 계정이 지워질 때만 함께 지운다.
+    forUserId: text("for_user_id").references(() => user.id, {
+      onDelete: "cascade",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
