@@ -347,8 +347,14 @@ export function ScheduleItemRow({
     };
     const shared = fieldsOf(item.money.shared);
     const mine = fieldsOf(item.money.mine);
-    const actualOf = (money: RowMoney | null) => ({
-      open: money?.actual != null,
+    const sides = budget ? rowSides(budget, item.money) : undefined;
+    const preferred = budget ? defaultSide(budget.mode) : undefined;
+    const initialSide =
+      sides && preferred && !sides.includes(preferred) ? sides[0] : preferred;
+    // 실제가 있는 쪽은 펼쳐 연다. 완료한 일정은 실제가 없어도 처음 보이는 쪽을 펼쳐 연다(#89 전과 같은 모양).
+    // 펼치기만 해서는 그 쪽을 쓰지 않는다(양식의 고친 쪽 표시).
+    const actualOf = (money: RowMoney | null, side: Side) => ({
+      open: money?.actual != null || (item.done && side === initialSide),
       rateSource: money?.actual?.rateSource ?? null,
     });
     return (
@@ -376,11 +382,11 @@ export function ScheduleItemRow({
           places={places}
           searchEnabled={searchEnabled}
           budget={budget}
-          sides={budget ? rowSides(budget, item.money) : undefined}
-          initialSide={budget ? defaultSide(budget.mode) : undefined}
+          sides={sides}
+          initialSide={initialSide}
           actual={{
-            shared: actualOf(item.money.shared),
-            mine: actualOf(item.money.mine),
+            shared: actualOf(item.money.shared, "shared"),
+            mine: actualOf(item.money.mine, "mine"),
           }}
           onClose={() =>
             setOpenKey((current) => (current === key ? null : current))

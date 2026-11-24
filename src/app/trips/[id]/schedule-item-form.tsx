@@ -329,8 +329,9 @@ function ScheduleItemFields({
               actual={actual?.[side]}
               actualOpen={actualOpen[side]}
               onOpenActual={() => {
+                // 펼치기만 해서는 고친 것이 아니다(적어야 onChange 로 고친 쪽이 된다). 펼친 채 비워 저장해도
+                // 그 쪽을 보내지 않으므로, 그 사이 다른 사람이 적은 실제·예상을 지우거나 되돌리지 않는다.
                 setActualOpen((current) => ({ ...current, [side]: true }));
-                markDirty(side);
               }}
               onChange={() => markDirty(side)}
             />
@@ -456,7 +457,6 @@ function SideMoneyFields({
         ) : (
           <button
             type="button"
-            aria-expanded={false}
             onClick={() => {
               focusActual.current = true;
               onOpenActual();
