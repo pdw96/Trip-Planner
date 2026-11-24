@@ -26,6 +26,7 @@ import {
   updateScheduleItemWithNewPlace,
   writeDayOrder,
 } from "@/db/queries/schedule-items";
+import { listTripPeople } from "@/db/queries/trip-members";
 import { getTrip } from "@/db/queries/trips";
 import type { BudgetItem } from "@/db/schema";
 import type { ActualMoney, Money } from "@/lib/budget";
@@ -40,6 +41,7 @@ import { fetchPlaceCoords } from "@/lib/google-maps-server";
 import { isUuid } from "@/lib/ids";
 import {
   EMPTY_SCHEDULE_FIELDS,
+  FOR_USER_INVALID,
   type GooglePlacePick,
   parseScheduleInput,
   type ScheduleFieldErrors,
@@ -66,6 +68,8 @@ import {
 // tripId·itemId·date 는 bind 로 오지만 클라이언트가 바꿀 수 있는 값이다.
 // 쿼리의 uuid 검사와 여행 접근 조건(userId 범위), 입력 검증의 날짜 규칙이 막는다.
 // Google 장소(#35)는 여행(·일정) 접근을 확인한 뒤에만 Google 을 부르고, 좌표는 서버가 직접 받는다.
+// "누구"(forUserId, #90)는 쓰는 문이 같은 문 안에서 여행 사람인지 확인한다. 액션의 사전 확인은 쓰기 전에
+// 필드 오류로 돌려주고, 쓰기가 0행일 때 까닭을 가리는 데만 쓴다.
 
 // 고른 장소가 이 여행의 장소가 아니어서(그 사이 지워짐 등) 쓰기가 걸리지 않았을 때의 문구.
 const PLACE_GONE = "장소를 다시 골라 주세요.";
@@ -102,9 +106,23 @@ function readScheduleFields(
     mineActualCurrency: field("mineActualCurrency"),
     mineActualPaidOn: field("mineActualPaidOn"),
     mineActualRate: field("mineActualRate"),
-    // 칸이 없으면 빈 값(모두).
+    // 칸이 없으면 빈 값(모두). 고치기는 칸이 없을 때 지금 값을 그대로 둔다(updateScheduleItemAction).
     forUserId: field("forUserId"),
   };
+}
+
+// "누구" 값이 이 여행 사람인지(#90). null(모두)이나 keep(고치기에서 그 일정의 지금 값, 나간 사람이어도 그대로 저장할
+// 수 있다, 설계 §5.6)이면 묻지 않고 ok. 사람 목록을 읽을 수 없으면(여행에 접근할 수 없음) gone.
+async function checkForUser(
+  userId: string,
+  tripId: string,
+  forUserId: string | null,
+  keep: string | null,
+): Promise<"ok" | "invalid" | "gone"> {
+  if (forUserId === null || forUserId === keep) return "ok";
+  const people = await listTripPeople(userId, tripId);
+  if (people === null) return "gone";
+  return people.some((p) => p.userId === forUserId) ? "ok" : "invalid";
 }
 
 // 양식이 금액 칸을 그린 쪽(hidden "sides", 예 "shared,mine", #89). 모르는 글자는 버린다.
@@ -421,12 +439,17 @@ export async function createScheduleItemAction(
     actualShown: { shared: false, mine: false },
     defaultPaidOn: values.date,
   });
-  if (!parsed.ok || !money.ok) {
+  const person = parsed.ok
+    ? await checkForUser(user.id, tripId, parsed.value.forUserId, null)
+    : "ok";
+  if (person === "gone") notFound();
+  if (!parsed.ok || !money.ok || person === "invalid") {
     return {
       values,
       errors: {
         ...(parsed.ok ? {} : parsed.errors),
         ...(money.ok ? {} : money.errors),
+        ...(person === "invalid" ? { forUserId: FOR_USER_INVALID } : {}),
       },
       formError: null,
       savedAt: prev.savedAt,
@@ -463,6 +486,20 @@ export async function createScheduleItemAction(
     };
   }
   if (outcome.kind === "missed") {
+    // "누구"로 고른 사람이 그 사이 여행을 나갔으면 사람을 다시 고르게 한다(사람 목록이 바뀌었으니 새로 그린다).
+    // 사람 확인은 다시 읽어 확실히 가릴 수 있으므로 장소보다 먼저 본다.
+    if (
+      (await checkForUser(user.id, tripId, parsed.value.forUserId, null)) ===
+      "invalid"
+    ) {
+      revalidatePath(tripPath(tripId));
+      return {
+        values,
+        errors: { forUserId: FOR_USER_INVALID },
+        formError: null,
+        savedAt: prev.savedAt,
+      };
+    }
     // 장소를 골랐는데 쓰기가 걸리지 않았고 여행은 여전히 보이면, 고른 장소가 그 사이 지워진 것이다
     // (Google 장소면 넣는 사이 다른 쪽에서 같은 장소가 들어온 경우 등).
     // 내 여행 안의 일이므로 notFound 대신 장소를 다시 고르게 한다. 여행이 안 보이면 지금처럼 찾을 수 없음.
@@ -511,13 +548,17 @@ export async function updateScheduleItemAction(
   const user = await getCurrentUser();
   if (!user) redirect("/");
 
-  const values = readScheduleFields(formData, null);
+  const read = readScheduleFields(formData, null);
   const [trip, item, budgetRows] = await Promise.all([
     getTrip(user.id, tripId),
     getScheduleItem(user.id, tripId, itemId),
     getScheduleBudgetRows(user.id, tripId, itemId),
   ]);
   if (!trip || !item) notFound();
+  // "누구" 칸이 없으면(칸이 생기기 전의 낡은 양식, 칸을 숨긴 양식) 지금 값을 그대로 둔다(몰래 모두로 바뀌지 않게, #90).
+  const values: ScheduleFields = formData.has("forUserId")
+    ? read
+    : { ...read, forUserId: item.forUserId ?? "" };
   const parsed = parseScheduleInput(values, {
     startDate: trip.startDate,
     endDate: trip.endDate,
@@ -534,12 +575,22 @@ export async function updateScheduleItemAction(
     },
     defaultPaidOn: parsed.ok ? parsed.value.date : item.date,
   });
-  if (!parsed.ok || !money.ok) {
+  const person = parsed.ok
+    ? await checkForUser(
+        user.id,
+        tripId,
+        parsed.value.forUserId,
+        item.forUserId,
+      )
+    : "ok";
+  if (person === "gone") notFound();
+  if (!parsed.ok || !money.ok || person === "invalid") {
     return {
       values,
       errors: {
         ...(parsed.ok ? {} : parsed.errors),
         ...(money.ok ? {} : money.errors),
+        ...(person === "invalid" ? { forUserId: FOR_USER_INVALID } : {}),
       },
       formError: null,
       savedAt: prev.savedAt,
@@ -565,11 +616,27 @@ export async function updateScheduleItemAction(
     };
   }
   if (outcome.kind === "missed") {
-    // 추가와 같다. 일정이 여전히 보이면 고른 장소가 그 사이 지워진 것이므로 장소를 다시 고르게 한다.
+    // 추가와 같다. 일정이 여전히 보이면 먼저 "누구"를 다시 확인하고(그 사이 사람이 나갔거나, 다른 창에서 이 일정의
+    // "누구"가 바뀌어 지금 값과 달라짐), 아니면 고른 장소가 그 사이 지워진 것이므로 장소를 다시 고르게 한다.
     // 글자 칸은 지금 일정의 장소 글자(이어졌던 장소의 이름표)로 채워 돌려준다.
-    if (outcome.placeLinked) {
-      const current = await getScheduleItem(user.id, tripId, itemId);
-      if (current) {
+    const current = await getScheduleItem(user.id, tripId, itemId);
+    if (current) {
+      const person = await checkForUser(
+        user.id,
+        tripId,
+        parsed.value.forUserId,
+        current.forUserId,
+      );
+      if (person === "invalid") {
+        revalidatePath(tripPath(tripId));
+        return {
+          values,
+          errors: { forUserId: FOR_USER_INVALID },
+          formError: null,
+          savedAt: prev.savedAt,
+        };
+      }
+      if (outcome.placeLinked) {
         revalidatePath(tripPath(tripId));
         return {
           values: {
