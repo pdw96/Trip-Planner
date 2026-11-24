@@ -11,11 +11,14 @@ import type { PanelBudget } from "./map-types";
 export function BudgetArea({
   tripId,
   budget,
+  isOwner,
   days,
   today,
 }: {
   tripId: string;
   budget: PanelBudget;
+  // 여행 주인인지(예산이 없을 때 설정 양식의 방식 고르기). 예산이 있으면 budget.config.isOwner 와 같다.
+  isOwner: boolean;
   days: TripDay[];
   // 여행 중이면 오늘, 아니면 null.
   today: string | null;
@@ -46,6 +49,7 @@ export function BudgetArea({
       <BudgetSheet
         tripId={tripId}
         budget={budget}
+        isOwner={isOwner}
         days={days}
         request={request}
         onClose={() => {

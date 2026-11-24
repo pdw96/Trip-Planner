@@ -9,7 +9,7 @@ import {
 } from "@/app/ui/styles";
 import {
   type ActualMoney,
-  type BudgetSettings,
+  type CurrencySettings,
   formatMoney,
   type Money,
   type PeriodTotal,
@@ -18,25 +18,33 @@ import {
 import { lineClass } from "@/lib/day-line";
 import { dateLabel, type TripDay } from "@/lib/schedule";
 import {
+  type BudgetConfig,
   BudgetSettingsForm,
   ExtraItemForm,
   tripDateChoices,
 } from "./budget-forms";
-import { BalanceText, BudgetBar } from "./budget-meter";
-import type { PanelBudget, PanelExtra } from "./map-types";
+import { BalanceText, BudgetBar, PrivateBadge } from "./budget-meter";
+import type { PanelBudget, PanelExtra, PanelWallet } from "./map-types";
 import { RATE_SOURCE_LABELS } from "./money-fields";
 
 // 예산 카드(#14 설계 §5.7.1, 자리는 예산 시트 #97). [전체]는 총 예산·예상 총지출·날짜별 표·여행 전체 항목·설정,
 // [N일차]는 그날 예상·실제와 일정 밖 지출. 숫자는 서버가 계산해 넘긴다. 금액은 일정 줄에 보이지 않는다.
+// 지갑(모임·내 돈, #89)마다 카드 하나. 모임 통장 여행은 모임 카드 하나라 지금과 같다.
 
 const budgetCardClass = `flex flex-col gap-3 ${cardClass}`;
 const linkButtonClass = `self-start ${buttonClass("quiet", "small")}`;
 const OVER = "text-danger";
 const UNDER = "text-ok";
 
+// 한 번에 한 양식(카드 사이에서도): "settings" | "settings:mine" | "add:<쪽>" | "edit:<id>".
+// 설정 양식은 첫 카드에만 열린다. "settings:mine" 은 내 예산 칸에 초점을 둔다.
+type OpenForm = string | null;
+
 type Props = {
   tripId: string;
   budget: PanelBudget;
+  // 여행 주인인지. 예산이 없을 때(budget null) 설정 양식의 방식 고르기에 쓴다. 있으면 budget.config.isOwner.
+  isOwner: boolean;
   // "all" 또는 날짜.
   tab: string;
   days: TripDay[];
@@ -45,13 +53,13 @@ type Props = {
   initialForm?: "settings";
 };
 
-export function BudgetCard(props: Props) {
+export function BudgetCards(props: Props) {
   // 처음 연 탭. 탭을 한 번 바꾸면 null 이 되어, 돌아와도 처음 양식이 저절로 다시 열리지 않는다.
   const [firstTab, setFirstTab] = useState<string | null>(props.tab);
   if (firstTab !== null && props.tab !== firstTab) setFirstTab(null);
   // 탭을 바꾸면 열린 양식을 닫는다.
   return (
-    <CardBody
+    <CardsBody
       key={props.tab}
       {...props}
       initialForm={props.tab === firstTab ? props.initialForm : undefined}
@@ -59,16 +67,16 @@ export function BudgetCard(props: Props) {
   );
 }
 
-function CardBody({
+function CardsBody({
   tripId,
   budget,
+  isOwner,
   tab,
   days,
   onSelectTab,
   initialForm,
 }: Props) {
-  // 한 번에 한 양식: "settings" | "add" | "edit:<id>"
-  const [open, setOpen] = useState<string | null>(initialForm ?? null);
+  const [open, setOpen] = useState<OpenForm>(initialForm ?? null);
   const close = () => setOpen(null);
 
   if (!budget) {
@@ -78,7 +86,12 @@ function CardBody({
         className={open === "settings" ? budgetCardClass : emptyStateClass}
       >
         {open === "settings" ? (
-          <BudgetSettingsForm tripId={tripId} settings={null} onClose={close} />
+          <BudgetSettingsForm
+            tripId={tripId}
+            config={null}
+            isOwner={isOwner}
+            onClose={close}
+          />
         ) : (
           <div className="flex w-full flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-sub">
@@ -97,23 +110,94 @@ function CardBody({
     );
   }
 
-  const { settings } = budget;
+  const { config, wallets } = budget;
+  const day = tab === "all" ? null : (days.find((d) => d.date === tab) ?? null);
+  const settingsOpen = open === "settings" || open === "settings:mine";
+  const settingsForm = settingsOpen ? (
+    <BudgetSettingsForm
+      tripId={tripId}
+      config={config}
+      isOwner={config.isOwner}
+      sharedLeftover={
+        config.mode === "personal" && wallets.some((w) => w.side === "shared")
+      }
+      focus={open === "settings:mine" ? "mine" : "total"}
+      onClose={close}
+    />
+  ) : null;
+
+  return (
+    <div className="flex flex-col gap-3">
+      {wallets.map((wallet, index) => (
+        <BudgetCard
+          key={wallet.side}
+          tripId={tripId}
+          config={config}
+          wallet={wallet}
+          day={day}
+          days={days}
+          onSelectTab={onSelectTab}
+          first={index === 0}
+          open={open}
+          setOpen={setOpen}
+          settingsForm={index === 0 ? settingsForm : null}
+        />
+      ))}
+    </div>
+  );
+}
+
+function BudgetCard({
+  tripId,
+  config,
+  wallet,
+  day,
+  days,
+  onSelectTab,
+  first,
+  open,
+  setOpen,
+  settingsForm,
+}: {
+  tripId: string;
+  config: BudgetConfig;
+  wallet: PanelWallet;
+  // null 이면 [전체].
+  day: TripDay | null;
+  days: TripDay[];
+  onSelectTab: (tab: string) => void;
+  // 첫 카드에만 [설정] 버튼과 설정 양식.
+  first: boolean;
+  open: OpenForm;
+  setOpen: (key: OpenForm) => void;
+  // 열린 설정 양식(첫 카드에만 넘어온다).
+  settingsForm: React.ReactNode;
+}) {
+  const mine = wallet.side === "mine";
+  const close = () => setOpen(null);
+  const settingsOpen = open === "settings" || open === "settings:mine";
   const currencies = {
-    currency: settings.currency,
-    localCurrency: settings.localCurrency,
+    currency: config.currency,
+    localCurrency: config.localCurrency,
   };
   const dateChoices = tripDateChoices(days);
-  const day = tab === "all" ? null : days.find((d) => d.date === tab);
-  const extras = budget.extras.filter((e) =>
+  const extras = wallet.extras.filter((e) =>
     day ? e.date === day.date : e.date === null,
   );
   // 여행 날짜를 줄여 기간 밖으로 밀려난 일정 밖 항목. [전체]에서 고치거나 지울 수 있게 따로 보인다(#14 리뷰).
   const tripDates = new Set(days.map((d) => d.date));
-  const outsideExtras = budget.extras.filter(
+  const outsideExtras = wallet.extras.filter(
     (e) => e.date !== null && !tripDates.has(e.date),
   );
+  // 예산 정하기 버튼: [전체]에서만(설정 양식이 거기 있다). 내 예산은 모임 통장 방식에서는 저장되지 않으므로
+  // (서버가 내 돈을 쓰는 방식에서만 내 예산을 쓴다) 남은 내 돈 행 때문에 보이는 카드에는 버튼이 없다.
+  const onSet =
+    !day && !settingsOpen && (!mine || config.mode !== "shared")
+      ? () => setOpen(mine ? "settings:mine" : "settings")
+      : null;
 
   // 고치는 항목의 날짜가 기간 밖이면 그 날짜도 고를 수 있게 둔다(저장해도 그대로 남도록).
+  // 쪽은 이 카드의 지갑(넣기는 서버가 이 값으로 모임·내 돈을 정하고, 고치기는 저장된 행의 쪽을 쓴다).
   const renderForm = (item: PanelExtra | null) => (
     <ExtraItemForm
       tripId={tripId}
@@ -131,6 +215,7 @@ function CardBody({
             ]
           : dateChoices
       }
+      sides={[wallet.side]}
       onClose={close}
     />
   );
@@ -138,37 +223,41 @@ function CardBody({
   const extraList = (
     <ExtraList
       extras={extras}
-      settings={settings}
+      settings={config}
       open={open}
       setOpen={setOpen}
+      addKey={`add:${wallet.side}`}
       addLabel={day ? "+ 지출 추가" : "+ 항목 추가"}
       renderForm={renderForm}
     />
   );
 
+  const head = <BudgetHead config={config} wallet={wallet} onSet={onSet} />;
+
   if (day) {
+    const title = mine
+      ? `${day.dayNumber}일차 내 예산`
+      : `${day.dayNumber}일차 예산`;
     return (
-      <section
-        aria-label={`${day.dayNumber}일차 예산`}
-        className={budgetCardClass}
-      >
-        <h3 className="font-semibold">{day.dayNumber}일차 예산</h3>
-        <BudgetHead budget={budget} />
-        <PeriodLine
-          total={budget.periods.byDate[day.date]}
-          settings={settings}
-        />
+      <section aria-label={title} className={budgetCardClass}>
+        <CardTitle mine={mine}>
+          {day.dayNumber}
+          {mine ? "일차 내 예산" : "일차 예산"}
+        </CardTitle>
+        {head}
+        <PeriodLine total={wallet.periods.byDate[day.date]} settings={config} />
         <h4 className="text-sm font-medium">일정 밖 지출</h4>
         {extraList}
       </section>
     );
   }
 
+  const title = mine ? "내 예산" : "전체 예산";
   return (
-    <section aria-label="전체 예산" className={budgetCardClass}>
+    <section aria-label={title} className={budgetCardClass}>
       <div className="flex items-center justify-between gap-2">
-        <h3 className="font-semibold">전체 예산</h3>
-        {open !== "settings" && (
+        <CardTitle mine={mine}>{title}</CardTitle>
+        {first && !settingsOpen && (
           <button
             type="button"
             onClick={() => setOpen("settings")}
@@ -178,17 +267,14 @@ function CardBody({
           </button>
         )}
       </div>
-      <BudgetHead budget={budget} />
-      {open === "settings" ? (
-        <BudgetSettingsForm
-          tripId={tripId}
-          settings={settings}
-          onClose={close}
-        />
-      ) : (
-        <Summary budget={budget} />
-      )}
-      <DayTable budget={budget} days={days} onSelectTab={onSelectTab} />
+      {head}
+      {settingsForm ?? <Summary config={config} wallet={wallet} />}
+      <DayTable
+        wallet={wallet}
+        settings={config}
+        days={days}
+        onSelectTab={onSelectTab}
+      />
       <h4 className="text-sm font-medium">여행 전체 항목</h4>
       {extraList}
       {outsideExtras.length > 0 && (
@@ -196,9 +282,10 @@ function CardBody({
           <h4 className="text-sm font-medium">여행 기간 밖 항목</h4>
           <ExtraList
             extras={outsideExtras}
-            settings={settings}
+            settings={config}
             open={open}
             setOpen={setOpen}
+            addKey={null}
             addLabel={null}
             renderForm={renderForm}
           />
@@ -208,25 +295,81 @@ function CardBody({
   );
 }
 
-function money(minor: number, settings: BudgetSettings): string {
+// 모임 카드는 지금 제목 그대로, 내 카드는 옆에 "나만 보여요".
+function CardTitle({
+  mine,
+  children,
+}: {
+  mine: boolean;
+  children: React.ReactNode;
+}) {
+  const h3 = <h3 className="font-semibold">{children}</h3>;
+  if (!mine) return h3;
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+      {h3}
+      <PrivateBadge />
+    </div>
+  );
+}
+
+function money(minor: number, settings: CurrencySettings): string {
   return formatMoney(minor, settings.currency);
 }
 
 // 카드 머리(탑승권식, #53 설계 §5.5): 여행 전체 "예상 총지출 / 총 예산", 막대, 여유·초과. 두 탭 공통.
-function BudgetHead({ budget }: { budget: NonNullable<PanelBudget> }) {
-  const { settings, summary: s } = budget;
+// 예산을 아직 정하지 않았거나(total null) 통화가 바뀐 내 예산(stale)이면 요약은 0 에 대해 계산된 것이라
+// 막대·여유를 그리지 않고 예상 합계와 안내만 보인다(onSet 이 있으면 "… 예산 정하기" 버튼).
+function BudgetHead({
+  config,
+  wallet,
+  onSet,
+}: {
+  config: BudgetConfig;
+  wallet: PanelWallet;
+  onSet: (() => void) | null;
+}) {
+  const s = wallet.summary;
+  const mine = wallet.side === "mine";
+  if (wallet.total === null || wallet.stale) {
+    const notice = wallet.stale
+      ? `예산 통화가 바뀌었어요. 내 예산을 다시 정해 주세요 (전에 정한 값: ${formatMoney(wallet.stale.amount, wallet.stale.currency)})`
+      : onSet
+        ? null
+        : mine
+          ? "내 예산을 아직 정하지 않았어요."
+          : "모임 예산을 아직 정하지 않았어요.";
+    return (
+      <div className="flex flex-col gap-2">
+        <p className="text-xl font-bold tabular-nums">
+          {money(s.projected, config)}
+          <span className="text-base font-semibold text-sub"> 예상</span>
+        </p>
+        {notice && <p className="text-sm text-sub">{notice}</p>}
+        {onSet && (
+          <button
+            type="button"
+            onClick={onSet}
+            className={`self-start ${buttonClass("secondary", "small")}`}
+          >
+            {mine ? "내 예산 정하기" : "모임 예산 정하기"}
+          </button>
+        )}
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <p className="text-xl font-bold tabular-nums">
-          {money(s.projected, settings)}
+          {money(s.projected, config)}
           <span className="text-base font-semibold text-sub">
             {" "}
-            / {money(s.total, settings)}
+            / {money(s.total, config)}
           </span>
         </p>
         <p className="text-sm font-semibold">
-          <BalanceText balance={s.balance} settings={settings} />
+          <BalanceText balance={s.balance} currency={config.currency} />
         </p>
       </div>
       <BudgetBar projected={s.projected} total={s.total} />
@@ -253,16 +396,34 @@ function Row({
   );
 }
 
-function Summary({ budget }: { budget: NonNullable<PanelBudget> }) {
-  const { settings, summary: s } = budget;
+// 예산을 정하지 않은 지갑(total null·stale)은 총 예산·여유 없이 합계만.
+function Summary({
+  config,
+  wallet,
+}: {
+  config: BudgetConfig;
+  wallet: PanelWallet;
+}) {
+  const settings = config;
+  const s = wallet.summary;
+  const hasTotal = wallet.total !== null && !wallet.stale;
   if (!s.hasActual) {
     // 예산 짜는 중: 계획 합계와 총 예산을 바로 비교한다.
     return (
       <div className="flex flex-col gap-1">
-        <Row label="총 예산">{money(s.total, settings)}</Row>
+        {hasTotal && <Row label="총 예산">{money(s.total, settings)}</Row>}
         <Row label="계획 합계" strong>
-          {money(s.planned, settings)} ·{" "}
-          <BalanceText balance={s.total - s.planned} settings={settings} />
+          {money(s.planned, settings)}
+          {hasTotal && (
+            <>
+              {" "}
+              ·{" "}
+              <BalanceText
+                balance={s.total - s.planned}
+                currency={settings.currency}
+              />
+            </>
+          )}
         </Row>
       </div>
     );
@@ -276,10 +437,15 @@ function Summary({ budget }: { budget: NonNullable<PanelBudget> }) {
         : `그 항목들 예상보다 ${money(-over, settings)} 덜`;
   return (
     <div className="flex flex-col gap-1">
-      <Row label="총 예산">{money(s.total, settings)}</Row>
+      {hasTotal && <Row label="총 예산">{money(s.total, settings)}</Row>}
       <Row label="예상 총지출" strong>
-        {money(s.projected, settings)} ·{" "}
-        <BalanceText balance={s.balance} settings={settings} />
+        {money(s.projected, settings)}
+        {hasTotal && (
+          <>
+            {" "}
+            · <BalanceText balance={s.balance} currency={settings.currency} />
+          </>
+        )}
       </Row>
       <p className="text-sm text-sub">
         실제 적은 것 {money(s.actual, settings)} ({overText}
@@ -292,20 +458,22 @@ function Summary({ budget }: { budget: NonNullable<PanelBudget> }) {
   );
 }
 
-function amountOrDash(minor: number, has: boolean, settings: BudgetSettings) {
+function amountOrDash(minor: number, has: boolean, settings: CurrencySettings) {
   return has ? money(minor, settings) : "—";
 }
 
 function DayTable({
-  budget,
+  wallet,
+  settings,
   days,
   onSelectTab,
 }: {
-  budget: NonNullable<PanelBudget>;
+  wallet: PanelWallet;
+  settings: CurrencySettings;
   days: TripDay[];
   onSelectTab: (tab: string) => void;
 }) {
-  const { settings, periods } = budget;
+  const { periods } = wallet;
   if (days.length === 0 && !periods.outside) return null;
   return (
     <table className="w-full text-sm tabular-nums">
@@ -385,7 +553,7 @@ function PeriodLine({
   settings,
 }: {
   total: PeriodTotal | undefined;
-  settings: BudgetSettings;
+  settings: CurrencySettings;
 }) {
   if (!total) {
     return (
@@ -437,7 +605,7 @@ function MoneyCell({
   rate,
 }: {
   value: Money | ActualMoney | null;
-  settings: BudgetSettings;
+  settings: CurrencySettings;
   rate: string | null;
 }) {
   if (!value) return <span className="text-sub">—</span>;
@@ -467,14 +635,16 @@ function ExtraList({
   settings,
   open,
   setOpen,
+  addKey,
   addLabel,
   renderForm,
 }: {
   extras: PanelExtra[];
-  settings: BudgetSettings;
-  open: string | null;
-  setOpen: (key: string | null) => void;
-  // null 이면 추가 버튼 없음.
+  settings: CurrencySettings;
+  open: OpenForm;
+  setOpen: (key: OpenForm) => void;
+  // 넣기 양식의 열림 키(카드마다 다름). null 이면 추가 버튼 없음.
+  addKey: string | null;
   addLabel: string | null;
   renderForm: (item: PanelExtra | null) => React.ReactNode;
 }) {
@@ -516,12 +686,12 @@ function ExtraList({
           )}
         </ul>
       )}
-      {addLabel === null ? null : open === "add" ? (
+      {addKey === null || addLabel === null ? null : open === addKey ? (
         renderForm(null)
       ) : (
         <button
           type="button"
-          onClick={() => setOpen("add")}
+          onClick={() => setOpen(addKey)}
           className={linkButtonClass}
         >
           {addLabel}
