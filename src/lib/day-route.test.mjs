@@ -58,7 +58,6 @@ test("base 있음: base → stops → base", () => {
     AA,
     places,
     dist,
-    "me",
   );
   assert.deepEqual(summary(r), [
     "A>B arrival 09:30",
@@ -89,7 +88,6 @@ test("base 없음", () => {
     NONE,
     places,
     dist,
-    "me",
   );
   assert.equal(r.start, null);
   assert.equal(r.end, null);
@@ -106,7 +104,6 @@ test("첫 stop 이 base 와 같음", () => {
     AA,
     places,
     dist,
-    "me",
   );
   assert.deepEqual(summary(r), ["A>B departure 12:00", "B>A departure 10:00"]);
   assert.equal(r.legs[0].fromIsBase, true);
@@ -126,7 +123,6 @@ test("연달아 같은 stop 은 합치고 번호를 건너뛰지 않는다", () 
     NONE,
     places,
     dist,
-    "me",
   );
   assert.deepEqual(summary(r), ["B>C departure 11:00"]);
   assert.deepEqual(
@@ -149,7 +145,6 @@ test("좌표 없는 장소는 뺀다", () => {
     { start: "D", end: "D" },
     places,
     dist,
-    "me",
   );
   assert.equal(r2.start, null);
   assert.equal(r2.end, null);
@@ -179,7 +174,6 @@ test("마지막 stop 이 base 와 합쳐져도 시각은 도착으로 남는다"
     AA,
     places,
     dist,
-    "me",
   );
   assert.deepEqual(summary(r), ["A>B departure 10:00", "B>A arrival 15:00"]);
   const r2 = buildDayRoute(
@@ -190,7 +184,6 @@ test("마지막 stop 이 base 와 합쳐져도 시각은 도착으로 남는다"
     AA,
     places,
     dist,
-    "me",
   );
   assert.deepEqual(summary(r2), ["A>B arrival 09:00", "B>A departure 09:00"]);
 });
@@ -213,7 +206,6 @@ test("가운데의 base 와 같은 stop 은 번호가 남는다", () => {
     AA,
     places,
     dist,
-    "me",
   );
   assert.deepEqual(
     r.stops.map((s) => [s.place.id, s.number]),
@@ -236,7 +228,6 @@ test("같은 장소가 이어지면 들어오는 구간은 첫 시각, 나가는
     AA,
     places,
     dist,
-    "me",
   );
   assert.deepEqual(summary(r), [
     "A>B arrival 09:00",
@@ -255,7 +246,6 @@ test("합친 stop 중 나중 것만 시각이 있으면 그 시각이 도착·�
     AA,
     places,
     dist,
-    "me",
   );
   assert.deepEqual(summary(r), [
     "A>B arrival 11:00",
@@ -274,7 +264,6 @@ test("구간의 일정 id: 기준점은 null, 합친 점은 도착=처음·출�
     AA,
     places,
     dist,
-    "me",
   );
   assert.deepEqual(
     r.legs.map((l) => [l.fromItemId, l.toItemId]),
@@ -296,7 +285,6 @@ test("기준점과 같은 장소의 첫·끝 일정은 일정 id 가 이긴다",
     AA,
     places,
     dist,
-    "me",
   );
   assert.deepEqual(
     r.legs.map((l) => [l.fromItemId, l.toItemId, l.fromIsBase, l.toIsBase]),
@@ -317,7 +305,6 @@ test("좌표 없는 장소의 일정은 건너뛴다", () => {
     NONE,
     places,
     dist,
-    "me",
   );
   assert.deepEqual(
     r.legs.map((l) => [l.fromItemId, l.toItemId]),
@@ -432,7 +419,6 @@ test("buildDayRoute: 시작점과 끝점이 다르다", () => {
     { start: "A", end: "B" },
     places,
     dist,
-    "me",
   );
   assert.deepEqual(summary(r), ["A>C arrival 13:00", "C>B departure 13:00"]);
   assert.equal(r.start.id, "A");
@@ -458,7 +444,6 @@ test("buildDayRoute: 좌표 없는 끝점은 빠진다", () => {
     { start: "A", end: "D" },
     places,
     dist,
-    "me",
   );
   assert.deepEqual(summary(r), ["A>B departure 10:00"]);
   assert.equal(r.end, null);
