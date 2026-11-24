@@ -269,7 +269,10 @@ export const tripBudgets = pgTable(
       .primaryKey()
       .references(() => trips.id, { onDelete: "cascade" }),
     currency: text("currency").notNull(),
-    totalAmount: bigint("total_amount", { mode: "number" }).notNull(),
+    // #89: 모임 예산 총액. 각자(personal) 여행은 비어 있을 수 있다.
+    totalAmount: bigint("total_amount", { mode: "number" }),
+    // #89: 여행 방식(여행 주인만 고른다). 새로 적을 때의 "누구 돈"과 보이는 카드를 정한다.
+    mode: text("mode").notNull().default("shared"),
     localCurrency: text("local_currency"),
     plannedRate: numeric("planned_rate", { precision: 20, scale: 10 }),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -288,7 +291,11 @@ export const tripBudgets = pgTable(
     ),
     check(
       "trip_budgets_total_check",
-      sql`${t.totalAmount} >= 0 and ${t.totalAmount} < 1000000000000`,
+      sql`${t.totalAmount} is null or (${t.totalAmount} >= 0 and ${t.totalAmount} < 1000000000000)`,
+    ),
+    check(
+      "trip_budgets_mode_check",
+      sql`${t.mode} in ('shared', 'personal', 'both')`,
     ),
     check(
       "trip_budgets_rate_check",
@@ -298,6 +305,41 @@ export const tripBudgets = pgTable(
 );
 
 export type TripBudget = typeof tripBudgets.$inferSelect;
+
+// #89: 사람마다 본인만 보는 내 예산. currency 는 정할 때의 예산 통화(통화가 바뀌면 낡은 값을 알아보려고).
+export const tripPersonalBudgets = pgTable(
+  "trip_personal_budgets",
+  {
+    tripId: uuid("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    totalAmount: bigint("total_amount", { mode: "number" }).notNull(),
+    currency: text("currency").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    primaryKey({ columns: [t.tripId, t.userId] }),
+    check(
+      "trip_personal_budgets_total_check",
+      sql`${t.totalAmount} >= 0 and ${t.totalAmount} < 1000000000000`,
+    ),
+    check(
+      "trip_personal_budgets_currency_check",
+      sql`${t.currency} ~ '^[A-Z]{3}$'`,
+    ),
+  ],
+);
+
+export type TripPersonalBudget = typeof tripPersonalBudgets.$inferSelect;
 
 // 일정에 붙은 금액(일정 하나에 한 행, 일정을 지우면 함께 지움) 또는 일정 밖 항목(이름, 날짜 없으면 여행 전체).
 // 실제 지출이 현지 통화면 결제일·환율·출처를 함께 저장한다. 저장한 환율은 나중에 저절로 바뀌지 않는다.
@@ -312,6 +354,10 @@ export const budgetItems = pgTable(
       () => scheduleItems.id,
       { onDelete: "cascade" },
     ),
+    // #89: owner_user_id null = 모임 돈, 값이 있으면 그 사람만 보는 내 돈.
+    ownerUserId: text("owner_user_id").references(() => user.id, {
+      onDelete: "cascade",
+    }),
     title: text("title"),
     date: date("date"),
     estimateAmount: bigint("estimate_amount", { mode: "number" }),
@@ -331,7 +377,13 @@ export const budgetItems = pgTable(
   },
   (t) => [
     index("budget_items_trip_id_idx").on(t.tripId),
-    uniqueIndex("budget_items_schedule_item_idx").on(t.scheduleItemId),
+    // #89: 일정마다 모임 행 하나, 사람마다 내 돈 행 하나.
+    uniqueIndex("budget_items_schedule_shared_idx")
+      .on(t.scheduleItemId)
+      .where(sql`${t.ownerUserId} is null`),
+    uniqueIndex("budget_items_schedule_owner_idx")
+      .on(t.scheduleItemId, t.ownerUserId)
+      .where(sql`${t.ownerUserId} is not null`),
     check(
       "budget_items_link_check",
       sql`(${t.scheduleItemId} is not null and ${t.title} is null and ${t.date} is null) or (${t.scheduleItemId} is null and ${t.title} is not null)`,
