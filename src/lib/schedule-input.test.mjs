@@ -65,6 +65,12 @@ test("empty fields are all blank", () => {
     actualCurrency: "",
     actualPaidOn: "",
     actualRate: "",
+    mineEstimateAmount: "",
+    mineEstimateCurrency: "",
+    mineActualAmount: "",
+    mineActualCurrency: "",
+    mineActualPaidOn: "",
+    mineActualRate: "",
   });
 });
 

@@ -9,7 +9,7 @@ import {
   releaseVelocity,
   shouldCloseSheet,
 } from "@/lib/sheet-drag";
-import { BudgetCard } from "./budget-card";
+import { BudgetCards } from "./budget-card";
 import { centerSelectedChip, DayChips } from "./day-chips";
 import type { PanelBudget } from "./map-types";
 import { useSelectedDay } from "./selected-day";
@@ -34,12 +34,15 @@ type Drag = {
 export function BudgetSheet({
   tripId,
   budget,
+  isOwner,
   days,
   request,
   onClose,
 }: {
   tripId: string;
   budget: PanelBudget;
+  // 여행 주인인지(예산이 없을 때 설정 양식의 방식 고르기).
+  isOwner: boolean;
   days: TripDay[];
   // null 이면 닫힘. id 가 바뀔 때마다 새로 연다(안의 양식이 지난 입력 없이 시작).
   request: SheetRequest | null;
@@ -217,10 +220,11 @@ export function BudgetSheet({
       </div>
       <div className="px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
         {request && (
-          <BudgetCard
+          <BudgetCards
             key={request.id}
             tripId={tripId}
             budget={budget}
+            isOwner={isOwner}
             tab={selected}
             days={days}
             onSelectTab={select}

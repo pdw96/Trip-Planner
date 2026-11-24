@@ -14,17 +14,20 @@ import {
   useTransition,
 } from "react";
 import { buttonClass, errorTextClass, fieldClass } from "@/app/ui/styles";
-import { type ActualMoney, formatMoney, type Money } from "@/lib/budget";
+import type { ActualMoney, Money } from "@/lib/budget";
+import {
+  type BudgetMode,
+  defaultSide,
+  type Side,
+  visibleSides,
+} from "@/lib/budget-wallets";
 import { placeUrl } from "@/lib/leg-display";
 import { mapsSearchUrl } from "@/lib/schedule";
 import {
   EMPTY_SCHEDULE_FIELDS,
   type ScheduleFormState,
 } from "@/lib/schedule-input";
-import {
-  setScheduleItemActualAction,
-  undoScheduleItemWithActualAction,
-} from "../budget-actions";
+import { setScheduleItemActualAction } from "../budget-actions";
 import { SAVE_FAILED } from "../messages";
 import {
   createScheduleItemAction,
@@ -32,6 +35,7 @@ import {
   setScheduleItemDoneAction,
   updateScheduleItemAction,
 } from "../schedule-actions";
+import { SideSwitch } from "./budget-forms";
 import type { PlaceOption } from "./map-types";
 import {
   actualDetailValues,
@@ -55,10 +59,22 @@ export type RowItem = {
   placeId: string | null;
   memo: string | null;
   done: boolean;
-  // 예산 금액(#14). 일정 줄에는 보이지 않고 양식·체크칸에서만 쓴다.
-  estimate: Money | null;
-  actual: ActualMoney | null;
+  // 예산 금액(#14, #89). 일정 줄에는 보이지 않고 양식·체크칸에서만 쓴다. 쪽마다 그 일정의 행이 없으면 null.
+  money: { shared: RowMoney | null; mine: RowMoney | null };
 };
+
+export type RowMoney = { estimate: Money | null; actual: ActualMoney | null };
+
+// 예산 설정의 두 통화와 방식(#14, #89).
+export type EditorBudget = BudgetCurrencies & { mode: BudgetMode };
+
+// 그 일정에서 금액 칸을 보일 쪽(#89 §5.7): 방식의 쪽 + 그 일정에 행이 남아 있는 쪽.
+function rowSides(budget: EditorBudget, money: RowItem["money"]): Side[] {
+  return visibleSides(budget.mode, {
+    shared: money.shared !== null,
+    mine: money.mine !== null,
+  });
+}
 
 const ERROR_VISIBLE_MS = 4000;
 
@@ -77,7 +93,7 @@ type OpenState = {
   setOpenKey: React.Dispatch<React.SetStateAction<string | null>>;
   places: PlaceOption[];
   searchEnabled: boolean;
-  budget: BudgetCurrencies | null;
+  budget: EditorBudget | null;
   // 고른 날을 보다가 일정의 날짜를 옮기면 그 날 목록 아래에 잠깐 보이는 안내(#53 §5.4.1).
   moved: { fromDate: string; text: string } | null;
   setMoved: (moved: { fromDate: string; text: string } | null) => void;
@@ -103,7 +119,7 @@ export function ScheduleEditorProvider({
 }: {
   places: PlaceOption[];
   browserKey: string | null;
-  budget: BudgetCurrencies | null;
+  budget: EditorBudget | null;
   children: React.ReactNode;
 }) {
   const [openKey, setOpenKey] = useState<string | null>(null);
@@ -182,6 +198,12 @@ export function AddScheduleItem({
       places={places}
       searchEnabled={searchEnabled}
       budget={budget}
+      sides={
+        budget
+          ? visibleSides(budget.mode, { shared: false, mine: false })
+          : undefined
+      }
+      initialSide={budget ? defaultSide(budget.mode) : undefined}
       onClose={() => setOpenKey(null)}
     />
   );
@@ -247,30 +269,10 @@ export function ScheduleItemRow({
   }
 
   // 누르면 바로 화면에 반영하고 저장한다. 실패하면 전환이 끝날 때 서버 값으로 돌아가고 문구를 보인다.
-  // 예산이 있으면 켤 때 실제 지출 칸을 연다. 실제를 적은 일정을 끄면 확인 뒤 완료 해제와 실제 삭제를 한 번에 한다.
+  // 예산이 있으면 켤 때 실제 지출 칸을 연다. 완료를 풀어도 실제 지출은 지우지 않는다(#89 §5.6: 미리 결제한 일정,
+  // 사람마다인 실제). 실제를 지우려면 칸을 비우고 저장한다.
   function toggleDone() {
     const next = !done;
-    if (!next && item.actual) {
-      const spent = formatMoney(item.actual.amount, item.actual.currency);
-      if (
-        !window.confirm(
-          `완료를 풀면 적어 둔 실제 지출 ${spent}도 지워져요. 계속할까요?`,
-        )
-      ) {
-        return;
-      }
-      setError(null);
-      closeActual();
-      startToggle(async () => {
-        setOptimisticDone(false);
-        const ok = await undoScheduleItemWithActualAction(tripId, item.id).then(
-          (result) => result.ok,
-          () => false,
-        );
-        if (!ok) setError(SAVE_FAILED);
-      });
-      return;
-    }
     if (next && budget) setOpenKey(actualKey);
     else closeActual();
     setError(null);
@@ -325,9 +327,36 @@ export function ScheduleItemRow({
   }
 
   if (editing) {
-    const estimate = budget ? amountFieldValues(item.estimate, budget) : null;
-    const actual = budget ? amountFieldValues(item.actual, budget) : null;
-    const detail = actualDetailValues(item.actual);
+    // 쪽마다 처음 값(#89). 내 돈 쪽은 mine* 칸으로 보낸다.
+    const fieldsOf = (money: RowMoney | null) => {
+      const estimate = budget
+        ? amountFieldValues(money?.estimate ?? null, budget)
+        : null;
+      const actual = budget
+        ? amountFieldValues(money?.actual ?? null, budget)
+        : null;
+      const detail = actualDetailValues(money?.actual ?? null);
+      return {
+        estimateAmount: estimate?.amount ?? "",
+        estimateCurrency: estimate?.currency ?? "",
+        actualAmount: actual?.amount ?? "",
+        actualCurrency: actual?.currency ?? "",
+        actualPaidOn: detail.paidOn,
+        actualRate: detail.rate,
+      };
+    };
+    const shared = fieldsOf(item.money.shared);
+    const mine = fieldsOf(item.money.mine);
+    const sides = budget ? rowSides(budget, item.money) : undefined;
+    const preferred = budget ? defaultSide(budget.mode) : undefined;
+    const initialSide =
+      sides && preferred && !sides.includes(preferred) ? sides[0] : preferred;
+    // 실제가 있는 쪽은 펼쳐 연다. 완료한 일정은 실제가 없어도 처음 보이는 쪽을 펼쳐 연다(#89 전과 같은 모양).
+    // 펼치기만 해서는 그 쪽을 쓰지 않는다(양식의 고친 쪽 표시).
+    const actualOf = (money: RowMoney | null, side: Side) => ({
+      open: money?.actual != null || (item.done && side === initialSide),
+      rateSource: money?.actual?.rateSource ?? null,
+    });
     return (
       <li ref={setNodeRef} style={sortStyle}>
         <ScheduleItemForm
@@ -341,19 +370,24 @@ export function ScheduleItemRow({
             place: item.place ?? "",
             placeId: item.placeId ?? "",
             memo: item.memo ?? "",
-            estimateAmount: estimate?.amount ?? "",
-            estimateCurrency: estimate?.currency ?? "",
-            actualAmount: actual?.amount ?? "",
-            actualCurrency: actual?.currency ?? "",
-            actualPaidOn: detail.paidOn,
-            actualRate: detail.rate,
+            ...shared,
+            mineEstimateAmount: mine.estimateAmount,
+            mineEstimateCurrency: mine.estimateCurrency,
+            mineActualAmount: mine.actualAmount,
+            mineActualCurrency: mine.actualCurrency,
+            mineActualPaidOn: mine.actualPaidOn,
+            mineActualRate: mine.actualRate,
           }}
           dateOptions={dateOptions}
           places={places}
           searchEnabled={searchEnabled}
           budget={budget}
-          showActual={item.done || item.actual !== null}
-          actualRateSource={item.actual?.rateSource ?? null}
+          sides={sides}
+          initialSide={initialSide}
+          actual={{
+            shared: actualOf(item.money.shared, "shared"),
+            mine: actualOf(item.money.mine, "mine"),
+          }}
           onClose={() =>
             setOpenKey((current) => (current === key ? null : current))
           }
@@ -469,6 +503,8 @@ export function ScheduleItemRow({
 
 // 완료 체크칸을 켠 뒤 그 줄 아래에 열리는 실제 지출 칸 하나(§5.7.3). 처음 값은 적어 둔 실제 → 예상 → 빈칸.
 // 저장하면 닫히고, 건너뛰기(돈을 안 쓴 일정)는 실제를 쓰지 않고 닫는다. 빈칸으로 저장하면 실제를 지운다.
+// 쓰는 쪽은 방식의 기본 쪽(#89). 보일 쪽이 둘이면(둘 다 여행, 반대쪽 행이 남은 일정) [모임] [내 돈] 전환을 보이고,
+// 쪽마다 적던 값을 따로 둔다. 저장은 고른 쪽 하나만.
 function ActualEntry({
   tripId,
   item,
@@ -477,20 +513,40 @@ function ActualEntry({
 }: {
   tripId: string;
   item: RowItem;
-  budget: BudgetCurrencies;
+  budget: EditorBudget;
   onClose: () => void;
 }) {
-  const initial = amountFieldValues(item.actual ?? item.estimate, budget);
-  const [amount, setAmount] = useState(initial.amount);
-  const [currency, setCurrency] = useState(initial.currency);
+  const [sides] = useState(() => rowSides(budget, item.money));
+  const [side, setSide] = useState<Side>(() => {
+    const preferred = defaultSide(budget.mode);
+    return sides.includes(preferred) ? preferred : sides[0];
+  });
+  const [entries, setEntries] = useState<
+    Record<Side, { amount: string; currency: string }>
+  >(() => {
+    const initial = (money: RowMoney | null) =>
+      amountFieldValues(money?.actual ?? money?.estimate ?? null, budget);
+    return {
+      shared: initial(item.money.shared),
+      mine: initial(item.money.mine),
+    };
+  });
   const [error, setError] = useState<string | null>(null);
   const [saving, startSave] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
   const inputId = `actual-${item.id}`;
+  const { amount, currency } = entries[side];
 
   useLayoutEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  function setEntry(patch: Partial<{ amount: string; currency: string }>) {
+    setEntries((current) => ({
+      ...current,
+      [side]: { ...current[side], ...patch },
+    }));
+  }
 
   function save(event: React.FormEvent) {
     event.preventDefault();
@@ -499,6 +555,7 @@ function ActualEntry({
       const result = await setScheduleItemActualAction(
         tripId,
         item.id,
+        side,
         amount,
         currency,
       ).catch(() => ({ ok: false as const, error: SAVE_FAILED }));
@@ -512,6 +569,17 @@ function ActualEntry({
     : null;
   return (
     <form onSubmit={save} noValidate className="mt-1 flex flex-col gap-1">
+      {sides.length > 1 && (
+        <SideSwitch
+          name={`actual-side-${item.id}`}
+          sides={sides}
+          value={side}
+          onChange={(next) => {
+            setSide(next);
+            setError(null);
+          }}
+        />
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <label htmlFor={inputId} className="text-sm font-medium">
           실제 지출
@@ -520,7 +588,7 @@ function ActualEntry({
           ref={inputRef}
           id={inputId}
           value={amount}
-          onChange={(e) => setAmount(e.target.value)}
+          onChange={(e) => setEntry({ amount: e.target.value })}
           inputMode="decimal"
           autoComplete="off"
           aria-invalid={error ? true : undefined}
@@ -529,7 +597,7 @@ function ActualEntry({
         {choices && (
           <select
             value={currency}
-            onChange={(e) => setCurrency(e.target.value)}
+            onChange={(e) => setEntry({ currency: e.target.value })}
             aria-label="실제 지출 통화"
             className={`${fieldClass} h-8 w-auto`}
           >

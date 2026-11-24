@@ -1,7 +1,7 @@
 import "server-only";
 import {
   type ActualMoney,
-  type BudgetSettings,
+  type CurrencySettings,
   currencyInfo,
   decideRate,
   parseAmount,
@@ -28,7 +28,7 @@ export async function resolveActualRate(
     rateField: string | undefined;
   },
   previous: ActualMoney | null,
-  settings: BudgetSettings,
+  settings: CurrencySettings,
 ): Promise<ActualMoney> {
   const base = { amount: actual.amount, currency: actual.currency };
   if (actual.currency === settings.currency) {

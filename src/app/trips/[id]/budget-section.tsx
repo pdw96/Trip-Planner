@@ -20,6 +20,7 @@ export async function BudgetSection({
     <BudgetArea
       tripId={trip.id}
       budget={budget}
+      isOwner={trip.userId === userId}
       days={tripDays(trip.startDate, trip.endDate)}
       today={todayInTrip ? today : null}
     />

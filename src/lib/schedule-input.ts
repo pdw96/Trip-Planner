@@ -34,6 +34,13 @@ export type ScheduleFields = {
   actualCurrency: string;
   actualPaidOn: string;
   actualRate: string;
+  // 내 돈 칸(#89). 같은 6칸을 내 돈 쪽으로 따로 둔다.
+  mineEstimateAmount: string;
+  mineEstimateCurrency: string;
+  mineActualAmount: string;
+  mineActualCurrency: string;
+  mineActualPaidOn: string;
+  mineActualRate: string;
 };
 
 export type GooglePlacePick = {
@@ -85,6 +92,12 @@ export const EMPTY_SCHEDULE_FIELDS: ScheduleFields = {
   actualCurrency: "",
   actualPaidOn: "",
   actualRate: "",
+  mineEstimateAmount: "",
+  mineEstimateCurrency: "",
+  mineActualAmount: "",
+  mineActualCurrency: "",
+  mineActualPaidOn: "",
+  mineActualRate: "",
 };
 
 export type AllowedDates = {

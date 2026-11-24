@@ -3,6 +3,7 @@ import { and, asc, eq, inArray, type SQL, sql } from "drizzle-orm";
 import { cache } from "react";
 import { db } from "@/db";
 import { places, type ScheduleItem, scheduleItems, trips } from "@/db/schema";
+import { EXTRA_TITLE_MAX } from "@/lib/budget-input";
 import { isUuid } from "@/lib/ids";
 import type { GooglePlacePick, ScheduleInput } from "@/lib/schedule-input";
 import type { OrderItem } from "@/lib/schedule-order";
@@ -334,15 +335,44 @@ export async function setScheduleItemDone(
   return rows.length > 0;
 }
 
+// #89 §5.4: 일정을 지우면 그 일정의 내 돈 행(누구 것이든)은 일정 밖 항목으로 남기고(제목 = 일정 제목 → 장소 이름표 →
+// 적은 장소 글자 → "지운 일정", 날짜 = 일정 날짜), 모임 행은 지금처럼 FK cascade 로 함께 지운다.
+// 남의 내 돈 행을 옮기는 것은 지우는 사람이 볼 수 없어도 하는 시스템 동작이라, 돌려주는 값은 지운 일정 id(d)뿐이다.
+// 옮기기는 s(접근 조건을 통과한 일정)가 있을 때만 일어난다. 접근할 수 없는 일정이면 s 가 비어 아무것도 바뀌지 않는다.
+//
+// 한 문으로 묶어도 옮긴 행이 cascade 로 지워지지 않는 까닭:
+// - CTE 들은 같은 스냅숏을 보지만, d 는 schedule_items 만 지우고 budget_items 는 moved 만 건드린다(같은 행을 두 번 쓰지 않음).
+// - ON DELETE CASCADE 는 RI 트리거(AFTER ROW)로, 모든 CTE 가 끝난 뒤 문 끝에서 돈다. 그 트리거의
+//   `DELETE FROM budget_items WHERE schedule_item_id = $1` 은 명령 카운터를 올린 뒤의 새 스냅숏으로 돌아
+//   moved 가 이미 schedule_item_id 를 NULL 로 바꾼 행을 보므로 걸리지 않는다. 남은 모임 행만 지운다.
+// - 다른 연결이 이 문 도중에 같은 일정에 내 돈 금액을 넣고 커밋하면(일정 행 KEY SHARE 잠금을 기다린 뒤) 그 행은
+//   moved 의 스냅숏에 없어 옮겨지지 않고 cascade 로 지워진다. 창은 이 문 하나 길이로 좁고, 받아들인다.
+// 이 동작은 마이그레이션 적용 뒤 실제 DB 에서 확인한다(구현 계획 Task 9 Step 4). 어긋나면 moved 를 먼저 따로 실행한다.
+// 제목은 일정 밖 항목 이름 상한(EXTRA_TITLE_MAX)에 맞춰 자른다(LEFT 와 입력 검증 모두 글자(코드 포인트) 수).
 export async function deleteScheduleItem(
   userId: string,
   tripId: string,
   itemId: string,
 ): Promise<boolean> {
   if (!validIds(tripId, itemId)) return false;
-  const rows = await db
-    .delete(scheduleItems)
-    .where(itemCondition(userId, tripId, itemId))
-    .returning({ id: scheduleItems.id });
-  return rows.length > 0;
+  const result = await db.execute<{ id: string }>(sql`
+    WITH s AS (
+      SELECT ${scheduleItems.id} AS id, ${scheduleItems.date} AS date,
+        LEFT(COALESCE(NULLIF(${scheduleItems.title}, ''), p.label, NULLIF(${scheduleItems.place}, ''), '지운 일정'), ${EXTRA_TITLE_MAX}::integer) AS title
+      FROM ${scheduleItems}
+      LEFT JOIN ${places} p ON p.id = ${scheduleItems.placeId}
+      WHERE ${itemCondition(userId, tripId, itemId)}
+    ),
+    moved AS (
+      UPDATE budget_items
+      SET schedule_item_id = NULL, title = s.title, date = s.date, updated_at = now()
+      FROM s
+      WHERE budget_items.schedule_item_id = s.id AND budget_items.owner_user_id IS NOT NULL
+      RETURNING budget_items.id
+    ),
+    d AS (
+      DELETE FROM schedule_items WHERE id IN (SELECT id FROM s) RETURNING id
+    )
+    SELECT id FROM d`);
+  return result.rows.length > 0;
 }

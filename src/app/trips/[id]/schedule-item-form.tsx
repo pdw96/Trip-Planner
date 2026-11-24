@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import {
+  buttonClass,
   cardClass,
   dangerButtonClass,
   errorTextClass,
@@ -18,8 +19,15 @@ import {
   secondaryButtonClass,
 } from "@/app/ui/styles";
 import type { RateSource } from "@/lib/budget";
+import type { Side } from "@/lib/budget-wallets";
 import { existingPlaceIdFor } from "@/lib/schedule";
-import type { ScheduleFields, ScheduleFormState } from "@/lib/schedule-input";
+import type {
+  ScheduleFieldErrors,
+  ScheduleFields,
+  ScheduleFormState,
+} from "@/lib/schedule-input";
+import { SideSwitch } from "./budget-forms";
+import { PrivateBadge } from "./budget-meter";
 import { GooglePlaceSearch } from "./google-place-search";
 import { CATEGORY_ICONS, type PlaceOption } from "./map-types";
 import {
@@ -55,10 +63,51 @@ type ScheduleItemFormProps = {
   deleting?: boolean;
   // 예산 금액 칸(#14). undefined = 보이지 않음, null = 예산 설정 없음(안내 한 줄).
   budget?: BudgetCurrencies | null;
-  // 고치기에서 완료됐거나 실제가 이미 있으면 실제 지출 칸도 보인다(§5.7.2).
-  showActual?: boolean;
-  actualRateSource?: RateSource | null;
+  // 금액 칸을 그릴 쪽(#89, visibleSides). 둘이면 [모임] [내 돈] 전환. 기본은 모임만.
+  sides?: Side[];
+  // 처음 보일 쪽(방식의 기본 쪽). sides 에 없으면 첫 쪽.
+  initialSide?: Side;
+  // 고치기 양식의 실제 지출 칸(완료와 상관없이, #89 §5.6). 쪽마다 처음부터 펼칠지(실제가 있으면)와 환율 출처.
+  // undefined = 실제 칸 없음(추가 양식).
+  actual?: Record<Side, { open: boolean; rateSource: RateSource | null }>;
 };
+
+// 쪽마다의 금액 칸 이름·오류 키. 내 돈 쪽은 같은 칸을 mine* 이름으로 보낸다(schedule-actions).
+const SIDE_FIELDS = {
+  shared: {
+    estimateAmount: "estimateAmount",
+    estimateCurrency: "estimateCurrency",
+    actualAmount: "actualAmount",
+    actualCurrency: "actualCurrency",
+    actualPaidOn: "actualPaidOn",
+    actualRate: "actualRate",
+  },
+  mine: {
+    estimateAmount: "mineEstimateAmount",
+    estimateCurrency: "mineEstimateCurrency",
+    actualAmount: "mineActualAmount",
+    actualCurrency: "mineActualCurrency",
+    actualPaidOn: "mineActualPaidOn",
+    actualRate: "mineActualRate",
+  },
+} as const satisfies Record<
+  Side,
+  Record<
+    | "estimateAmount"
+    | "estimateCurrency"
+    | "actualAmount"
+    | "actualCurrency"
+    | "actualPaidOn"
+    | "actualRate",
+    keyof ScheduleFields
+  >
+>;
+
+function hasSideErrors(errors: ScheduleFieldErrors, side: Side): boolean {
+  return Object.values(SIDE_FIELDS[side]).some(
+    (key) => errors[key] !== undefined,
+  );
+}
 
 // 일정 추가·고치기가 같이 쓰는 양식. 검증은 서버에서 하고, 오류와 입력값을 action 상태로 돌려받는다.
 // 추가는 저장할 때마다 key 를 바꿔 빈 양식으로 다시 열고(연달아 적기), 고치기는 저장하면 접는다.
@@ -96,8 +145,9 @@ function ScheduleItemFields({
   onDelete,
   deleting = false,
   budget,
-  showActual = false,
-  actualRateSource = null,
+  sides,
+  initialSide,
+  actual,
   notice,
   onSaved,
 }: ScheduleItemFormProps & {
@@ -127,6 +177,50 @@ function ScheduleItemFields({
   }, [state.savedAt, state.notice]);
 
   const busy = pending || deleting;
+
+  // 금액 칸의 쪽 상태(#89). 결과마다 다시 그리는 금액 칸(key) 밖에 두어, 검증 오류로 돌아와도 고른 쪽·펼침·
+  // 고친 쪽 표시가 남게 한다. 쪽 목록은 양식을 연 때로 고정한다(고치는 사이 칸이 사라지지 않게).
+  const [moneySides] = useState<Side[]>(() =>
+    sides && sides.length > 0 ? sides : ["shared"],
+  );
+  const [activeSide, setActiveSide] = useState<Side>(() =>
+    initialSide && moneySides.includes(initialSide)
+      ? initialSide
+      : moneySides[0],
+  );
+  // 이 양식에서 고친 쪽. hidden "sides" 에는 이 쪽들만 보낸다: 서버는 저장할 때 DB 와 비교하므로
+  // 건드리지 않은 쪽의 처음 값을 보내면 그 사이 다른 사람이 고친 금액을 덮을 수 있다.
+  const [dirty, setDirty] = useState<Record<Side, boolean>>({
+    shared: false,
+    mine: false,
+  });
+  // 실제 칸(금액·통화·결제일·환율)을 고친 쪽. 펼쳤지만 건드리지 않은 쪽은 actualShown 을 보내지 않는다:
+  // 서버는 표시가 있으면 빈 실제도 "지움"으로 읽어, 그 사이 다른 사람이 적은 실제를 지울 수 있다.
+  const [actualDirty, setActualDirty] = useState<Record<Side, boolean>>({
+    shared: false,
+    mine: false,
+  });
+  const [actualOpen, setActualOpen] = useState<Record<Side, boolean>>({
+    shared: actual?.shared.open ?? false,
+    mine: actual?.mine.open ?? false,
+  });
+  // 오류가 보이지 않는 쪽에만 있으면 그 쪽으로 넘긴다(결과가 바뀔 때 한 번).
+  const [seenState, setSeenState] = useState(state);
+  if (seenState !== state) {
+    setSeenState(state);
+    const other = moneySides.find((side) => side !== activeSide);
+    if (
+      other &&
+      !hasSideErrors(state.errors, activeSide) &&
+      hasSideErrors(state.errors, other)
+    ) {
+      setActiveSide(other);
+    }
+  }
+  const markDirty = (side: Side) =>
+    setDirty((current) =>
+      current[side] ? current : { ...current, [side]: true },
+    );
 
   return (
     <form
@@ -213,31 +307,49 @@ function ScheduleItemFields({
           예산을 정하면 예상 비용을 적을 수 있어요(지도 칸 [전체] 탭).
         </p>
       )}
+      {/* 고친 쪽만 쓴다(빈 값 = 금액은 쓰지 않음). 금액 칸이 없어도 보내, 칸이 없는 양식이 금액을 건드리지 않게 한다. */}
+      <input
+        type="hidden"
+        name="sides"
+        value={budget ? moneySides.filter((side) => dirty[side]).join(",") : ""}
+      />
       {budget && (
         <div key={`money-${resultKey(state)}`} className="flex flex-col gap-3">
-          <MoneyField
-            id={`${idPrefix}-estimate`}
-            label="예상 비용 (선택)"
-            amountName="estimateAmount"
-            currencyName="estimateCurrency"
-            amount={values.estimateAmount}
-            currency={values.estimateCurrency || defaultCurrency(budget)}
-            currencies={budget}
-            error={errors.estimateAmount ?? errors.estimateCurrency}
-          />
-          {showActual && <input type="hidden" name="actualShown" value="1" />}
-          {showActual && (
-            <ActualMoneyFields
-              idPrefix={idPrefix}
-              currencies={budget}
-              amount={values.actualAmount}
-              currency={values.actualCurrency || defaultCurrency(budget)}
-              paidOn={values.actualPaidOn}
-              rate={values.actualRate}
-              rateSource={actualRateSource}
-              errors={errors}
+          {moneySides.length > 1 && (
+            <SideSwitch
+              name="moneySide"
+              sides={moneySides}
+              value={activeSide}
+              onChange={setActiveSide}
             />
           )}
+          {moneySides.map((side) => (
+            <SideMoneyFields
+              key={side}
+              side={side}
+              hidden={side !== activeSide}
+              idPrefix={side === "mine" ? `${idPrefix}-mine` : idPrefix}
+              budget={budget}
+              values={values}
+              errors={errors}
+              actual={actual?.[side]}
+              actualOpen={actualOpen[side]}
+              actualDirty={actualDirty[side]}
+              onOpenActual={() => {
+                // 펼치기만 해서는 고친 것이 아니다(적어야 onChange 로 고친 쪽이 된다). 펼친 채 비워 저장해도
+                // 그 쪽을 보내지 않으므로, 그 사이 다른 사람이 적은 실제·예상을 지우거나 되돌리지 않는다.
+                setActualOpen((current) => ({ ...current, [side]: true }));
+              }}
+              onChange={(actualChanged) => {
+                markDirty(side);
+                if (actualChanged) {
+                  setActualDirty((current) =>
+                    current[side] ? current : { ...current, [side]: true },
+                  );
+                }
+              }}
+            />
+          ))}
         </div>
       )}
       <Field
@@ -279,6 +391,113 @@ function ScheduleItemFields({
         )}
       </div>
     </form>
+  );
+}
+
+// 한 쪽(모임 / 내 돈)의 예상·실제 칸. 보이지 않는 쪽도 hidden 으로 그려 두어 전환해도 적던 값이 남는다.
+// 실제 칸은 고치기 양식에만 있고, 실제가 없으면 접힌 "실제 지출 적기"를 누를 때 펼친다(미리 결제, §5.6).
+// 펼친 쪽 중 실제 칸을 고친 쪽만 actualShown 표시를 보낸다(서버는 표시가 있는 쪽의 실제만 읽는다).
+function SideMoneyFields({
+  side,
+  hidden,
+  idPrefix,
+  budget,
+  values,
+  errors,
+  actual,
+  actualOpen,
+  actualDirty,
+  onOpenActual,
+  onChange,
+}: {
+  side: Side;
+  hidden: boolean;
+  idPrefix: string;
+  budget: BudgetCurrencies;
+  values: ScheduleFields;
+  errors: ScheduleFieldErrors;
+  actual: { open: boolean; rateSource: RateSource | null } | undefined;
+  actualOpen: boolean;
+  actualDirty: boolean;
+  onOpenActual: () => void;
+  onChange: (actualChanged: boolean) => void;
+}) {
+  const f = SIDE_FIELDS[side];
+  // 펼친 직후에만 실제 금액 칸에 초점을 옮긴다(처음부터 펼친 칸은 그대로).
+  const focusActual = useRef(false);
+  return (
+    // 칸의 change 가 여기까지 올라오면 이 쪽을 고친 것으로 본다.
+    // 실제 칸이 바뀐 것인지는 칸 이름으로 가린다(예상 칸만 고치면 실제는 건드리지 않은 것).
+    <div
+      hidden={hidden}
+      onChange={(event) => {
+        const name = (event.target as HTMLInputElement).name;
+        onChange(
+          name === f.actualAmount ||
+            name === f.actualCurrency ||
+            name === f.actualPaidOn ||
+            name === f.actualRate,
+        );
+      }}
+      className="flex flex-col gap-3"
+    >
+      {side === "mine" && <PrivateBadge />}
+      <MoneyField
+        id={`${idPrefix}-estimate`}
+        label="예상 비용 (선택)"
+        amountName={f.estimateAmount}
+        currencyName={f.estimateCurrency}
+        amount={values[f.estimateAmount]}
+        currency={values[f.estimateCurrency] || defaultCurrency(budget)}
+        currencies={budget}
+        error={errors[f.estimateAmount] ?? errors[f.estimateCurrency]}
+      />
+      {actual &&
+        (actualOpen ? (
+          <>
+            {actualDirty && (
+              <input
+                type="hidden"
+                name={side === "mine" ? "mineActualShown" : "actualShown"}
+                value="1"
+              />
+            )}
+            <ActualMoneyFields
+              idPrefix={idPrefix}
+              currencies={budget}
+              amount={values[f.actualAmount]}
+              currency={values[f.actualCurrency] || defaultCurrency(budget)}
+              paidOn={values[f.actualPaidOn]}
+              rate={values[f.actualRate]}
+              rateSource={actual.rateSource}
+              errors={{
+                actualAmount: errors[f.actualAmount],
+                actualCurrency: errors[f.actualCurrency],
+                actualPaidOn: errors[f.actualPaidOn],
+                actualRate: errors[f.actualRate],
+              }}
+              namePrefix={side === "mine" ? "mine" : ""}
+              inputRef={(el) => {
+                if (el && focusActual.current) {
+                  focusActual.current = false;
+                  el.focus();
+                }
+              }}
+            />
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              focusActual.current = true;
+              onOpenActual();
+            }}
+            className={`${buttonClass("secondary", "small")} self-start`}
+          >
+            + 실제 지출 적기
+          </button>
+        ))}
+    </div>
   );
 }
 

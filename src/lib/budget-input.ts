@@ -29,15 +29,20 @@ function isValidIsoDate(value: string): boolean {
 // --- 예산 설정 ---
 
 // localCurrency 빈칸 = 없음. plannedRate 는 현지 통화의 rateUnit 단위 글자(엔이면 100엔당).
+// mode: 지출 방식(shared·personal·both), myTotal: 내 예산(내 돈을 쓰는 방식일 때만).
 export type BudgetSettingsFields = {
+  mode: string;
   totalAmount: string;
+  myTotal: string;
   currency: string;
   localCurrency: string;
   plannedRate: string;
 };
 
 export const EMPTY_BUDGET_SETTINGS_FIELDS: BudgetSettingsFields = {
+  mode: "shared",
   totalAmount: "",
+  myTotal: "",
   currency: "KRW",
   localCurrency: "",
   plannedRate: "",
@@ -45,17 +50,33 @@ export const EMPTY_BUDGET_SETTINGS_FIELDS: BudgetSettingsFields = {
 
 type Errors<T> = Partial<Record<keyof T, string>>;
 
+type Mode = "shared" | "personal" | "both";
+type Side = "shared" | "mine";
+
+// budget-wallets.ts 를 import 하지 않으려고 모드 검사를 여기서 직접 한다.
+function asMode(v: string): Mode | null {
+  return v === "shared" || v === "personal" || v === "both" ? v : null;
+}
+
+export function parseSide(text: string): Side | null {
+  return text === "shared" || text === "mine" ? text : null;
+}
+
+// ctx.canChangeMode: 방식은 주인만 바꾼다. 아니면 보낸 mode 를 무시하고 지금 방식.
 export function parseBudgetSettings(
   f: BudgetSettingsFields,
   p: MoneyParsers,
+  ctx: { currentMode: Mode; canChangeMode: boolean },
 ):
   | {
       ok: true;
       value: {
         currency: string;
-        totalAmount: number;
         localCurrency: string | null;
         plannedRate: string | null;
+        mode: Mode;
+        sharedTotal: number | null;
+        myTotal: number | null;
       };
     }
   | { ok: false; errors: Errors<BudgetSettingsFields> } {
@@ -64,13 +85,29 @@ export function parseBudgetSettings(
   const currencyOk = p.currencyInfo(currency) !== null;
   if (!currencyOk) errors.currency = CURRENCY_INVALID;
 
-  let totalAmount = 0;
+  let mode: Mode = ctx.currentMode;
+  if (ctx.canChangeMode) {
+    const picked = asMode(f.mode);
+    if (picked === null) errors.mode = "방식을 골라 주세요.";
+    else mode = picked;
+  }
+
+  // 모임 총액: 각자 방식은 빈칸 허용(null), 그 밖에는 필수. 각자여도 적었으면 해석해 둔다.
+  let sharedTotal: number | null = null;
   if (currencyOk) {
     const total = p.parseAmount(f.totalAmount, currency);
     if (!total.ok) errors.totalAmount = total.error;
-    else if (total.minor === null)
-      errors.totalAmount = "총 예산을 적어 주세요.";
-    else totalAmount = total.minor;
+    else if (total.minor === null) {
+      if (mode !== "personal") errors.totalAmount = "총 예산을 적어 주세요.";
+    } else sharedTotal = total.minor;
+  }
+
+  // 내 예산: 모임 통장만 쓰는 방식이면 보지 않는다. 빈칸 = 아직 안 정함(null).
+  let myTotal: number | null = null;
+  if (currencyOk && mode !== "shared") {
+    const mine = p.parseAmount(f.myTotal, currency);
+    if (!mine.ok) errors.myTotal = mine.error;
+    else myTotal = mine.minor;
   }
 
   const localCurrency = f.localCurrency === "" ? null : f.localCurrency;
@@ -93,8 +130,32 @@ export function parseBudgetSettings(
   if (Object.keys(errors).length > 0) return { ok: false, errors };
   return {
     ok: true,
-    value: { currency, totalAmount, localCurrency, plannedRate },
+    value: { currency, localCurrency, plannedRate, mode, sharedTotal, myTotal },
   };
+}
+
+// 설정 양식이 모임 값(통화·현지 통화·환율·모임 총액·방식)을 써야 하는가(#89 최종 리뷰 I1).
+// 양식은 그 칸들을 고쳤을 때만 hidden "sharedDirty" 를 "1" 로 보낸다. 내 예산만 저장한 사람이
+// 양식을 연 뒤 다른 사람이 바꾼 모임 값을 옛 값으로 되돌리지 않게.
+// 설정이 아직 없으면(처음 정하기) 언제나 쓴다. 칸이 없는 낡은 양식(raw null)은 예전처럼 쓴다.
+export function writesSharedSettings(
+  hasConfig: boolean,
+  raw: unknown,
+): boolean {
+  if (!hasConfig || raw === null) return true;
+  return raw === "1";
+}
+
+// 설정 양식이 내 예산을 써야(정하거나 지워야) 하는가(#89 코드 리뷰). 양식은 내 예산 칸을 고쳤을 때만
+// hidden "myDirty" 를 "1" 로 보낸다. 통화가 바뀌어 빈칸으로 열린 내 예산(설계 §5.5)을 다른 칸만 고친
+// 저장이 지워 "전에 정한 값" 안내를 잃지 않게. 내 예산 칸(myTotal)이 없는 양식은 언제나 건드리지 않는다.
+// myDirty 칸이 없는 낡은 양식(raw null)은 예전처럼 myTotal 칸이 있으면 쓴다.
+export function writesPersonalBudget(
+  raw: unknown,
+  hasMyTotalField: boolean,
+): boolean {
+  if (!hasMyTotalField) return false;
+  return raw === null || raw === "1";
 }
 
 // --- 예상·실제 칸 ---
@@ -210,12 +271,18 @@ export function parseAmountFields(
 // --- 일정 밖 항목 ---
 
 // date 빈칸 = 여행 전체(날짜 없음).
-export type ExtraItemFields = AmountFields & { title: string; date: string };
+// side: 어느 돈인지(shared·mine).
+export type ExtraItemFields = AmountFields & {
+  title: string;
+  date: string;
+  side: string;
+};
 
 export const EMPTY_EXTRA_ITEM_FIELDS: ExtraItemFields = {
   ...EMPTY_AMOUNT_FIELDS,
   title: "",
   date: "",
+  side: "shared",
 };
 
 export function parseExtraItem(
@@ -224,7 +291,10 @@ export function parseExtraItem(
   p: MoneyParsers,
   opts: { defaultPaidOn: string; tripDates: string[] },
 ):
-  | { ok: true; value: { title: string; date: string | null } & ParsedAmounts }
+  | {
+      ok: true;
+      value: { title: string; date: string | null; side: Side } & ParsedAmounts;
+    }
   | { ok: false; errors: Errors<ExtraItemFields> } {
   const errors: Errors<ExtraItemFields> = {};
   const title = f.title.trim();
@@ -238,6 +308,9 @@ export function parseExtraItem(
     errors.date = "날짜를 다시 골라 주세요.";
   }
 
+  const side = parseSide(f.side);
+  if (side === null) errors.side = "어느 돈인지 골라 주세요.";
+
   const amounts = parseAmountFields(f, allowed, p, {
     actualShown: true,
     defaultPaidOn: date ?? opts.defaultPaidOn,
@@ -247,7 +320,7 @@ export function parseExtraItem(
     errors.estimateAmount = "예상이나 실제 중 하나는 적어 주세요.";
   }
 
-  if (Object.keys(errors).length > 0 || !amounts.ok) {
+  if (Object.keys(errors).length > 0 || !amounts.ok || side === null) {
     return { ok: false, errors };
   }
   return {
@@ -255,6 +328,7 @@ export function parseExtraItem(
     value: {
       title,
       date,
+      side,
       estimate: amounts.value.estimate,
       actual: amounts.value.actual,
     },

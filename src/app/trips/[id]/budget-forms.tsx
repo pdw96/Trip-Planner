@@ -17,7 +17,6 @@ import {
 } from "@/app/ui/styles";
 import {
   amountInputValue,
-  type BudgetSettings,
   CURRENCIES,
   currencyInfo,
   type RateSource,
@@ -28,6 +27,7 @@ import {
   EMPTY_BUDGET_SETTINGS_FIELDS,
   type ExtraItemFields,
 } from "@/lib/budget-input";
+import { type BudgetMode, isBudgetMode, type Side } from "@/lib/budget-wallets";
 import {
   type BudgetSettingsFormState,
   createExtraItemAction,
@@ -36,7 +36,8 @@ import {
   saveBudgetSettingsAction,
   updateExtraItemAction,
 } from "../budget-actions";
-import type { PanelExtra } from "./map-types";
+import { LockIcon, PrivateBadge } from "./budget-meter";
+import type { PanelBudget, PanelExtra } from "./map-types";
 import {
   ActualMoneyFields,
   actualDetailValues,
@@ -99,43 +100,114 @@ function FieldError({ id, message }: { id: string; message?: string }) {
   );
 }
 
-function settingsFields(settings: BudgetSettings | null): BudgetSettingsFields {
-  if (!settings) return EMPTY_BUDGET_SETTINGS_FIELDS;
-  const unit = settings.localCurrency
-    ? (currencyInfo(settings.localCurrency)?.rateUnit ?? 1)
+export const MODE_LABELS: Record<BudgetMode, string> = {
+  shared: "모임 통장",
+  personal: "각자",
+  both: "둘 다",
+};
+
+const MODE_HINTS: Record<BudgetMode, string> = {
+  shared: "예산과 지출을 모두 함께 봐요.",
+  personal: "예산과 지출을 사람마다 따로 적어요. 내 것은 나만 봐요.",
+  both: "모임 예산과 내 예산을 함께 써요. 지출마다 누구 돈인지 골라요.",
+};
+
+export const SIDE_LABELS: Record<Side, string> = {
+  shared: "모임",
+  mine: "내 돈",
+};
+
+export type BudgetConfig = NonNullable<PanelBudget>["config"];
+
+// 모두가 함께 쓰는 설정 칸(내 예산 myTotal 은 빠진다).
+const SHARED_FIELD_NAMES: ReadonlySet<string> = new Set([
+  "currency",
+  "localCurrency",
+  "plannedRate",
+  "totalAmount",
+  "mode",
+]);
+
+function settingsFields(config: BudgetConfig | null): BudgetSettingsFields {
+  if (!config) return EMPTY_BUDGET_SETTINGS_FIELDS;
+  const unit = config.localCurrency
+    ? (currencyInfo(config.localCurrency)?.rateUnit ?? 1)
     : 1;
   return {
-    totalAmount: amountInputValue(settings.totalAmount, settings.currency),
-    currency: settings.currency,
-    localCurrency: settings.localCurrency ?? "",
-    plannedRate: settings.plannedRate
-      ? rateInputValue(settings.plannedRate, unit)
+    mode: config.mode,
+    totalAmount:
+      config.sharedTotal === null
+        ? ""
+        : amountInputValue(config.sharedTotal, config.currency),
+    // 통화가 바뀐 내 예산은 myTotal 이 null 이라 빈칸(옛 숫자를 새 통화로 채우지 않는다, 설계 §5.5).
+    myTotal:
+      config.myTotal === null
+        ? ""
+        : amountInputValue(config.myTotal, config.currency),
+    currency: config.currency,
+    localCurrency: config.localCurrency ?? "",
+    plannedRate: config.plannedRate
+      ? rateInputValue(config.plannedRate, unit)
       : "",
   };
 }
 
+// 예산 설정(#14) + 방식·내 예산(#89). config 가 null 이면 예산을 처음 정한다(방식은 모임 통장부터).
+// sharedLeftover: 각자 방식인데 모임 행이 남아 모임 카드가 보인다 → 모임 총 예산 칸도 보인다.
+// focus: 처음 초점을 둘 칸("내 예산 정하기"로 열었으면 내 예산).
 export function BudgetSettingsForm({
   tripId,
-  settings,
+  config,
+  isOwner,
+  sharedLeftover = false,
+  focus = "total",
   onClose,
 }: {
   tripId: string;
-  settings: BudgetSettings | null;
+  config: BudgetConfig | null;
+  isOwner: boolean;
+  sharedLeftover?: boolean;
+  focus?: "total" | "mine";
   onClose: () => void;
 }) {
   const [state, formAction, pending] = useActionState<
     BudgetSettingsFormState,
     FormData
   >(closingOnSave(saveBudgetSettingsAction.bind(null, tripId), onClose), {
-    values: settingsFields(settings),
+    values: settingsFields(config),
     errors: {},
     formError: null,
     savedAt: null,
   });
+  // 모임 값 칸을 고쳤는가(#89 최종 리뷰 I1). 서버는 이것이 "1" 일 때만 모임 설정을 쓴다(처음 정하기는 언제나).
+  // 오류로 칸을 다시 그려도 남도록 다시 그리지 않는 이 컴포넌트에 둔다. 한번 고치면 되돌려도 켜 둔다.
+  const [sharedDirty, setSharedDirty] = useState(config === null);
+  // 내 예산 칸을 고쳤는가(#89 코드 리뷰). 서버는 이것이 "1" 일 때만 내 예산을 쓴다. 통화가 바뀌어 빈칸으로
+  // 열린 내 예산(설계 §5.5)을 다른 칸만 고친 저장이 지워 "전에 정한 값" 안내를 잃지 않게.
+  const [myDirty, setMyDirty] = useState(false);
   return (
-    <form action={formAction} noValidate className={formClass}>
+    <form
+      action={formAction}
+      noValidate
+      className={formClass}
+      onChange={(e) => {
+        const name = (e.target as { name?: unknown }).name;
+        if (typeof name !== "string") return;
+        if (SHARED_FIELD_NAMES.has(name)) setSharedDirty(true);
+        else if (name === "myTotal") setMyDirty(true);
+      }}
+    >
+      <input type="hidden" name="sharedDirty" value={sharedDirty ? "1" : ""} />
+      <input type="hidden" name="myDirty" value={myDirty ? "1" : ""} />
       <FormError message={state.formError} />
-      <SettingsFields key={resultKey(state)} state={state} />
+      <SettingsFields
+        key={resultKey(state)}
+        state={state}
+        currentMode={config?.mode ?? "shared"}
+        isOwner={isOwner}
+        sharedLeftover={sharedLeftover}
+        focus={focus}
+      />
       <div className="flex gap-2">
         <button type="submit" disabled={pending} className={primaryButtonClass}>
           {pending ? "저장하는 중…" : "저장"}
@@ -153,55 +225,181 @@ export function BudgetSettingsForm({
   );
 }
 
-function SettingsFields({ state }: { state: BudgetSettingsFormState }) {
+function SettingsFields({
+  state,
+  currentMode,
+  isOwner,
+  sharedLeftover,
+  focus,
+}: {
+  state: BudgetSettingsFormState;
+  currentMode: BudgetMode;
+  isOwner: boolean;
+  sharedLeftover: boolean;
+  focus: "total" | "mine";
+}) {
   const { values, errors } = state;
   const id = useId();
+  // 방식은 주인만 고른다. 주인이 아니면 mode 를 보내지 않고(서버가 무시) 지금 방식대로 칸을 보인다.
+  const [mode, setMode] = useState<BudgetMode>(
+    isOwner && isBudgetMode(values.mode) ? values.mode : currentMode,
+  );
   const [currency, setCurrency] = useState(values.currency);
   const [local, setLocal] = useState(values.localCurrency);
+  // 모임 총 예산 글자. 각자로 바꿔 칸이 사라졌다 다시 생겨도, 숨은 칸으로 보낼 때도 고친 글자가 남게 state 로 둔다.
+  const [total, setTotal] = useState(values.totalAmount);
   const totalRef = useRef<HTMLInputElement>(null);
+  const mineRef = useRef<HTMLInputElement>(null);
+  // 모임 총 예산: 각자 방식이면 숨긴다. 숨겨도 칸은 그대로 보낸다(값을 지우지 않게. 서버는 각자 방식에서
+  // 빈칸을 허용하고 적힌 값은 그대로 저장한다 — 주인 아닌 사람이 내 예산만 저장해도 모임 총액이 남는다).
+  const showTotal =
+    mode !== "personal" || sharedLeftover || !!errors.totalAmount;
+  // 내 예산: 모임 통장이 아닐 때만 칸을 그린다(서버는 칸이 있을 때만 내 예산을 건드린다).
+  const showMine = mode !== "shared";
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 처음 그릴 때 한 번만 초점을 둔다
   useLayoutEffect(() => {
-    totalRef.current?.focus();
+    (focus === "mine" && showMine
+      ? mineRef.current
+      : (totalRef.current ?? mineRef.current)
+    )?.focus();
   }, []);
+  // 예산 통화: 모임 통장이면 지금처럼 총 예산 칸 옆. 내 돈을 쓰는 방식이면 따로 한 줄("함께 써요")로 두어
+  // "나만 보여요" 내 예산 칸 아래에 놓이지 않게 하고, 금액 칸 옆에는 통화 이름만 보인다.
+  const shared = mode === "shared";
+  const currencySelect = (
+    <select
+      id={`${id}-currency`}
+      name="currency"
+      value={currency}
+      aria-label={shared ? "예산 통화" : undefined}
+      onChange={(e) => setCurrency(e.target.value)}
+      className={`${fieldClass} ${shared ? "w-auto shrink-0" : "w-full"}`}
+    >
+      {CURRENCIES.map((c) => (
+        <option key={c.code} value={c.code}>
+          {currencyLabel(c.code)}
+        </option>
+      ))}
+    </select>
+  );
+  const currencyName = (
+    <span className="shrink-0 text-sm text-sub">{currencyLabel(currency)}</span>
+  );
+  // 숨긴 모임 총액은 처음 통화로 적힌 글자로 본다. 통화를 바꿨으면 새 통화로 다시 읽히지 않게 빈칸(각자 방식은 빈칸 허용 → 없음).
+  const hiddenTotal = currency === values.currency ? total : "";
   return (
     <>
       <div className="flex flex-col gap-1">
-        <label htmlFor={`${id}-total`} className="text-sm font-medium">
-          총 예산
-        </label>
-        <div className="flex gap-2">
-          <input
-            ref={totalRef}
-            id={`${id}-total`}
-            name="totalAmount"
-            defaultValue={values.totalAmount}
-            inputMode="decimal"
-            autoComplete="off"
-            aria-invalid={errors.totalAmount ? true : undefined}
-            aria-describedby={
-              errors.totalAmount ? `${id}-total-error` : undefined
-            }
-            className={`${fieldClass} min-w-0 flex-1`}
-          />
-          <select
-            name="currency"
-            defaultValue={values.currency}
-            aria-label="예산 통화"
-            onChange={(e) => setCurrency(e.target.value)}
-            className={`${fieldClass} w-auto shrink-0`}
-          >
-            {CURRENCIES.map((c) => (
-              <option key={c.code} value={c.code}>
-                {currencyLabel(c.code)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <FieldError id={`${id}-total-error`} message={errors.totalAmount} />
-        <FieldError id={`${id}-currency-error`} message={errors.currency} />
+        {isOwner ? (
+          <>
+            <label htmlFor={`${id}-mode`} className="text-sm font-medium">
+              방식
+            </label>
+            <select
+              id={`${id}-mode`}
+              name="mode"
+              value={mode}
+              onChange={(e) => {
+                if (isBudgetMode(e.target.value)) setMode(e.target.value);
+              }}
+              aria-invalid={errors.mode ? true : undefined}
+              aria-describedby={
+                errors.mode
+                  ? `${id}-mode-hint ${id}-mode-error`
+                  : `${id}-mode-hint`
+              }
+              className={`w-full ${fieldClass}`}
+            >
+              {(Object.keys(MODE_LABELS) as BudgetMode[]).map((m) => (
+                <option key={m} value={m}>
+                  {MODE_LABELS[m]}
+                </option>
+              ))}
+            </select>
+            <p id={`${id}-mode-hint`} className="text-sm text-sub">
+              {MODE_HINTS[mode]}
+            </p>
+            <FieldError id={`${id}-mode-error`} message={errors.mode} />
+          </>
+        ) : (
+          <p className="text-sm text-sub">
+            방식: {MODE_LABELS[currentMode]} · 여행 주인이 정해요
+          </p>
+        )}
       </div>
+      {!shared && (
+        <div className="flex flex-col gap-1">
+          <label htmlFor={`${id}-currency`} className="text-sm font-medium">
+            예산 통화 <span className="font-normal text-sub">(함께 써요)</span>
+          </label>
+          {currencySelect}
+          <FieldError id={`${id}-currency-error`} message={errors.currency} />
+        </div>
+      )}
+      {showTotal ? (
+        <div className="flex flex-col gap-1">
+          <label htmlFor={`${id}-total`} className="text-sm font-medium">
+            {mode === "shared" ? "총 예산" : "모임 총 예산"}
+          </label>
+          <div className="flex gap-2">
+            <input
+              ref={totalRef}
+              id={`${id}-total`}
+              name="totalAmount"
+              value={total}
+              onChange={(e) => setTotal(e.target.value)}
+              inputMode="decimal"
+              autoComplete="off"
+              aria-invalid={errors.totalAmount ? true : undefined}
+              aria-describedby={
+                errors.totalAmount ? `${id}-total-error` : undefined
+              }
+              className={`${fieldClass} min-w-0 flex-1`}
+            />
+            {shared ? currencySelect : currencyName}
+          </div>
+          <FieldError id={`${id}-total-error`} message={errors.totalAmount} />
+          {shared && (
+            <FieldError id={`${id}-currency-error`} message={errors.currency} />
+          )}
+        </div>
+      ) : (
+        <input type="hidden" name="totalAmount" value={hiddenTotal} />
+      )}
+      {showMine && (
+        <div className="flex flex-col gap-1">
+          <div className="flex flex-wrap items-center gap-x-2">
+            <label htmlFor={`${id}-mine`} className="text-sm font-medium">
+              내 예산
+            </label>
+            <PrivateBadge />
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              ref={mineRef}
+              id={`${id}-mine`}
+              name="myTotal"
+              defaultValue={values.myTotal}
+              inputMode="decimal"
+              autoComplete="off"
+              aria-invalid={errors.myTotal ? true : undefined}
+              aria-describedby={errors.myTotal ? `${id}-mine-error` : undefined}
+              className={`${fieldClass} min-w-0 flex-1`}
+            />
+            {currencyName}
+          </div>
+          <FieldError id={`${id}-mine-error`} message={errors.myTotal} />
+        </div>
+      )}
       <div className="flex flex-col gap-1">
         <label htmlFor={`${id}-local`} className="text-sm font-medium">
           현지 통화
+          {!shared && (
+            <>
+              {" "}
+              <span className="font-normal text-sub">(함께 써요)</span>
+            </>
+          )}
         </label>
         <select
           id={`${id}-local`}
@@ -265,6 +463,7 @@ function extraFields(
   item: PanelExtra | null,
   currencies: BudgetCurrencies,
   defaultDate: string,
+  side: Side,
 ): ExtraItemFields {
   const estimate = amountFieldValues(item?.estimate ?? null, currencies);
   const actual = amountFieldValues(item?.actual ?? null, currencies);
@@ -278,16 +477,20 @@ function extraFields(
     actualCurrency: actual.currency,
     actualPaidOn: detail.paidOn,
     actualRate: detail.rate,
+    side,
   };
 }
 
 // 일정 밖 항목 넣기(item 없음)·고치기. dates: "여행 전체"("") + 여행 날짜.
+// sides: 누구 돈(#89). 하나면 hidden 으로 보내고(카드의 쪽), 둘이면 [모임] [내 돈] 고르기(처음은 sides[0]).
+// 고치기는 서버가 저장된 행의 쪽을 쓰므로 보내도 상관없다.
 export function ExtraItemForm({
   tripId,
   currencies,
   item,
   defaultDate,
   dates,
+  sides,
   onClose,
 }: {
   tripId: string;
@@ -295,6 +498,7 @@ export function ExtraItemForm({
   item: PanelExtra | null;
   defaultDate: string;
   dates: DateChoice[];
+  sides: Side[];
   onClose: () => void;
 }) {
   const action = item
@@ -304,7 +508,7 @@ export function ExtraItemForm({
     ExtraItemFormState,
     FormData
   >(closingOnSave(action, onClose), {
-    values: extraFields(item, currencies, defaultDate),
+    values: extraFields(item, currencies, defaultDate, sides[0]),
     errors: {},
     formError: null,
     savedAt: null,
@@ -328,6 +532,7 @@ export function ExtraItemForm({
         state={state}
         currencies={currencies}
         dates={dates}
+        sides={sides}
         rateSource={item?.actual?.rateSource ?? null}
       />
       <div className="flex flex-wrap gap-2">
@@ -361,11 +566,13 @@ function ExtraFields({
   state,
   currencies,
   dates,
+  sides,
   rateSource,
 }: {
   state: ExtraItemFormState;
   currencies: BudgetCurrencies;
   dates: DateChoice[];
+  sides: Side[];
   rateSource: RateSource | null;
 }) {
   const { values, errors } = state;
@@ -411,6 +618,24 @@ function ExtraFields({
         </select>
         <FieldError id={`${id}-date-error`} message={errors.date} />
       </div>
+      {sides.length > 1 ? (
+        <SideSwitch
+          name="side"
+          sides={sides}
+          defaultValue={sides.find((side) => side === values.side) ?? sides[0]}
+          error={errors.side}
+        />
+      ) : (
+        <>
+          <input type="hidden" name="side" value={sides[0]} />
+          {/* 고를 칸이 없어 이어 줄 곳이 없으므로 바로 읽히게 alert 로 둔다(낡은 양식 등 드문 경우). */}
+          {errors.side && (
+            <p role="alert" className={errorTextClass}>
+              {errors.side}
+            </p>
+          )}
+        </>
+      )}
       <MoneyField
         id={`${id}-estimate`}
         label="예상"
@@ -432,5 +657,55 @@ function ExtraFields({
         errors={errors}
       />
     </>
+  );
+}
+
+// 누구 돈 고르기 [모임] [내 돈](#89). 라디오 그룹이라 화살표 키로 움직인다.
+// value·onChange 를 주면 제어한다(일정 양식: 어느 쪽 칸을 보일지 고르기만 하고 값은 서버가 읽지 않음).
+export function SideSwitch({
+  name,
+  sides,
+  defaultValue,
+  value,
+  onChange,
+  error,
+}: {
+  name: string;
+  sides: Side[];
+  defaultValue?: Side;
+  value?: Side;
+  onChange?: (side: Side) => void;
+  error?: string;
+}) {
+  const id = useId();
+  const controlled = value !== undefined;
+  return (
+    <fieldset
+      className="flex flex-col gap-1"
+      aria-describedby={error ? `${id}-error` : undefined}
+    >
+      <legend className="mb-1 text-sm font-medium">누구 돈</legend>
+      <div className="inline-flex self-start rounded-[10px] border border-field-line bg-field p-0.5">
+        {sides.map((side) => (
+          <label
+            key={side}
+            className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-[8px] px-3 text-[13px] font-semibold text-sub transition-colors has-checked:bg-foreground has-checked:text-on-ink has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-foreground"
+          >
+            <input
+              type="radio"
+              name={name}
+              value={side}
+              {...(controlled
+                ? { checked: side === value, onChange: () => onChange?.(side) }
+                : { defaultChecked: side === defaultValue })}
+              className="sr-only"
+            />
+            {SIDE_LABELS[side]}
+            {side === "mine" && <LockIcon />}
+          </label>
+        ))}
+      </div>
+      <FieldError id={`${id}-error`} message={error} />
+    </fieldset>
   );
 }

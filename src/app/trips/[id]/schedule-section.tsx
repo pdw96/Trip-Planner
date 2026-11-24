@@ -4,6 +4,7 @@ import { listScheduleItems } from "@/db/queries/schedule-items";
 import { listTripBases } from "@/db/queries/trip-bases";
 import type { TripRow as Trip } from "@/db/queries/trips";
 import type { ScheduleItem } from "@/db/schema";
+import type { BudgetLine } from "@/lib/budget";
 import { lineClass, lineVar } from "@/lib/day-line";
 import {
   type DayRoute,
@@ -111,6 +112,9 @@ export async function ScheduleSection({
   // 장소 칸 Google 검색(#35). 브라우저 키는 공개 값(웹사이트 제한)이다. 자동완성에는 지도 ID 가 필요 없다.
   const browserKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY || null;
 
+  const moneyOf = (line: BudgetLine | null) =>
+    line ? { estimate: line.estimate, actual: line.actual } : null;
+
   function rowItem(item: ScheduleItem): RowItem {
     return {
       id: item.id,
@@ -121,8 +125,10 @@ export async function ScheduleSection({
       placeId: item.placeId,
       memo: item.memo,
       done: item.done,
-      estimate: budget?.bySchedule.get(item.id)?.estimate ?? null,
-      actual: budget?.bySchedule.get(item.id)?.actual ?? null,
+      money: {
+        shared: moneyOf(budget?.bySchedule.get(item.id)?.shared ?? null),
+        mine: moneyOf(budget?.bySchedule.get(item.id)?.mine ?? null),
+      },
     };
   }
 
@@ -137,8 +143,9 @@ export async function ScheduleSection({
         budget={
           budget
             ? {
-                currency: budget.settings.currency,
-                localCurrency: budget.settings.localCurrency,
+                currency: budget.config.currency,
+                localCurrency: budget.config.localCurrency,
+                mode: budget.config.mode,
               }
             : null
         }
