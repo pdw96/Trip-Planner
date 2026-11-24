@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   defaultSide,
+  defaultSideFor,
   isBudgetMode,
   personalTotalFor,
   splitByOwner,
@@ -61,4 +62,12 @@ test("defaultSide", () => {
   assert.equal(defaultSide("personal"), "mine");
   assert.equal(defaultSide("both"), "shared");
   assert.equal(defaultSide("shared"), "shared");
+});
+
+test("defaultSideFor: 둘 다 + 내 일정만 내 돈", () => {
+  assert.equal(defaultSideFor("both", "me", "me"), "mine");
+  assert.equal(defaultSideFor("both", "friend", "me"), "shared");
+  assert.equal(defaultSideFor("both", null, "me"), "shared");
+  assert.equal(defaultSideFor("shared", "me", "me"), "shared");
+  assert.equal(defaultSideFor("personal", null, "me"), "mine");
 });

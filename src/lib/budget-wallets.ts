@@ -12,6 +12,16 @@ export function defaultSide(mode: BudgetMode): Side {
   return mode === "personal" ? "mine" : "shared";
 }
 
+// 일정 양식의 처음 쪽(#90). 둘 다 여행에서 "누구"가 나인 일정은 내 돈이 먼저.
+export function defaultSideFor(
+  mode: BudgetMode,
+  forUserId: string | null,
+  viewerId: string,
+): Side {
+  if (mode === "both" && forUserId === viewerId) return "mine";
+  return defaultSide(mode);
+}
+
 // 방식의 쪽 ∪ 행이 있는 쪽. 순서는 늘 shared 먼저.
 // 카드(여행 전체 행 유무)와 일정 양식 전환(그 일정 행 유무)에 같이 쓴다.
 export function visibleSides(

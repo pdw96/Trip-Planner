@@ -102,6 +102,8 @@ function readScheduleFields(
     mineActualCurrency: field("mineActualCurrency"),
     mineActualPaidOn: field("mineActualPaidOn"),
     mineActualRate: field("mineActualRate"),
+    // 칸이 없으면 빈 값(모두).
+    forUserId: field("forUserId"),
   };
 }
 

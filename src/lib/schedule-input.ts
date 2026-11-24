@@ -41,6 +41,8 @@ export type ScheduleFields = {
   mineActualCurrency: string;
   mineActualPaidOn: string;
   mineActualRate: string;
+  // 이 일정이 누구의 것인지(#90). 빈 값 = 모두, 값 = 그 사람(사용자 id)만.
+  forUserId: string;
 };
 
 export type GooglePlacePick = {
@@ -58,6 +60,8 @@ export type ScheduleInput = {
   memo: string | null;
   // 있으면 placeId·place 는 null 이다.
   google: GooglePlacePick | null;
+  // null = 모두. 여행 사람인지는 쓰는 문 안에서 확인한다(#90).
+  forUserId: string | null;
 };
 
 export type ScheduleFieldErrors = Partial<Record<keyof ScheduleFields, string>>;
@@ -98,6 +102,7 @@ export const EMPTY_SCHEDULE_FIELDS: ScheduleFields = {
   mineActualCurrency: "",
   mineActualPaidOn: "",
   mineActualRate: "",
+  forUserId: "",
 };
 
 export type AllowedDates = {
@@ -117,6 +122,9 @@ const GOOGLE_PICK_INVALID = "장소를 찾지 못했어요. 다시 검색해 주
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+// Better Auth 사용자 id 는 uuid 가 아니다. 길이와 글자 종류만 거른다(#90).
+const FOR_USER_ID_PATTERN = /^[A-Za-z0-9_-]{1,100}$/;
+export const FOR_USER_INVALID = "함께하는 사람을 다시 골라 주세요.";
 
 // 글자 수는 코드 포인트 기준이다 (이모지 하나 = 1자).
 function length(value: string): number {
@@ -158,6 +166,7 @@ export function parseScheduleInput(
   const hasGoogle = googlePlaceId !== "";
   const place = hasGoogle ? "" : raw.place.trim();
   const placeId = hasGoogle ? "" : raw.placeId.trim();
+  const forUserId = raw.forUserId.trim();
 
   const errors: ScheduleFieldErrors = {};
   const dateError = checkDate(date, allowed);
@@ -184,6 +193,9 @@ export function parseScheduleInput(
   }
   const memoError = tooLong(memo, MEMO_MAX);
   if (memoError) errors.memo = memoError;
+  if (forUserId !== "" && !FOR_USER_ID_PATTERN.test(forUserId)) {
+    errors.forUserId = FOR_USER_INVALID;
+  }
 
   if (Object.keys(errors).length > 0) return { ok: false, errors };
   return {
@@ -196,6 +208,7 @@ export function parseScheduleInput(
       placeId: placeId || null,
       memo: memo || null,
       google,
+      forUserId: forUserId || null,
     },
   };
 }
