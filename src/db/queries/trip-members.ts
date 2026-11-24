@@ -2,7 +2,7 @@ import "server-only";
 import { and, asc, eq, inArray, isNotNull, type SQL, sql } from "drizzle-orm";
 import { cache } from "react";
 import { db } from "@/db";
-import { scheduleItems, tripMembers, trips, user } from "@/db/schema";
+import { tripMembers, trips, user } from "@/db/schema";
 import { isUuid } from "@/lib/ids";
 import { accessibleTrips, ownedTrips } from "./trips";
 
@@ -63,32 +63,6 @@ export const listTripPeople = cache(async function listTripPeople(
     ...members.map((m) => ({ ...m, image: m.image ?? null, isOwner: false })),
   ];
 });
-
-// 이 여행 일정의 "누구"(for_user_id)마다 이름(#90). 나간 사람 이름표("이름 (나감)")에 쓴다.
-// 지금 사람은 listTripPeople 로도 알 수 있지만, 일정에 남은 값이면 나갔든 아니든 모두 돌려준다. 접근할 수 없으면 빈 Map.
-export async function listScheduleForUserNames(
-  userId: string,
-  tripId: string,
-): Promise<Map<string, string>> {
-  if (!isUuid(tripId)) return new Map();
-  const rows = await db
-    .selectDistinct({ id: user.id, name: user.name })
-    .from(scheduleItems)
-    .innerJoin(user, eq(user.id, scheduleItems.forUserId))
-    .where(
-      and(
-        eq(scheduleItems.tripId, tripId),
-        inArray(
-          scheduleItems.tripId,
-          db
-            .select({ id: trips.id })
-            .from(trips)
-            .where(accessibleTrips(userId)),
-        ),
-      ),
-    );
-  return new Map(rows.map((r) => [r.id, r.name]));
-}
 
 // 주인이고 링크가 켜져 있을 때만 만든 시각.
 export async function getInviteCreatedAt(

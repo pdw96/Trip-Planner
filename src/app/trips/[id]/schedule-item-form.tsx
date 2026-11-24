@@ -552,6 +552,10 @@ function WhoField({
   onChange: (forUserId: string) => void;
 }) {
   const errorId = `${idPrefix}-forUserId-error`;
+  // 값이 보기에 없으면(나간 사람 등) 맨 앞 "모두"를 골라 보이고 보낸다.
+  const checkedValue = options.some((option) => option.value === value)
+    ? value
+    : (options[0]?.value ?? "");
   return (
     <fieldset
       className="flex flex-col gap-1.5"
@@ -568,7 +572,7 @@ function WhoField({
               type="radio"
               name="forUserId"
               value={option.value}
-              defaultChecked={option.value === value}
+              defaultChecked={option.value === checkedValue}
               onChange={() => onChange(option.value)}
               className="sr-only"
             />

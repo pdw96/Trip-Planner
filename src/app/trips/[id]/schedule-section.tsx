@@ -1,11 +1,11 @@
 import { sectionTitleClass } from "@/app/ui/styles";
 import { listPlaces } from "@/db/queries/places";
-import { listScheduleItems } from "@/db/queries/schedule-items";
-import { listTripBases } from "@/db/queries/trip-bases";
 import {
   listScheduleForUserNames,
-  listTripPeople,
-} from "@/db/queries/trip-members";
+  listScheduleItems,
+} from "@/db/queries/schedule-items";
+import { listTripBases } from "@/db/queries/trip-bases";
+import { listTripPeople } from "@/db/queries/trip-members";
 import type { TripRow as Trip } from "@/db/queries/trips";
 import type { ScheduleItem } from "@/db/schema";
 import type { BudgetLine } from "@/lib/budget";
@@ -14,6 +14,7 @@ import {
   type DayRoute,
   daySignature,
   type RoutePlace,
+  routeItemsFor,
   routesByDate,
 } from "@/lib/day-route";
 import { distanceMeters, formatDistance } from "@/lib/geo";
@@ -219,8 +220,8 @@ export async function ScheduleSection({
                 items={dayItems.map(rowItem)}
                 dateOptions={dayOptions}
                 travel={
-                  // 일정 없이 숙소만 옮기는 날(A → B, #91)은 이동 줄을 그릴 자리가 없으니 묻지 않는다(지도 탭에는 보인다).
-                  dayItems.length > 0
+                  // 일정 없이 숙소만 옮기는 날(A → B, #91)이나 남의 일정뿐인 날은 이동 줄을 그릴 자리가 없으니 묻지 않는다(지도 탭에는 보인다).
+                  routeItemsFor(dayItems, userId).length > 0
                     ? dayTravel(day.date, routes.get(day.date), placeLabels)
                     : null
                 }

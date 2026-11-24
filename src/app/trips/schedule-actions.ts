@@ -443,6 +443,7 @@ export async function createScheduleItemAction(
     ? await checkForUser(user.id, tripId, parsed.value.forUserId, null)
     : "ok";
   if (person === "gone") notFound();
+  if (person === "invalid") revalidatePath(tripPath(tripId));
   if (!parsed.ok || !money.ok || person === "invalid") {
     return {
       values,
@@ -584,6 +585,7 @@ export async function updateScheduleItemAction(
       )
     : "ok";
   if (person === "gone") notFound();
+  if (person === "invalid") revalidatePath(tripPath(tripId));
   if (!parsed.ok || !money.ok || person === "invalid") {
     return {
       values,
