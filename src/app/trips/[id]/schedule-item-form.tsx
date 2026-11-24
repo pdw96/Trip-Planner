@@ -44,6 +44,9 @@ export type DateOption = {
   dayNumber: number | null;
 };
 
+// "누구" 선택지(#90). value "" = 모두.
+export type WhoOption = { value: string; label: string };
+
 type ScheduleItemFormProps = {
   action: (
     prev: ScheduleFormState,
@@ -67,6 +70,11 @@ type ScheduleItemFormProps = {
   sides?: Side[];
   // 처음 보일 쪽(방식의 기본 쪽). sides 에 없으면 첫 쪽.
   initialSide?: Side;
+  // "누구" 값마다 처음 보일 쪽(#90: 둘 다 여행의 나만 일정은 내 돈). 금액을 아직 건드리지 않았으면 "누구"를 바꿀 때 따른다.
+  sideFor?: (forUserId: string) => Side;
+  // "누구" 선택지(#90, 첫 값 "" = 모두). 없으면 칸을 그리지 않는다: forUserId 를 보내지 않으므로
+  // 추가는 모두로, 고치기는 지금 값 그대로 저장된다.
+  whoOptions?: WhoOption[];
   // 고치기 양식의 실제 지출 칸(완료와 상관없이, #89 §5.6). 쪽마다 처음부터 펼칠지(실제가 있으면)와 환율 출처.
   // undefined = 실제 칸 없음(추가 양식).
   actual?: Record<Side, { open: boolean; rateSource: RateSource | null }>;
@@ -147,6 +155,8 @@ function ScheduleItemFields({
   budget,
   sides,
   initialSide,
+  sideFor,
+  whoOptions,
   actual,
   notice,
   onSaved,
@@ -216,6 +226,13 @@ function ScheduleItemFields({
     ) {
       setActiveSide(other);
     }
+  }
+  // 쪽 전환을 직접 누르면 "누구"를 바꿔도 쪽을 따라 바꾸지 않는다.
+  const sideChosen = useRef(false);
+  function onWhoChange(forUserId: string) {
+    if (!sideFor || sideChosen.current || dirty.shared || dirty.mine) return;
+    const preferred = sideFor(forUserId);
+    if (moneySides.includes(preferred)) setActiveSide(preferred);
   }
   const markDirty = (side: Side) =>
     setDirty((current) =>
@@ -302,6 +319,21 @@ function ScheduleItemFields({
         values={values}
         error={errors.place}
       />
+      {whoOptions && (
+        <WhoField
+          key={`who-${resultKey(state)}`}
+          idPrefix={idPrefix}
+          options={whoOptions}
+          value={values.forUserId}
+          error={errors.forUserId}
+          onChange={onWhoChange}
+        />
+      )}
+      {!whoOptions && errors.forUserId && (
+        <p role="alert" className={errorTextClass}>
+          {errors.forUserId}
+        </p>
+      )}
       {budget === null && (
         <p className="text-sm text-sub">
           예산을 정하면 예상 비용을 적을 수 있어요(지도 칸 [전체] 탭).
@@ -320,7 +352,10 @@ function ScheduleItemFields({
               name="moneySide"
               sides={moneySides}
               value={activeSide}
-              onChange={setActiveSide}
+              onChange={(side) => {
+                sideChosen.current = true;
+                setActiveSide(side);
+              }}
             />
           )}
           {moneySides.map((side) => (
@@ -498,6 +533,55 @@ function SideMoneyFields({
           </button>
         ))}
     </div>
+  );
+}
+
+// "누구" 칸(#90 §5.6): 라디오 모양 단추 줄, 많으면 줄바꿈. 제어하지 않는다(defaultChecked):
+// React 19 는 제출마다 form.reset() 을 하므로 결과마다 key 로 다시 만들어 돌려받은 값으로 맞춘다(장소 칸과 같은 방식).
+function WhoField({
+  idPrefix,
+  options,
+  value,
+  error,
+  onChange,
+}: {
+  idPrefix: string;
+  options: WhoOption[];
+  value: string;
+  error: string | undefined;
+  onChange: (forUserId: string) => void;
+}) {
+  const errorId = `${idPrefix}-forUserId-error`;
+  return (
+    <fieldset
+      className="flex flex-col gap-1.5"
+      aria-describedby={error ? errorId : undefined}
+    >
+      <legend className="mb-1.5 text-sm font-medium">누구</legend>
+      <div className="flex flex-wrap gap-1.5">
+        {options.map((option) => (
+          <label
+            key={option.value}
+            className="inline-flex h-8 cursor-pointer items-center rounded-full border border-field-line bg-field px-3 text-[13px] font-semibold text-sub transition-colors has-checked:border-foreground has-checked:bg-foreground has-checked:text-on-ink has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-foreground"
+          >
+            <input
+              type="radio"
+              name="forUserId"
+              value={option.value}
+              defaultChecked={option.value === value}
+              onChange={() => onChange(option.value)}
+              className="sr-only"
+            />
+            {option.label}
+          </label>
+        ))}
+      </div>
+      {error && (
+        <p id={errorId} role="alert" className={errorTextClass}>
+          {error}
+        </p>
+      )}
+    </fieldset>
   );
 }
 

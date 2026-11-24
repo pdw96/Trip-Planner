@@ -236,6 +236,11 @@ export function ScheduleDayItems({
     reordering ? [] : lines,
   );
   const moved = useMovedNotice(date);
+  // 레일은 내 동선의 첫 역부터 마지막 역(그날 밤 숙소로 가는 줄이 있으면 목록 끝)까지만 잇는다.
+  // 남의 일정(#90)은 역이 아니라 그 앞뒤로는 레일을 늘이지 않고, 내 역 사이에 끼면 레일이 그 줄을 지나간다.
+  const onRoute = ordered.map((item) => item.who.kind !== "other");
+  const firstOn = onRoute.indexOf(true);
+  const lastOn = onRoute.lastIndexOf(true);
 
   // 감싸개는 하나로 늘 그린다(빈 날에 첫 일정을 넣어도 같은 요소를 계속 지켜보도록).
   // 일정 줄은 일정 id 로 묶어(Fragment key) 앞에 일정이 들어오거나 빠져도 뒤 줄이 다시 마운트되지 않게 한다.
@@ -282,9 +287,16 @@ export function ScheduleDayItems({
                       item={item}
                       dateOptions={dateOptions}
                       sortable={sortable}
-                      railTop={index > 0 || line !== undefined}
+                      railTop={
+                        line !== undefined ||
+                        (firstOn !== -1 &&
+                          index > firstOn &&
+                          (index <= lastOn || placed.after !== null))
+                      }
                       railBottom={
-                        index < ordered.length - 1 || placed.after !== null
+                        firstOn !== -1 &&
+                        index >= firstOn &&
+                        (index < lastOn || placed.after !== null)
                       }
                     />
                   </Fragment>

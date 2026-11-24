@@ -17,7 +17,7 @@ import { buttonClass, errorTextClass, fieldClass } from "@/app/ui/styles";
 import type { ActualMoney, Money } from "@/lib/budget";
 import {
   type BudgetMode,
-  defaultSide,
+  defaultSideFor,
   type Side,
   visibleSides,
 } from "@/lib/budget-wallets";
@@ -43,7 +43,11 @@ import {
   type BudgetCurrencies,
   currencyLabel,
 } from "./money-fields";
-import { type DateOption, ScheduleItemForm } from "./schedule-item-form";
+import {
+  type DateOption,
+  ScheduleItemForm,
+  type WhoOption,
+} from "./schedule-item-form";
 import { useSelectedDay } from "./selected-day";
 
 export type { DateOption };
@@ -59,9 +63,27 @@ export type RowItem = {
   placeId: string | null;
   memo: string | null;
   done: boolean;
+  // 이 일정이 누구의 동선에 들어가는가(#90 §5.6). other 의 label 은 이름, 나간 사람은 "이름 (나감)".
+  who: Who;
   // 예산 금액(#14, #89). 일정 줄에는 보이지 않고 양식·체크칸에서만 쓴다. 쪽마다 그 일정의 행이 없으면 null.
   money: { shared: RowMoney | null; mine: RowMoney | null };
 };
+
+export type Who =
+  | { kind: "all" }
+  | { kind: "me" }
+  | { kind: "other"; userId: string; label: string };
+
+// 일정 양식 "누구"의 사람. 보는 사람은 label "나"이고 맨 앞이다.
+export type WhoPerson = { userId: string; label: string };
+
+// 양식의 "누구" 값("" = 모두).
+function whoValue(who: Who, viewerId: string): string {
+  if (who.kind === "all") return "";
+  return who.kind === "me" ? viewerId : who.userId;
+}
+
+const ALL_OPTION: WhoOption = { value: "", label: "모두" };
 
 export type RowMoney = { estimate: Money | null; actual: ActualMoney | null };
 
@@ -94,6 +116,9 @@ type OpenState = {
   places: PlaceOption[];
   searchEnabled: boolean;
   budget: EditorBudget | null;
+  // 보는 사람과 "누구" 선택지의 사람(#90).
+  viewerId: string;
+  people: WhoPerson[];
   // 고른 날을 보다가 일정의 날짜를 옮기면 그 날 목록 아래에 잠깐 보이는 안내(#53 §5.4.1).
   moved: { fromDate: string; text: string } | null;
   setMoved: (moved: { fromDate: string; text: string } | null) => void;
@@ -115,11 +140,15 @@ export function ScheduleEditorProvider({
   places,
   browserKey,
   budget,
+  viewerId,
+  people,
   children,
 }: {
   places: PlaceOption[];
   browserKey: string | null;
   budget: EditorBudget | null;
+  viewerId: string;
+  people: WhoPerson[];
   children: React.ReactNode;
 }) {
   const [openKey, setOpenKey] = useState<string | null>(null);
@@ -133,6 +162,8 @@ export function ScheduleEditorProvider({
         places,
         searchEnabled: browserKey !== null,
         budget,
+        viewerId,
+        people,
         moved,
         setMoved,
       }}
@@ -169,7 +200,15 @@ export function AddScheduleItem({
   tripId: string;
   date: string;
 }) {
-  const { openKey, setOpenKey, places, searchEnabled, budget } = useOpen();
+  const {
+    openKey,
+    setOpenKey,
+    places,
+    searchEnabled,
+    budget,
+    viewerId,
+    people,
+  } = useOpen();
   const key = `add:${date}`;
 
   if (openKey !== key) {
@@ -203,14 +242,44 @@ export function AddScheduleItem({
           ? visibleSides(budget.mode, { shared: false, mine: false })
           : undefined
       }
-      initialSide={budget ? defaultSide(budget.mode) : undefined}
+      initialSide={
+        budget ? defaultSideFor(budget.mode, null, viewerId) : undefined
+      }
+      sideFor={
+        budget
+          ? (forUserId) =>
+              defaultSideFor(budget.mode, forUserId || null, viewerId)
+          : undefined
+      }
+      // 혼자 여행이면 칸을 그리지 않는다(값을 보내지 않으면 모두로 저장, §5.1).
+      whoOptions={people.length >= 2 ? whoOptions(people) : undefined}
       onClose={() => setOpenKey(null)}
     />
   );
 }
 
+// 모두 → 나 → 나머지 사람. extra 는 고치는 일정의 지금 값이 나간 사람일 때 하나 더 보이는 선택지(§5.6).
+function whoOptions(people: WhoPerson[], extra?: WhoOption): WhoOption[] {
+  return [
+    ALL_OPTION,
+    ...people.map((person) => ({ value: person.userId, label: person.label })),
+    ...(extra ? [extra] : []),
+  ];
+}
+
+// 일정 줄 오른쪽의 작은 이름표(#90). 남의 일정에서는 누르면 접는 단추 안에 들어간다.
+function WhoBadge({ label }: { label: string }) {
+  return (
+    <span className="inline-flex h-5 shrink-0 items-center rounded-full border border-field-line px-2 text-xs font-semibold text-sub">
+      {label}
+    </span>
+  );
+}
+
 // sortable: 손잡이로 끌 수 있는가(그날 일정이 둘 이상, #41). SortableContext 안에서만 쓴다.
 // railTop·railBottom: 역 위·아래로 노선(레일)을 이어 그릴지. 첫 역 위·마지막 역 아래는 비운다.
+// 남의 일정(who.kind "other", #90)은 내 동선 밖이라 처음엔 한 줄로 접히고, 눌러 펼치면 보통 줄이 된다.
+// 접혀도 같은 sortable 항목이라 그날 순서 저장에는 늘 모든 일정이 들어간다.
 export function ScheduleItemRow({
   tripId,
   item,
@@ -226,9 +295,27 @@ export function ScheduleItemRow({
   railTop: boolean;
   railBottom: boolean;
 }) {
-  const { openKey, setOpenKey, places, searchEnabled, budget, setMoved } =
-    useOpen();
+  const {
+    openKey,
+    setOpenKey,
+    places,
+    searchEnabled,
+    budget,
+    viewerId,
+    people,
+    setMoved,
+  } = useOpen();
   const { selected } = useSelectedDay();
+  const offRoute = item.who.kind === "other";
+  const [expanded, setExpanded] = useState(false);
+  // 펼치기·접기 단추는 서로 다른 요소라, 누른 뒤 초점을 새 단추로 옮긴다.
+  const focusToggle = useRef(false);
+  const toggleRef = (el: HTMLButtonElement | null) => {
+    if (el && focusToggle.current) {
+      focusToggle.current = false;
+      el.focus();
+    }
+  };
   const key = `edit:${item.id}`;
   const editing = openKey === key;
   // 완료 체크칸을 켜면 열리는 실제 지출 칸(#14 §5.7.3).
@@ -348,9 +435,23 @@ export function ScheduleItemRow({
     const shared = fieldsOf(item.money.shared);
     const mine = fieldsOf(item.money.mine);
     const sides = budget ? rowSides(budget, item.money) : undefined;
-    const preferred = budget ? defaultSide(budget.mode) : undefined;
+    const forUserId = whoValue(item.who, viewerId);
+    const preferred = budget
+      ? defaultSideFor(budget.mode, forUserId || null, viewerId)
+      : undefined;
     const initialSide =
       sides && preferred && !sides.includes(preferred) ? sides[0] : preferred;
+    // "누구" 칸: 사람이 둘 이상이거나, 값이 있는 일정(혼자 여행에서도 숨긴 채 저장해 모두로 바뀌지 않게, §5.1).
+    const who = item.who;
+    const departed =
+      who.kind === "other" &&
+      !people.some((person) => person.userId === who.userId)
+        ? { value: who.userId, label: who.label }
+        : undefined;
+    const editWhoOptions =
+      people.length >= 2 || item.who.kind !== "all"
+        ? whoOptions(people, departed)
+        : undefined;
     // 실제가 있는 쪽은 펼쳐 연다. 완료한 일정은 실제가 없어도 처음 보이는 쪽을 펼쳐 연다(#89 전과 같은 모양).
     // 펼치기만 해서는 그 쪽을 쓰지 않는다(양식의 고친 쪽 표시).
     const actualOf = (money: RowMoney | null, side: Side) => ({
@@ -370,6 +471,7 @@ export function ScheduleItemRow({
             place: item.place ?? "",
             placeId: item.placeId ?? "",
             memo: item.memo ?? "",
+            forUserId,
             ...shared,
             mineEstimateAmount: mine.estimateAmount,
             mineEstimateCurrency: mine.estimateCurrency,
@@ -384,6 +486,12 @@ export function ScheduleItemRow({
           budget={budget}
           sides={sides}
           initialSide={initialSide}
+          sideFor={
+            budget
+              ? (value) => defaultSideFor(budget.mode, value || null, viewerId)
+              : undefined
+          }
+          whoOptions={editWhoOptions}
           actual={{
             shared: actualOf(item.money.shared, "shared"),
             mine: actualOf(item.money.mine, "mine"),
@@ -411,6 +519,80 @@ export function ScheduleItemRow({
   // 제목이 없으면 장소 이름이 제목 자리에 온다(#35).
   const name = item.title ?? item.place ?? "";
 
+  const handle = sortable ? (
+    <button
+      type="button"
+      ref={setActivatorNodeRef}
+      {...attributes}
+      {...listeners}
+      aria-label={`${name || "일정"} 순서 옮기기`}
+      className={`flex ${offRoute && !expanded ? "h-8" : "h-10"} w-full cursor-grab touch-none items-center justify-center rounded text-sub select-none hover:text-foreground active:cursor-grabbing`}
+    >
+      ⠿
+    </button>
+  ) : (
+    <span />
+  );
+  const rails = (
+    <>
+      {railTop && <span aria-hidden className={`${RAIL} -top-1 h-6`} />}
+      {railBottom && <span aria-hidden className={`${RAIL} top-5 -bottom-1`} />}
+    </>
+  );
+
+  // 남의 일정의 접힌 줄(#90 §5.6): 시각 · 제목(또는 장소) · 이름표. 내 동선 밖이라 역 동그라미 대신 흐린 점을 둔다
+  // (레일은 내 앞뒤 역 사이를 지나가면 그대로 잇는다).
+  if (item.who.kind === "other" && !expanded) {
+    const label = item.who.label;
+    return (
+      <li
+        ref={setNodeRef}
+        style={sortStyle}
+        className={`${ROW_GRID} relative ${isDragging ? "z-10 rounded-[10px] bg-surface shadow-lg" : ""}`}
+      >
+        <span />
+        <span className="relative flex items-center justify-center self-stretch">
+          {railTop && (
+            <span aria-hidden className={`${RAIL} top-0 bottom-1/2`} />
+          )}
+          {railBottom && (
+            <span aria-hidden className={`${RAIL} top-1/2 bottom-0`} />
+          )}
+          <span
+            aria-hidden
+            className="relative z-10 size-2.5 rounded-full border-2 border-field-line bg-background"
+          />
+        </span>
+        <button
+          type="button"
+          ref={toggleRef}
+          aria-expanded={false}
+          onClick={() => {
+            focusToggle.current = true;
+            setExpanded(true);
+          }}
+          className="flex min-h-8 min-w-0 items-center gap-1.5 rounded text-left text-sm text-sub hover:text-foreground"
+        >
+          {item.time && (
+            <span className="shrink-0 tabular-nums">{item.time}</span>
+          )}
+          <span className={`truncate ${done ? "line-through" : ""}`}>
+            {name}
+          </span>
+          <span aria-hidden className="shrink-0">
+            ·
+          </span>
+          <span className="shrink-0">{label}</span>
+          <span className="sr-only"> 일정, 펼치기</span>
+          <span aria-hidden className="ml-auto shrink-0 pl-1">
+            ▸
+          </span>
+        </button>
+        {handle}
+      </li>
+    );
+  }
+
   // 노선 한 역(#53 설계 §5.4 6): 시각 | 레일·역 | 제목·장소·메모 | 손잡이.
   // 역 동그라미가 완료 체크칸이다(모양만 바꾼 input checkbox 라 키보드·화면 읽기는 그대로).
   // 손잡이로만 끈다(줄을 눌러 고치기·줄 위 터치 스크롤과 겹치지 않게). 손잡이에만 touch-action: none.
@@ -429,30 +611,54 @@ export function ScheduleItemRow({
       )}
       <span className="relative flex justify-center self-stretch">
         {/* 줄의 py-1 만큼 위아래로 늘려 이웃 줄의 레일과 잇는다. 역 중심은 이 칸 위에서 20px. */}
-        {railTop && <span aria-hidden className={`${RAIL} -top-1 h-6`} />}
-        {railBottom && (
-          <span aria-hidden className={`${RAIL} top-5 -bottom-1`} />
-        )}
+        {rails}
         <label className="relative z-10 flex size-10 cursor-pointer items-center justify-center">
           <input
             type="checkbox"
             checked={done}
             onChange={toggleDone}
             aria-label={`${name} 완료`}
-            className="size-5 cursor-pointer appearance-none rounded-full border-[3px] border-(--line) bg-background checked:bg-(--line)"
+            // 펼친 남의 일정은 내 동선 밖이라 점선 동그라미(#90).
+            className={`size-5 cursor-pointer appearance-none rounded-full border-[3px] border-(--line) bg-background checked:bg-(--line) ${offRoute ? "border-dashed" : ""}`}
           />
         </label>
       </span>
       <div className="flex min-w-0 flex-col gap-0.5 pt-1.5">
         {/* 완료된 일정은 보조 색. 완료 뒤에 여는 실제 지출 칸은 그대로 둔다(#14 리뷰). */}
         <div className={`flex flex-col gap-0.5 ${done ? "text-sub" : ""}`}>
-          <button
-            type="button"
-            onClick={() => setOpenKey(key)}
-            className="self-start text-left font-medium break-words hover:underline"
-          >
-            {name}
-          </button>
+          <div className="flex items-start gap-2">
+            <button
+              type="button"
+              onClick={() => setOpenKey(key)}
+              className="min-w-0 text-left font-medium break-words hover:underline"
+            >
+              {name}
+            </button>
+            {item.who.kind === "me" && (
+              <span className="mt-0.5 ml-auto">
+                <WhoBadge label="나" />
+              </span>
+            )}
+            {item.who.kind === "other" && (
+              <button
+                type="button"
+                ref={toggleRef}
+                aria-expanded
+                onClick={() => {
+                  focusToggle.current = true;
+                  closeActual();
+                  setExpanded(false);
+                }}
+                className="mt-0.5 ml-auto inline-flex shrink-0 items-center gap-1 rounded-full text-sub hover:text-foreground"
+              >
+                <WhoBadge label={item.who.label} />
+                <span className="sr-only">일정, 접기</span>
+                <span aria-hidden className="text-xs">
+                  ▾
+                </span>
+              </button>
+            )}
+          </div>
           {item.place && placeHref && (
             <a
               href={placeHref}
@@ -474,6 +680,7 @@ export function ScheduleItemRow({
             tripId={tripId}
             item={item}
             budget={budget}
+            viewerId={viewerId}
             onClose={closeActual}
           />
         )}
@@ -483,20 +690,7 @@ export function ScheduleItemRow({
           </p>
         )}
       </div>
-      {sortable ? (
-        <button
-          type="button"
-          ref={setActivatorNodeRef}
-          {...attributes}
-          {...listeners}
-          aria-label={`${name || "일정"} 순서 옮기기`}
-          className="flex h-10 w-full cursor-grab touch-none items-center justify-center rounded text-sub select-none hover:text-foreground active:cursor-grabbing"
-        >
-          ⠿
-        </button>
-      ) : (
-        <span />
-      )}
+      {handle}
     </li>
   );
 }
@@ -509,16 +703,22 @@ function ActualEntry({
   tripId,
   item,
   budget,
+  viewerId,
   onClose,
 }: {
   tripId: string;
   item: RowItem;
   budget: EditorBudget;
+  viewerId: string;
   onClose: () => void;
 }) {
   const [sides] = useState(() => rowSides(budget, item.money));
   const [side, setSide] = useState<Side>(() => {
-    const preferred = defaultSide(budget.mode);
+    const preferred = defaultSideFor(
+      budget.mode,
+      whoValue(item.who, viewerId) || null,
+      viewerId,
+    );
     return sides.includes(preferred) ? preferred : sides[0];
   });
   const [entries, setEntries] = useState<
