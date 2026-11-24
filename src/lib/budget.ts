@@ -514,7 +514,7 @@ export function decideRate(input: {
   paidOn: string;
   rateField: string | undefined;
   previous: ActualMoney | null;
-  settings: BudgetSettings;
+  settings: CurrencySettings;
   today: string;
 }): RateDecision {
   const { currency, paidOn, rateField, previous, settings, today } = input;

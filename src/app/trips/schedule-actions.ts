@@ -5,9 +5,10 @@ import { notFound, redirect } from "next/navigation";
 import {
   actualOf,
   estimateOf,
-  getBudgetItemForSchedule,
+  getScheduleBudgetRows,
   getTripBudget,
   setScheduleItemAmounts,
+  type TripBudgetConfig,
 } from "@/db/queries/budget";
 import {
   countPlaces,
@@ -27,8 +28,14 @@ import {
 } from "@/db/queries/schedule-items";
 import { getTrip } from "@/db/queries/trips";
 import type { BudgetItem } from "@/db/schema";
-import type { ActualMoney, BudgetSettings, Money } from "@/lib/budget";
-import { type ParsedAmounts, parseAmountFields } from "@/lib/budget-input";
+import type { ActualMoney, Money } from "@/lib/budget";
+import {
+  type AmountFields,
+  type ParsedAmounts,
+  parseAmountFields,
+  parseSide,
+} from "@/lib/budget-input";
+import type { Side } from "@/lib/budget-wallets";
 import { fetchPlaceCoords } from "@/lib/google-maps-server";
 import { isUuid } from "@/lib/ids";
 import {
@@ -89,36 +96,108 @@ function readScheduleFields(
     actualCurrency: field("actualCurrency"),
     actualPaidOn: field("actualPaidOn"),
     actualRate: field("actualRate"),
+    mineEstimateAmount: field("mineEstimateAmount"),
+    mineEstimateCurrency: field("mineEstimateCurrency"),
+    mineActualAmount: field("mineActualAmount"),
+    mineActualCurrency: field("mineActualCurrency"),
+    mineActualPaidOn: field("mineActualPaidOn"),
+    mineActualRate: field("mineActualRate"),
   };
 }
 
-// --- 예산 금액 (#14) ---
+// 양식이 금액 칸을 그린 쪽(hidden "sides", 예 "shared,mine", #89). 모르는 글자는 버린다.
+// 칸이 없으면(그 칸이 생기기 전의 낡은 양식) 모임 쪽만 그린 것으로 본다. 그린 쪽만 읽고 쓴다
+// (그리지 않은 쪽을 빈 값으로 읽어 저장된 금액을 지우지 않게).
+function readSides(formData: FormData): Side[] {
+  const raw = formData.get("sides");
+  if (typeof raw !== "string") return ["shared"];
+  const sides: Side[] = [];
+  for (const token of raw.split(",")) {
+    const side = parseSide(token.trim());
+    if (side !== null && !sides.includes(side)) sides.push(side);
+  }
+  return sides;
+}
+
+// --- 예산 금액 (#14, 쪽별 #89) ---
 // 예산 설정이 있는 여행에서만 일정 양식의 금액 칸을 읽는다. 일정 쓰기(이미 데이터를 바꾸는 CTE)와 한 문에 합치지 않고,
-// 일정을 저장한 뒤 금액이 바뀌었을 때만 쓴다. 금액만 실패하면 일정은 남기고 알린다(설계 §5.7.2).
+// 일정을 저장한 뒤 금액이 바뀐 쪽만 쓴다. 금액만 실패하면 일정은 남기고 알린다(설계 §5.7.2).
+// 쪽(모임 / 내 돈)마다 6칸이 따로 있다. 내 돈 칸은 mine* 이름으로 오고, 오류도 mine* 키로 돌려준다.
+// 서버는 두 쪽 모두 받는다(어느 쪽을 보일지는 화면이 정함). 내 돈 행의 주인은 쿼리가 userId 로 정한다.
+
+const MINE_FIELD: Record<keyof AmountFields, keyof ScheduleFields> = {
+  estimateAmount: "mineEstimateAmount",
+  estimateCurrency: "mineEstimateCurrency",
+  actualAmount: "mineActualAmount",
+  actualCurrency: "mineActualCurrency",
+  actualPaidOn: "mineActualPaidOn",
+  actualRate: "mineActualRate",
+};
+
+const AMOUNT_KEYS = Object.keys(MINE_FIELD) as (keyof AmountFields)[];
+
+// 그 쪽 칸을 AmountFields 모양으로 꺼낸다.
+function amountFieldsOf(values: ScheduleFields, side: Side): AmountFields {
+  const out = {} as AmountFields;
+  for (const key of AMOUNT_KEYS) {
+    out[key] = side === "mine" ? values[MINE_FIELD[key]] : values[key];
+  }
+  return out;
+}
+
+type SideAmounts = {
+  side: Side;
+  amounts: ParsedAmounts & { actualTouched: boolean };
+};
 
 type MoneyPlan = {
-  settings: BudgetSettings;
-  amounts: ParsedAmounts & { actualTouched: boolean };
+  settings: TripBudgetConfig;
+  sides: SideAmounts[];
 } | null;
 
+type PreviousRows = Awaited<ReturnType<typeof getScheduleBudgetRows>>;
+
+// actualShown: 쪽마다 실제 칸을 읽을지(그 칸을 실제로 그린 양식이 보낸 표시가 있을 때만).
 async function parseMoney(
   userId: string,
   tripId: string,
   values: ScheduleFields,
-  opts: { actualShown: boolean; defaultPaidOn: string },
+  sides: Side[],
+  opts: { actualShown: Record<Side, boolean>; defaultPaidOn: string },
 ): Promise<
   { ok: true; plan: MoneyPlan } | { ok: false; errors: ScheduleFieldErrors }
 > {
   const settings = await getTripBudget(userId, tripId);
   if (!settings) return { ok: true, plan: null };
-  const parsed = parseAmountFields(
-    values,
-    { currency: settings.currency, localCurrency: settings.localCurrency },
-    moneyParsers,
-    opts,
-  );
-  if (!parsed.ok) return { ok: false, errors: parsed.errors };
-  return { ok: true, plan: { settings, amounts: parsed.value } };
+  const allowed = {
+    currency: settings.currency,
+    localCurrency: settings.localCurrency,
+  };
+  const errors: ScheduleFieldErrors = {};
+  const parsedSides: SideAmounts[] = [];
+  for (const side of sides) {
+    const parsed = parseAmountFields(
+      amountFieldsOf(values, side),
+      allowed,
+      moneyParsers,
+      {
+        actualShown: opts.actualShown[side],
+        defaultPaidOn: opts.defaultPaidOn,
+      },
+    );
+    if (parsed.ok) {
+      parsedSides.push({ side, amounts: parsed.value });
+      continue;
+    }
+    for (const key of AMOUNT_KEYS) {
+      const message = parsed.errors[key];
+      if (message !== undefined) {
+        errors[side === "mine" ? MINE_FIELD[key] : key] = message;
+      }
+    }
+  }
+  if (Object.keys(errors).length > 0) return { ok: false, errors };
+  return { ok: true, plan: { settings, sides: parsedSides } };
 }
 
 function sameMoney(a: Money | null, b: Money | null): boolean {
@@ -136,16 +215,15 @@ function sameActual(a: ActualMoney | null, b: ActualMoney | null): boolean {
   );
 }
 
-// 금액이 바뀌었으면 쓴다. 실패하면 false(일정은 이미 저장됨).
-async function writeMoney(
+// 한 쪽의 금액이 그 쪽 처음 값(previous)과 다르면 쓴다. 실패하면 false.
+async function writeSide(
   userId: string,
   tripId: string,
   itemId: string,
-  plan: MoneyPlan,
+  settings: TripBudgetConfig,
+  { side, amounts }: SideAmounts,
   previous: BudgetItem | null,
 ): Promise<boolean> {
-  if (!plan) return true;
-  const { amounts, settings } = plan;
   const prevEstimate = previous ? estimateOf(previous) : null;
   const prevActual = previous ? actualOf(previous) : null;
   try {
@@ -161,13 +239,37 @@ async function writeMoney(
     ) {
       return true;
     }
-    return await setScheduleItemAmounts(userId, tripId, itemId, {
+    return await setScheduleItemAmounts(userId, tripId, itemId, side, {
       estimate: amounts.estimate,
       actual,
     });
   } catch {
     return false;
   }
+}
+
+// 바뀐 쪽만 쓴다. 한 쪽이라도 실패하면 false(일정은 이미 저장됨). 다른 쪽은 그대로 시도한다.
+async function writeMoney(
+  userId: string,
+  tripId: string,
+  itemId: string,
+  plan: MoneyPlan,
+  previous: PreviousRows | null,
+): Promise<boolean> {
+  if (!plan) return true;
+  const results = await Promise.all(
+    plan.sides.map((entry) =>
+      writeSide(
+        userId,
+        tripId,
+        itemId,
+        plan.settings,
+        entry,
+        previous?.[entry.side] ?? null,
+      ),
+    ),
+  );
+  return results.every(Boolean);
 }
 
 function tripPath(tripId: string): string {
@@ -312,9 +414,9 @@ export async function createScheduleItemAction(
   const trip = await getTrip(user.id, tripId);
   if (!trip) notFound();
   const parsed = parseScheduleInput(values, trip);
-  // 추가 양식에는 실제 지출 칸이 없다(실제는 완료 체크칸에서, §5.7.3).
-  const money = await parseMoney(user.id, tripId, values, {
-    actualShown: false,
+  // 추가 양식에는 실제 지출 칸이 없다(실제는 완료 체크칸이나 고치기 양식에서, §5.7.3).
+  const money = await parseMoney(user.id, tripId, values, readSides(formData), {
+    actualShown: { shared: false, mine: false },
     defaultPaidOn: values.date,
   });
   if (!parsed.ok || !money.ok) {
@@ -408,10 +510,10 @@ export async function updateScheduleItemAction(
   if (!user) redirect("/");
 
   const values = readScheduleFields(formData, null);
-  const [trip, item, budgetRow] = await Promise.all([
+  const [trip, item, budgetRows] = await Promise.all([
     getTrip(user.id, tripId),
     getScheduleItem(user.id, tripId, itemId),
-    getBudgetItemForSchedule(user.id, tripId, itemId),
+    getScheduleBudgetRows(user.id, tripId, itemId),
   ]);
   if (!trip || !item) notFound();
   const parsed = parseScheduleInput(values, {
@@ -419,15 +521,15 @@ export async function updateScheduleItemAction(
     endDate: trip.endDate,
     currentDate: item.date,
   });
-  // 실제 지출 칸은 완료됐거나 실제가 이미 있는 일정의 고치기 양식에만 있다(§5.7.2).
-  // 실제 칸은 (1) 그 칸을 실제로 그린 양식이 보낸 표시(actualShown=1)가 있고 (2) 지금도 완료됐거나 실제가 있는 일정일 때만 읽는다.
-  // (1)이 없으면 칸이 없던 낡은 양식이 다른 탭에서 적은 실제를 지우고, (2)가 없으면 다른 탭에서 완료를 풀며 지운 실제를
-  // 낡은 양식이 되살린다(Codex 리뷰 두 번). 둘 중 하나라도 아니면 저장된 실제를 그대로 둔다.
-  const actualFieldSent = formData.get("actualShown") === "1";
-  const actualAllowedNow =
-    item.done || (budgetRow?.actualAmount ?? null) !== null;
-  const money = await parseMoney(user.id, tripId, values, {
-    actualShown: actualFieldSent && actualAllowedNow,
+  // 고치기 양식은 완료와 상관없이 실제 지출 칸을 보인다(미리 결제, #89 §5.6).
+  // 그 쪽 실제 칸은 그 칸을 실제로 그린 양식이 보낸 표시(모임 actualShown=1, 내 돈 mineActualShown=1)가 있을 때만 읽는다.
+  // 표시가 없으면 칸이 없던 낡은 양식이 다른 탭에서 적은 실제를 지우지 않게 저장된 실제를 그대로 둔다.
+  // (완료 풀기가 더는 실제를 지우지 않으므로 "지금도 완료됐거나 실제가 있는가" 검사는 없앴다.)
+  const money = await parseMoney(user.id, tripId, values, readSides(formData), {
+    actualShown: {
+      shared: formData.get("actualShown") === "1",
+      mine: formData.get("mineActualShown") === "1",
+    },
     defaultPaidOn: parsed.ok ? parsed.value.date : item.date,
   });
   if (!parsed.ok || !money.ok) {
@@ -491,7 +593,7 @@ export async function updateScheduleItemAction(
     tripId,
     itemId,
     money.plan,
-    budgetRow,
+    budgetRows,
   );
   revalidatePath(tripPath(tripId));
   if (!moneySaved) {
@@ -566,12 +668,7 @@ export async function setScheduleItemDoneAction(
 
   let updated: boolean;
   try {
-    // 실제 지출이 있는 일정의 완료 풀기는 확인 뒤 undoScheduleItemWithActualAction 으로만 한다(#14 §5.7.3).
-    // 낡은 화면이 실제를 모른 채 보낸 요청은 거절해, 완료가 아닌 일정에 실제가 남지 않게 한다.
-    if (!done) {
-      const row = await getBudgetItemForSchedule(user.id, tripId, itemId);
-      if (row?.actualAmount != null) return { ok: false };
-    }
+    // 완료를 풀어도 실제 지출은 지우지 않는다(#89 §5.6: 미리 결제한 일정, 사람마다인 실제).
     updated = await setScheduleItemDone(user.id, tripId, itemId, done);
   } catch {
     return { ok: false };
