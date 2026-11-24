@@ -103,6 +103,7 @@ export async function ScheduleSection({
     { startDate: trip.startDate, endDate: trip.endDate },
     routePlaces,
     distanceMeters,
+    userId,
   );
   const dayOptions: DateOption[] = days.map(({ day }) => ({
     value: day.date,

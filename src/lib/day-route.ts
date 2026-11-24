@@ -3,6 +3,7 @@
 // 거리는 호출하는 쪽이 넘긴다(geo.ts 의 distanceMeters).
 // routesByDate: 지도 칸·일정 칸·loadDayRoute 가 같은 규칙으로 날짜별 뼈대를 만든다(#37).
 // daySignature: 구간 결과 저장소의 키. 동선 모양·시각·일정 id 가 바뀌면 달라진다(#37).
+// routeItemsFor: 사람별 일정(#90). 동선은 모두 것 + 보는 사람 것만으로 만든다. forUserId 가 없거나 null 이면 모두.
 
 export type RoutePlace = {
   id: string;
@@ -29,6 +30,8 @@ export type ScheduleRow = {
   date: string;
   placeId: string | null;
   time: string | null;
+  // 이 일정의 주인. 없거나 null 이면 모두(#90).
+  forUserId?: string | null;
 };
 
 export type LegTiming =
@@ -211,6 +214,18 @@ export function buildDayRoute(
   };
 }
 
+// 모두 것(forUserId 없음/null) + viewerId 것만, 순서 유지(#90).
+// T 를 object 로 둔 것은 forUserId 열이 생기기 전 행(속성이 하나도 겹치지 않음)도 받기 위해서다.
+export function routeItemsFor<T extends object>(
+  items: T[],
+  viewerId: string,
+): T[] {
+  return items.filter((item) => {
+    const owner = (item as { forUserId?: string | null }).forUserId ?? null;
+    return owner === null || owner === viewerId;
+  });
+}
+
 // 날짜마다 그날 장소가 이어진 일정(items 순서 그대로, listScheduleItems 정렬)으로 뼈대를 만든다.
 export function routesByDate(
   dates: string[],
@@ -219,9 +234,10 @@ export function routesByDate(
   trip: TripRange,
   places: Map<string, RoutePlace>,
   distance: (a: LatLng, b: LatLng) => number,
+  viewerId: string,
 ): Map<string, DayRoute> {
   const stopsByDate = new Map<string, DayStop[]>(dates.map((d) => [d, []]));
-  for (const item of items) {
+  for (const item of routeItemsFor(items, viewerId)) {
     const stops = stopsByDate.get(item.date);
     if (!stops || item.placeId === null) continue;
     stops.push({
