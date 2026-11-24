@@ -234,14 +234,17 @@ function SettingsFields({
       : (totalRef.current ?? mineRef.current)
     )?.focus();
   }, []);
-  // 예산 통화 고르기는 보이는 첫 금액 칸 옆에 하나만.
+  // 예산 통화: 모임 통장이면 지금처럼 총 예산 칸 옆. 내 돈을 쓰는 방식이면 따로 한 줄("함께 써요")로 두어
+  // "나만 보여요" 내 예산 칸 아래에 놓이지 않게 하고, 금액 칸 옆에는 통화 이름만 보인다.
+  const shared = mode === "shared";
   const currencySelect = (
     <select
+      id={`${id}-currency`}
       name="currency"
       value={currency}
-      aria-label="예산 통화"
+      aria-label={shared ? "예산 통화" : undefined}
       onChange={(e) => setCurrency(e.target.value)}
-      className={`${fieldClass} w-auto shrink-0`}
+      className={`${fieldClass} ${shared ? "w-auto shrink-0" : "w-full"}`}
     >
       {CURRENCIES.map((c) => (
         <option key={c.code} value={c.code}>
@@ -250,6 +253,11 @@ function SettingsFields({
       ))}
     </select>
   );
+  const currencyName = (
+    <span className="shrink-0 text-sm text-sub">{currencyLabel(currency)}</span>
+  );
+  // 숨긴 모임 총액은 처음 통화로 적힌 글자다. 통화를 바꿨으면 새 통화로 다시 읽히지 않게 빈칸(각자 방식은 빈칸 허용 → 없음).
+  const hiddenTotal = currency === values.currency ? values.totalAmount : "";
   return (
     <>
       <div className="flex flex-col gap-1">
@@ -266,7 +274,11 @@ function SettingsFields({
                 if (isBudgetMode(e.target.value)) setMode(e.target.value);
               }}
               aria-invalid={errors.mode ? true : undefined}
-              aria-describedby={`${id}-mode-hint`}
+              aria-describedby={
+                errors.mode
+                  ? `${id}-mode-hint ${id}-mode-error`
+                  : `${id}-mode-hint`
+              }
               className={`w-full ${fieldClass}`}
             >
               {(Object.keys(MODE_LABELS) as BudgetMode[]).map((m) => (
@@ -286,6 +298,15 @@ function SettingsFields({
           </p>
         )}
       </div>
+      {!shared && (
+        <div className="flex flex-col gap-1">
+          <label htmlFor={`${id}-currency`} className="text-sm font-medium">
+            예산 통화 <span className="font-normal text-sub">(함께 써요)</span>
+          </label>
+          {currencySelect}
+          <FieldError id={`${id}-currency-error`} message={errors.currency} />
+        </div>
+      )}
       {showTotal ? (
         <div className="flex flex-col gap-1">
           <label htmlFor={`${id}-total`} className="text-sm font-medium">
@@ -305,13 +326,15 @@ function SettingsFields({
               }
               className={`${fieldClass} min-w-0 flex-1`}
             />
-            {currencySelect}
+            {shared ? currencySelect : currencyName}
           </div>
           <FieldError id={`${id}-total-error`} message={errors.totalAmount} />
-          <FieldError id={`${id}-currency-error`} message={errors.currency} />
+          {shared && (
+            <FieldError id={`${id}-currency-error`} message={errors.currency} />
+          )}
         </div>
       ) : (
-        <input type="hidden" name="totalAmount" value={values.totalAmount} />
+        <input type="hidden" name="totalAmount" value={hiddenTotal} />
       )}
       {showMine && (
         <div className="flex flex-col gap-1">
@@ -333,23 +356,20 @@ function SettingsFields({
               aria-describedby={errors.myTotal ? `${id}-mine-error` : undefined}
               className={`${fieldClass} min-w-0 flex-1`}
             />
-            {showTotal ? (
-              <span className="shrink-0 text-sm text-sub">
-                {currencyLabel(currency)}
-              </span>
-            ) : (
-              currencySelect
-            )}
+            {currencyName}
           </div>
           <FieldError id={`${id}-mine-error`} message={errors.myTotal} />
-          {!showTotal && (
-            <FieldError id={`${id}-currency-error`} message={errors.currency} />
-          )}
         </div>
       )}
       <div className="flex flex-col gap-1">
         <label htmlFor={`${id}-local`} className="text-sm font-medium">
           현지 통화
+          {!shared && (
+            <>
+              {" "}
+              <span className="font-normal text-sub">(함께 써요)</span>
+            </>
+          )}
         </label>
         <select
           id={`${id}-local`}
@@ -578,7 +598,12 @@ function ExtraFields({
       ) : (
         <>
           <input type="hidden" name="side" value={sides[0]} />
-          <FieldError id={`${id}-side-error`} message={errors.side} />
+          {/* 고를 칸이 없어 이어 줄 곳이 없으므로 바로 읽히게 alert 로 둔다(낡은 양식 등 드문 경우). */}
+          {errors.side && (
+            <p role="alert" className={errorTextClass}>
+              {errors.side}
+            </p>
+          )}
         </>
       )}
       <MoneyField

@@ -84,6 +84,9 @@ export function BudgetDock({
                 wallet={wallets[0]}
                 currency={config.currency}
                 day={day}
+                settable={
+                  wallets[0].side !== "mine" || config.mode !== "shared"
+                }
               />
             ) : (
               wallets.map((wallet) => (
@@ -92,6 +95,7 @@ export function BudgetDock({
                   wallet={wallet}
                   currency={config.currency}
                   day={day}
+                  settable={wallet.side !== "mine" || config.mode !== "shared"}
                   compact
                 />
               ))
@@ -150,22 +154,27 @@ function WalletLine({
   wallet,
   currency,
   day,
+  settable,
   compact = false,
 }: {
   wallet: PanelWallet;
   currency: string;
   day: TripDay | null;
+  // 이 지갑의 예산을 정할 수 있는 방식인가. 모임 통장 여행의 남은 내 돈 줄은 정하라는 문구 없이 합계만.
+  settable: boolean;
   compact?: boolean;
 }) {
   const s = wallet.summary;
   const money = (minor: number) => formatMoney(minor, currency);
   const mine = wallet.side === "mine";
   const hasTotal = wallet.total !== null && !wallet.stale;
-  const unsetText = wallet.stale
-    ? "예산 통화가 바뀌었어요"
-    : mine
-      ? "내 예산을 정해 주세요"
-      : "모임 예산을 정해 주세요";
+  const unsetText = !settable
+    ? ""
+    : wallet.stale
+      ? "예산 통화가 바뀌었어요"
+      : mine
+        ? "내 예산을 정해 주세요"
+        : "모임 예산을 정해 주세요";
   const dayEstimate = day
     ? (wallet.periods.byDate[day.date]?.estimate ?? 0)
     : 0;
@@ -198,7 +207,7 @@ function WalletLine({
   const side = day ? (
     <span className="text-xs text-sub">
       전체 {money(s.projected)}
-      {hasTotal ? <> / {money(s.total)}</> : ` · ${unsetText}`}
+      {hasTotal ? <> / {money(s.total)}</> : unsetText && ` · ${unsetText}`}
     </span>
   ) : hasTotal ? (
     <span className="text-xs">

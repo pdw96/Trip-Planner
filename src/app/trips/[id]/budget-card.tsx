@@ -138,6 +138,7 @@ function CardsBody({
           days={days}
           onSelectTab={onSelectTab}
           first={index === 0}
+          paired={wallets.length > 1}
           open={open}
           setOpen={setOpen}
           settingsForm={index === 0 ? settingsForm : null}
@@ -155,6 +156,7 @@ function BudgetCard({
   days,
   onSelectTab,
   first,
+  paired,
   open,
   setOpen,
   settingsForm,
@@ -168,6 +170,8 @@ function BudgetCard({
   onSelectTab: (tab: string) => void;
   // 첫 카드에만 [설정] 버튼과 설정 양식.
   first: boolean;
+  // 지갑이 둘 보이면 모임 카드 제목을 "모임 예산"으로(하나면 지금 제목 "전체 예산" 그대로).
+  paired: boolean;
   open: OpenForm;
   setOpen: (key: OpenForm) => void;
   // 열린 설정 양식(첫 카드에만 넘어온다).
@@ -232,17 +236,29 @@ function BudgetCard({
     />
   );
 
-  const head = <BudgetHead config={config} wallet={wallet} onSet={onSet} />;
+  // 모임 통장 방식의 남은 내 돈 카드는 내 예산을 정할 수 없으므로 정하라는 문구 대신 설명만.
+  const settable = !mine || config.mode !== "shared";
+  const head = (
+    <BudgetHead
+      config={config}
+      wallet={wallet}
+      onSet={onSet}
+      settable={settable}
+    />
+  );
 
   if (day) {
-    const title = mine
-      ? `${day.dayNumber}일차 내 예산`
-      : `${day.dayNumber}일차 예산`;
+    const suffix = mine
+      ? "일차 내 예산"
+      : paired
+        ? "일차 모임 예산"
+        : "일차 예산";
+    const title = `${day.dayNumber}${suffix}`;
     return (
       <section aria-label={title} className={budgetCardClass}>
         <CardTitle mine={mine}>
           {day.dayNumber}
-          {mine ? "일차 내 예산" : "일차 예산"}
+          {suffix}
         </CardTitle>
         {head}
         <PeriodLine total={wallet.periods.byDate[day.date]} settings={config} />
@@ -252,7 +268,7 @@ function BudgetCard({
     );
   }
 
-  const title = mine ? "내 예산" : "전체 예산";
+  const title = mine ? "내 예산" : paired ? "모임 예산" : "전체 예산";
   return (
     <section aria-label={title} className={budgetCardClass}>
       <div className="flex items-center justify-between gap-2">
@@ -324,21 +340,26 @@ function BudgetHead({
   config,
   wallet,
   onSet,
+  settable,
 }: {
   config: BudgetConfig;
   wallet: PanelWallet;
   onSet: (() => void) | null;
+  // 이 지갑의 예산을 정할 수 있는 방식인가(아니면 정하라는 문구를 보이지 않는다).
+  settable: boolean;
 }) {
   const s = wallet.summary;
   const mine = wallet.side === "mine";
   if (wallet.total === null || wallet.stale) {
-    const notice = wallet.stale
-      ? `예산 통화가 바뀌었어요. 내 예산을 다시 정해 주세요 (전에 정한 값: ${formatMoney(wallet.stale.amount, wallet.stale.currency)})`
-      : onSet
-        ? null
-        : mine
-          ? "내 예산을 아직 정하지 않았어요."
-          : "모임 예산을 아직 정하지 않았어요.";
+    const notice = !settable
+      ? "내 돈으로 적은 지출이에요."
+      : wallet.stale
+        ? `예산 통화가 바뀌었어요. 내 예산을 다시 정해 주세요 (전에 정한 값: ${formatMoney(wallet.stale.amount, wallet.stale.currency)})`
+        : onSet
+          ? null
+          : mine
+            ? "내 예산을 아직 정하지 않았어요."
+            : "모임 예산을 아직 정하지 않았어요.";
     return (
       <div className="flex flex-col gap-2">
         <p className="text-xl font-bold tabular-nums">
