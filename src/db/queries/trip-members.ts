@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, type SQL, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { tripMembers, trips, user } from "@/db/schema";
 import { isUuid } from "@/lib/ids";
@@ -166,6 +166,32 @@ export async function countTripMembers(tripId: string): Promise<number> {
   return row?.n ?? 0;
 }
 
+// #89 §5.4: 멤버 행을 지운 문 안에서 그 사람의 그 여행 내 돈 행(budget_items.owner_user_id)과 내 예산
+// (trip_personal_budgets)도 지운다. 멤버 행을 실제로 지웠을 때만(removed 가 비면 아무것도 지우지 않음).
+// 그 사람이 적은 모임 행(owner_user_id IS NULL)은 남는다. 돌려주는 값은 멤버 행을 지웠는지뿐.
+// 이 문과 동시에 그 사람이 내 돈 금액을 쓰면(쓰기 문의 접근 확인이 아직 멤버 행을 본 경우) 그 행이 남을 수 있다.
+// 남아도 본인만 볼 수 있는 행이고 본인은 이제 접근할 수 없으므로 아무에게도 보이지 않는다(다시 참여하면 다시 보임).
+function removeMemberAndPrivateRows(memberCondition: SQL) {
+  return sql`
+    WITH removed AS (
+      DELETE FROM trip_members
+      WHERE ${memberCondition}
+      RETURNING trip_id, user_id
+    ),
+    gone_items AS (
+      DELETE FROM budget_items
+      WHERE owner_user_id IS NOT NULL
+        AND (trip_id, owner_user_id) IN (SELECT trip_id, user_id FROM removed)
+      RETURNING id
+    ),
+    gone_budgets AS (
+      DELETE FROM trip_personal_budgets
+      WHERE (trip_id, user_id) IN (SELECT trip_id, user_id FROM removed)
+      RETURNING trip_id
+    )
+    SELECT trip_id FROM removed`;
+}
+
 // 주인만 내보낸다.
 export async function removeMember(
   ownerId: string,
@@ -173,20 +199,17 @@ export async function removeMember(
   memberUserId: string,
 ): Promise<boolean> {
   if (!isUuid(tripId)) return false;
-  const rows = await db
-    .delete(tripMembers)
-    .where(
-      and(
-        eq(tripMembers.tripId, tripId),
-        eq(tripMembers.userId, memberUserId),
-        inArray(
-          tripMembers.tripId,
-          db.select({ id: trips.id }).from(trips).where(ownedTrips(ownerId)),
-        ),
-      ),
-    )
-    .returning({ tripId: tripMembers.tripId });
-  return rows.length > 0;
+  const ownedTripIds = db
+    .select({ id: trips.id })
+    .from(trips)
+    .where(ownedTrips(ownerId))
+    .getSQL();
+  const result = await db.execute<{ trip_id: string }>(
+    removeMemberAndPrivateRows(sql`trip_members.trip_id = ${tripId}::uuid
+        AND trip_members.user_id = ${memberUserId}::text
+        AND trip_members.trip_id IN (${ownedTripIds})`),
+  );
+  return result.rows.length > 0;
 }
 
 // 본인 행만 지운다. 주인은 멤버 행이 없으므로 false.
@@ -195,9 +218,9 @@ export async function leaveTrip(
   tripId: string,
 ): Promise<boolean> {
   if (!isUuid(tripId)) return false;
-  const rows = await db
-    .delete(tripMembers)
-    .where(and(eq(tripMembers.tripId, tripId), eq(tripMembers.userId, userId)))
-    .returning({ tripId: tripMembers.tripId });
-  return rows.length > 0;
+  const result = await db.execute<{ trip_id: string }>(
+    removeMemberAndPrivateRows(sql`trip_members.trip_id = ${tripId}::uuid
+        AND trip_members.user_id = ${userId}::text`),
+  );
+  return result.rows.length > 0;
 }
