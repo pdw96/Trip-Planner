@@ -176,6 +176,9 @@ export type BudgetSettings = {
   plannedRate: string | null;
 };
 
+// 통화·현지 통화·예정 환율만(총액은 모임·내 예산이 따로 있다, #89).
+export type CurrencySettings = Omit<BudgetSettings, "totalAmount">;
+
 // date: 일정에 붙은 행은 일정 날짜, 일정 밖 행은 그 행의 날짜(없으면 여행 전체).
 export type BudgetLine = {
   id: string;
