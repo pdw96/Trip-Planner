@@ -631,18 +631,24 @@ function ExtraFields({
 }
 
 // 누구 돈 고르기 [모임] [내 돈](#89). 라디오 그룹이라 화살표 키로 움직인다.
+// value·onChange 를 주면 제어한다(일정 양식: 어느 쪽 칸을 보일지 고르기만 하고 값은 서버가 읽지 않음).
 export function SideSwitch({
   name,
   sides,
   defaultValue,
+  value,
+  onChange,
   error,
 }: {
   name: string;
   sides: Side[];
-  defaultValue: Side;
+  defaultValue?: Side;
+  value?: Side;
+  onChange?: (side: Side) => void;
   error?: string;
 }) {
   const id = useId();
+  const controlled = value !== undefined;
   return (
     <fieldset
       className="flex flex-col gap-1"
@@ -659,7 +665,9 @@ export function SideSwitch({
               type="radio"
               name={name}
               value={side}
-              defaultChecked={side === defaultValue}
+              {...(controlled
+                ? { checked: side === value, onChange: () => onChange?.(side) }
+                : { defaultChecked: side === defaultValue })}
               className="sr-only"
             />
             {SIDE_LABELS[side]}

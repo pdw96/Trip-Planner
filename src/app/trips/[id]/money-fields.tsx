@@ -59,6 +59,11 @@ export function actualDetailValues(actual: ActualMoney | null): {
   };
 }
 
+// 칸 이름. 일정 양식의 내 돈 쪽은 같은 칸을 "mine" 을 붙인 이름으로 보낸다(#89, 예 mineActualAmount).
+function prefixedName(prefix: string, name: string): string {
+  return prefix ? `${prefix}${name[0].toUpperCase()}${name.slice(1)}` : name;
+}
+
 // "¥100 = ₩" 처럼 환율 칸 앞에 붙는 글자.
 export function rateUnitLabel(local: string, budget: string): string {
   const l = currencyInfo(local);
@@ -151,6 +156,7 @@ export function ActualRateFields({
   rate,
   rateSource,
   errors,
+  namePrefix = "",
 }: {
   idPrefix: string;
   localCurrency: string;
@@ -159,6 +165,7 @@ export function ActualRateFields({
   rate: string;
   rateSource: RateSource | null;
   errors: { actualPaidOn?: string; actualRate?: string };
+  namePrefix?: string;
 }) {
   return (
     <div className="flex flex-wrap gap-3 text-sm">
@@ -169,7 +176,7 @@ export function ActualRateFields({
         <input
           id={`${idPrefix}-paid-on`}
           type="date"
-          name="actualPaidOn"
+          name={prefixedName(namePrefix, "actualPaidOn")}
           defaultValue={paidOn}
           aria-invalid={errors.actualPaidOn ? true : undefined}
           className={`${fieldClass} h-8 w-auto`}
@@ -185,7 +192,7 @@ export function ActualRateFields({
         </label>
         <input
           id={`${idPrefix}-rate`}
-          name="actualRate"
+          name={prefixedName(namePrefix, "actualRate")}
           defaultValue={rate}
           inputMode="decimal"
           autoComplete="off"
@@ -211,6 +218,8 @@ export function ActualMoneyFields({
   rate,
   rateSource,
   errors,
+  namePrefix = "",
+  inputRef,
 }: {
   idPrefix: string;
   currencies: BudgetCurrencies;
@@ -225,6 +234,9 @@ export function ActualMoneyFields({
     actualPaidOn?: string;
     actualRate?: string;
   };
+  // 칸 이름 앞에 붙일 글자(일정 양식의 내 돈 쪽은 "mine").
+  namePrefix?: string;
+  inputRef?: React.Ref<HTMLInputElement>;
 }) {
   const [chosen, setChosen] = useState(currency);
   const local = currencies.localCurrency;
@@ -233,13 +245,14 @@ export function ActualMoneyFields({
       <MoneyField
         id={`${idPrefix}-actual`}
         label="실제 지출"
-        amountName="actualAmount"
-        currencyName="actualCurrency"
+        amountName={prefixedName(namePrefix, "actualAmount")}
+        currencyName={prefixedName(namePrefix, "actualCurrency")}
         amount={amount}
         currency={currency}
         currencies={currencies}
         error={errors.actualAmount ?? errors.actualCurrency}
         onCurrencyChange={setChosen}
+        inputRef={inputRef}
       />
       {local !== null && chosen === local && (
         <ActualRateFields
@@ -250,6 +263,7 @@ export function ActualMoneyFields({
           rate={rate}
           rateSource={rateSource}
           errors={errors}
+          namePrefix={namePrefix}
         />
       )}
     </div>
