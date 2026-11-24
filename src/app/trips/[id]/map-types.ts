@@ -3,11 +3,12 @@
 
 import type {
   ActualMoney,
-  BudgetSettings,
   BudgetSummary,
+  CurrencySettings,
   Money,
   PeriodTotal,
 } from "@/lib/budget";
+import type { BudgetMode, Side } from "@/lib/budget-wallets";
 import {
   CATEGORY_LABELS,
   PLACE_CATEGORIES,
@@ -118,8 +119,11 @@ export type PanelExtra = {
   actual: ActualMoney | null;
 };
 
-export type PanelBudget = {
-  settings: BudgetSettings;
+// 지갑 하나(모임 또는 내 돈)의 합계·기간별·일정 밖 항목. stale: 예산 통화가 바뀌어 합계를 못 쓰는 내 예산.
+export type PanelWallet = {
+  side: Side;
+  total: number | null;
+  stale: { amount: number; currency: string } | null;
   summary: BudgetSummary;
   periods: {
     tripWide: PeriodTotal;
@@ -127,4 +131,14 @@ export type PanelBudget = {
     outside: PeriodTotal | null;
   };
   extras: PanelExtra[];
+};
+
+export type PanelBudget = {
+  config: CurrencySettings & {
+    mode: BudgetMode;
+    isOwner: boolean;
+    sharedTotal: number | null;
+    myTotal: number | null;
+  };
+  wallets: PanelWallet[];
 } | null;

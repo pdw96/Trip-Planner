@@ -15,6 +15,7 @@ import {
 } from "react";
 import { buttonClass, errorTextClass, fieldClass } from "@/app/ui/styles";
 import { type ActualMoney, formatMoney, type Money } from "@/lib/budget";
+import type { BudgetMode } from "@/lib/budget-wallets";
 import { placeUrl } from "@/lib/leg-display";
 import { mapsSearchUrl } from "@/lib/schedule";
 import {
@@ -55,10 +56,14 @@ export type RowItem = {
   placeId: string | null;
   memo: string | null;
   done: boolean;
-  // 예산 금액(#14). 일정 줄에는 보이지 않고 양식·체크칸에서만 쓴다.
-  estimate: Money | null;
-  actual: ActualMoney | null;
+  // 예산 금액(#14, #89). 일정 줄에는 보이지 않고 양식·체크칸에서만 쓴다. 쪽마다 그 일정의 행이 없으면 null.
+  money: { shared: RowMoney | null; mine: RowMoney | null };
 };
+
+export type RowMoney = { estimate: Money | null; actual: ActualMoney | null };
+
+// 예산 설정의 두 통화와 방식(#14, #89).
+export type EditorBudget = BudgetCurrencies & { mode: BudgetMode };
 
 const ERROR_VISIBLE_MS = 4000;
 
@@ -77,7 +82,7 @@ type OpenState = {
   setOpenKey: React.Dispatch<React.SetStateAction<string | null>>;
   places: PlaceOption[];
   searchEnabled: boolean;
-  budget: BudgetCurrencies | null;
+  budget: EditorBudget | null;
   // 고른 날을 보다가 일정의 날짜를 옮기면 그 날 목록 아래에 잠깐 보이는 안내(#53 §5.4.1).
   moved: { fromDate: string; text: string } | null;
   setMoved: (moved: { fromDate: string; text: string } | null) => void;
@@ -103,7 +108,7 @@ export function ScheduleEditorProvider({
 }: {
   places: PlaceOption[];
   browserKey: string | null;
-  budget: BudgetCurrencies | null;
+  budget: EditorBudget | null;
   children: React.ReactNode;
 }) {
   const [openKey, setOpenKey] = useState<string | null>(null);
