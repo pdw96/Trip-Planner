@@ -182,6 +182,9 @@ export function BudgetSettingsForm({
   // 모임 값 칸을 고쳤는가(#89 최종 리뷰 I1). 서버는 이것이 "1" 일 때만 모임 설정을 쓴다(처음 정하기는 언제나).
   // 오류로 칸을 다시 그려도 남도록 다시 그리지 않는 이 컴포넌트에 둔다. 한번 고치면 되돌려도 켜 둔다.
   const [sharedDirty, setSharedDirty] = useState(config === null);
+  // 내 예산 칸을 고쳤는가(#89 코드 리뷰). 서버는 이것이 "1" 일 때만 내 예산을 쓴다. 통화가 바뀌어 빈칸으로
+  // 열린 내 예산(설계 §5.5)을 다른 칸만 고친 저장이 지워 "전에 정한 값" 안내를 잃지 않게.
+  const [myDirty, setMyDirty] = useState(false);
   return (
     <form
       action={formAction}
@@ -189,12 +192,13 @@ export function BudgetSettingsForm({
       className={formClass}
       onChange={(e) => {
         const name = (e.target as { name?: unknown }).name;
-        if (typeof name === "string" && SHARED_FIELD_NAMES.has(name)) {
-          setSharedDirty(true);
-        }
+        if (typeof name !== "string") return;
+        if (SHARED_FIELD_NAMES.has(name)) setSharedDirty(true);
+        else if (name === "myTotal") setMyDirty(true);
       }}
     >
       <input type="hidden" name="sharedDirty" value={sharedDirty ? "1" : ""} />
+      <input type="hidden" name="myDirty" value={myDirty ? "1" : ""} />
       <FormError message={state.formError} />
       <SettingsFields
         key={resultKey(state)}
@@ -242,6 +246,8 @@ function SettingsFields({
   );
   const [currency, setCurrency] = useState(values.currency);
   const [local, setLocal] = useState(values.localCurrency);
+  // 모임 총 예산 글자. 각자로 바꿔 칸이 사라졌다 다시 생겨도, 숨은 칸으로 보낼 때도 고친 글자가 남게 state 로 둔다.
+  const [total, setTotal] = useState(values.totalAmount);
   const totalRef = useRef<HTMLInputElement>(null);
   const mineRef = useRef<HTMLInputElement>(null);
   // 모임 총 예산: 각자 방식이면 숨긴다. 숨겨도 칸은 그대로 보낸다(값을 지우지 않게. 서버는 각자 방식에서
@@ -279,8 +285,8 @@ function SettingsFields({
   const currencyName = (
     <span className="shrink-0 text-sm text-sub">{currencyLabel(currency)}</span>
   );
-  // 숨긴 모임 총액은 처음 통화로 적힌 글자다. 통화를 바꿨으면 새 통화로 다시 읽히지 않게 빈칸(각자 방식은 빈칸 허용 → 없음).
-  const hiddenTotal = currency === values.currency ? values.totalAmount : "";
+  // 숨긴 모임 총액은 처음 통화로 적힌 글자로 본다. 통화를 바꿨으면 새 통화로 다시 읽히지 않게 빈칸(각자 방식은 빈칸 허용 → 없음).
+  const hiddenTotal = currency === values.currency ? total : "";
   return (
     <>
       <div className="flex flex-col gap-1">
@@ -340,7 +346,8 @@ function SettingsFields({
               ref={totalRef}
               id={`${id}-total`}
               name="totalAmount"
-              defaultValue={values.totalAmount}
+              value={total}
+              onChange={(e) => setTotal(e.target.value)}
               inputMode="decimal"
               autoComplete="off"
               aria-invalid={errors.totalAmount ? true : undefined}

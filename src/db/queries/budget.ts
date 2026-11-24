@@ -308,15 +308,20 @@ export async function upsertTripBudget(
   return trip ? "locked" : "missing";
 }
 
+export type PersonalBudgetResult = "ok" | "currency-changed" | "missing";
+
 // 내 예산을 정하거나(total) 지운다(null). 언제나 user_id = userId 행만 읽고 쓴다.
-// 정할 때는 예산 설정이 있는 접근 가능한 여행일 때만이고, currency 는 그 순간의 예산 통화를 같은 문에서 넣는다(설계 §5.5).
-// 지울 때는 접근 가능한 여행이면 true(지울 행이 없었어도).
+// 정할 때는 예산 설정이 있는 접근 가능한 여행이고 그 예산 통화가 currency(금액을 읽은 통화)와 같을 때만이다.
+// 양식을 연 뒤 다른 사람이 통화를 바꿨으면 금액을 새 통화로 읽어 저장하지 않고 "currency-changed"(설계 §5.5).
+// 통화 확인과 넣기는 한 문이다. 넣지 못했을 때 둘을 가르는 두 번째 읽기는 알림 문구만 정한다.
+// 지울 때는 통화와 상관없이 접근 가능한 여행이면 "ok"(지울 행이 없었어도). 그 밖은 "missing".
 export async function setPersonalBudget(
   userId: string,
   tripId: string,
   total: number | null,
-): Promise<boolean> {
-  if (!validIds(tripId)) return false;
+  currency: string,
+): Promise<PersonalBudgetResult> {
+  if (!validIds(tripId)) return "missing";
   if (total === null) {
     const result = await db.execute<{ id: string }>(sql`
       WITH removed AS (
@@ -327,19 +332,31 @@ export async function setPersonalBudget(
       )
       SELECT ${trips.id} AS id FROM ${trips}
       WHERE ${trips.id} = ${tripId}::uuid AND ${accessibleTrips(userId)}`);
-    return result.rows.length > 0;
+    return result.rows.length > 0 ? "ok" : "missing";
   }
   const result = await db.execute<{ trip_id: string }>(sql`
     INSERT INTO ${tripPersonalBudgets} (trip_id, user_id, total_amount, currency)
     SELECT tb.trip_id, ${userId}::text, ${total}::bigint, tb.currency
     FROM ${tripBudgets} tb
     WHERE tb.trip_id = ${tripId}::uuid AND tb.trip_id IN ${accessibleTripIdsSql(userId)}
+      AND tb.currency = ${currency}::text
     ON CONFLICT (trip_id, user_id) DO UPDATE SET
       total_amount = EXCLUDED.total_amount,
       currency = EXCLUDED.currency,
       updated_at = now()
     RETURNING trip_id`);
-  return result.rows.length > 0;
+  if (result.rows.length > 0) return "ok";
+  const [settings] = await db
+    .select({ tripId: tripBudgets.tripId })
+    .from(tripBudgets)
+    .where(
+      and(
+        eq(tripBudgets.tripId, tripId),
+        inArray(tripBudgets.tripId, accessibleTripIds(userId)),
+      ),
+    )
+    .limit(1);
+  return settings ? "currency-changed" : "missing";
 }
 
 // 이 사용자가 접근할 수 있는 여행 tripId 의 일정인가.

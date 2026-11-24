@@ -146,6 +146,18 @@ export function writesSharedSettings(
   return raw === "1";
 }
 
+// 설정 양식이 내 예산을 써야(정하거나 지워야) 하는가(#89 코드 리뷰). 양식은 내 예산 칸을 고쳤을 때만
+// hidden "myDirty" 를 "1" 로 보낸다. 통화가 바뀌어 빈칸으로 열린 내 예산(설계 §5.5)을 다른 칸만 고친
+// 저장이 지워 "전에 정한 값" 안내를 잃지 않게. 내 예산 칸(myTotal)이 없는 양식은 언제나 건드리지 않는다.
+// myDirty 칸이 없는 낡은 양식(raw null)은 예전처럼 myTotal 칸이 있으면 쓴다.
+export function writesPersonalBudget(
+  raw: unknown,
+  hasMyTotalField: boolean,
+): boolean {
+  if (!hasMyTotalField) return false;
+  return raw === null || raw === "1";
+}
+
 // --- 예상·실제 칸 ---
 
 export type AmountFields = {

@@ -28,6 +28,7 @@ import {
   parseBudgetSettings,
   parseExtraItem,
   parseSide,
+  writesPersonalBudget,
   writesSharedSettings,
 } from "@/lib/budget-input";
 import type { Side } from "@/lib/budget-wallets";
@@ -36,6 +37,7 @@ import { getCurrentUser } from "@/lib/session";
 import { todayInSeoul } from "@/lib/trip-dates";
 import { moneyParsers, resolveActualRate } from "./budget-rate";
 import {
+  BUDGET_CURRENCY_CHANGED,
   BUDGET_CURRENCY_LOCKED,
   BUDGET_ITEM_LIMIT,
   BUDGET_NOT_SET,
@@ -47,6 +49,7 @@ import {
 // 쿼리의 uuid 검사와 여행 접근 조건(userId 범위)이 막는다. 남의 것과 없는 것은 똑같이 찾을 수 없음.
 // 금액 검증에는 그 여행의 통화(예산 설정)가 필요해, 설정·일정을 userId 범위 쿼리로 읽은 뒤 필드를 검증한다
 // (CLAUDE.md 순서의 예외. 읽기만 하고, 쓰기는 검증 뒤에 한다).
+// 예산 설정 저장도 같은 예외다: 방식 검증에 지금 방식(설정)과 주인인지(여행)가 필요해 둘을 먼저 읽는다.
 
 type Errors<T> = Partial<Record<keyof T, string>>;
 
@@ -166,18 +169,27 @@ export async function saveBudgetSettingsAction(
   }
 
   // 내 예산은 내 돈을 쓰는 방식일 때만 쓴다(빈칸이면 지움). 모임 통장으로 바꿀 때는 그대로 둔다.
-  // 내 예산 칸을 그린 양식(myTotal 칸이 있음)일 때만 쓴다. 칸이 없던 낡은 양식이 내 예산을 지우지 않게.
-  if (effectiveMode !== "shared" && formData.has("myTotal")) {
-    let saved: boolean;
+  // 이 양식에서 내 예산 칸을 고쳤을 때만 쓴다(myDirty). 통화가 바뀌어 빈칸으로 열린 내 예산을 다른 칸만
+  // 고친 저장이 지우지 않게(설계 §5.5). 칸이 없던 낡은 양식은 내 예산을 건드리지 않는다.
+  if (
+    effectiveMode !== "shared" &&
+    writesPersonalBudget(formData.get("myDirty"), formData.has("myTotal"))
+  ) {
+    // 금액은 양식의 통화(currency)로 읽었다. 그 사이 예산 통화가 바뀌었으면 쿼리가 쓰지 않는다.
+    let result: Awaited<ReturnType<typeof setPersonalBudget>>;
     try {
-      saved = await setPersonalBudget(user.id, tripId, myTotal);
+      result = await setPersonalBudget(user.id, tripId, myTotal, currency);
     } catch {
-      saved = false;
+      result = "missing";
     }
-    if (!saved) {
+    if (result !== "ok") {
       // 설정은 이미 저장됐다(모임 값을 고치지 않았으면 그대로다). 화면을 새로 그리고, 내 예산만 못 했다고 알린다.
       revalidatePath(tripPath(tripId));
-      return fail(PERSONAL_BUDGET_SAVE_FAILED);
+      return fail(
+        result === "currency-changed"
+          ? BUDGET_CURRENCY_CHANGED
+          : PERSONAL_BUDGET_SAVE_FAILED,
+      );
     }
   }
 

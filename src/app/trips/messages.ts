@@ -29,6 +29,9 @@ export const BUDGET_NOT_SET = "예산을 먼저 정해 주세요.";
 export const PERSONAL_BUDGET_SAVE_FAILED =
   "설정은 저장했지만 내 예산은 저장하지 못했어요. 다시 저장해 주세요.";
 
+export const BUDGET_CURRENCY_CHANGED =
+  "그 사이 예산 통화가 바뀌었어요. 양식을 닫았다가 다시 열어 주세요.";
+
 // --- 공유 (#15) ---
 
 export const INVITE_INVALID =

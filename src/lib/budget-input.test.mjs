@@ -7,6 +7,7 @@ import {
   parseBudgetSettings,
   parseExtraItem,
   parseSide,
+  writesPersonalBudget,
   writesSharedSettings,
 } from "./budget-input.ts";
 
@@ -411,4 +412,15 @@ test("writesSharedSettings·모임 값은 고쳤을 때만 쓴다", () => {
   assert.equal(writesSharedSettings(true, "0"), false);
   // 칸이 없는 낡은 양식은 예전처럼 쓴다.
   assert.equal(writesSharedSettings(true, null), true);
+});
+
+test("writesPersonalBudget·내 예산은 그 칸을 고쳤을 때만 쓴다", () => {
+  assert.equal(writesPersonalBudget("1", true), true);
+  assert.equal(writesPersonalBudget("", true), false);
+  assert.equal(writesPersonalBudget("0", true), false);
+  // 내 예산 칸이 없는 양식은 고쳤다고 해도 건드리지 않는다.
+  assert.equal(writesPersonalBudget("1", false), false);
+  // myDirty 칸이 없는 낡은 양식은 예전처럼 myTotal 칸이 있으면 쓴다.
+  assert.equal(writesPersonalBudget(null, true), true);
+  assert.equal(writesPersonalBudget(null, false), false);
 });
