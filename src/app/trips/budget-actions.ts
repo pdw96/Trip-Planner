@@ -176,20 +176,20 @@ export async function saveBudgetSettingsAction(
     writesPersonalBudget(formData.get("myDirty"), formData.has("myTotal"))
   ) {
     // 금액은 양식의 통화(currency)로 읽었다. 그 사이 예산 통화가 바뀌었으면 쿼리가 쓰지 않는다.
-    let result: Awaited<ReturnType<typeof setPersonalBudget>>;
+    let result: Awaited<ReturnType<typeof setPersonalBudget>> | "failed";
     try {
       result = await setPersonalBudget(user.id, tripId, myTotal, currency);
     } catch {
-      result = "missing";
+      result = "failed";
     }
+    // 여행에 더는 들어갈 수 없으면 찾을 수 없음으로 처리한다.
+    if (result === "missing") notFound();
     if (result !== "ok") {
-      // 설정은 이미 저장됐다(모임 값을 고치지 않았으면 그대로다). 화면을 새로 그리고, 내 예산만 못 했다고 알린다.
       revalidatePath(tripPath(tripId));
-      return fail(
-        result === "currency-changed"
-          ? BUDGET_CURRENCY_CHANGED
-          : PERSONAL_BUDGET_SAVE_FAILED,
-      );
+      if (result === "currency-changed") return fail(BUDGET_CURRENCY_CHANGED);
+      // 이번에 모임 설정을 쓰지 않았으면 저장된 것이 없으니 그냥 저장 실패다.
+      // 모임 설정을 이미 저장했으면 내 예산만 못 했다고 알린다.
+      return fail(writeShared ? PERSONAL_BUDGET_SAVE_FAILED : SAVE_FAILED);
     }
   }
 

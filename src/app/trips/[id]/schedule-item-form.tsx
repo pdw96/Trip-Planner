@@ -194,6 +194,12 @@ function ScheduleItemFields({
     shared: false,
     mine: false,
   });
+  // 실제 칸(금액·통화·결제일·환율)을 고친 쪽. 펼쳤지만 건드리지 않은 쪽은 actualShown 을 보내지 않는다:
+  // 서버는 표시가 있으면 빈 실제도 "지움"으로 읽어, 그 사이 다른 사람이 적은 실제를 지울 수 있다.
+  const [actualDirty, setActualDirty] = useState<Record<Side, boolean>>({
+    shared: false,
+    mine: false,
+  });
   const [actualOpen, setActualOpen] = useState<Record<Side, boolean>>({
     shared: actual?.shared.open ?? false,
     mine: actual?.mine.open ?? false,
@@ -328,12 +334,20 @@ function ScheduleItemFields({
               errors={errors}
               actual={actual?.[side]}
               actualOpen={actualOpen[side]}
+              actualDirty={actualDirty[side]}
               onOpenActual={() => {
                 // 펼치기만 해서는 고친 것이 아니다(적어야 onChange 로 고친 쪽이 된다). 펼친 채 비워 저장해도
                 // 그 쪽을 보내지 않으므로, 그 사이 다른 사람이 적은 실제·예상을 지우거나 되돌리지 않는다.
                 setActualOpen((current) => ({ ...current, [side]: true }));
               }}
-              onChange={() => markDirty(side)}
+              onChange={(actualChanged) => {
+                markDirty(side);
+                if (actualChanged) {
+                  setActualDirty((current) =>
+                    current[side] ? current : { ...current, [side]: true },
+                  );
+                }
+              }}
             />
           ))}
         </div>
@@ -382,7 +396,7 @@ function ScheduleItemFields({
 
 // 한 쪽(모임 / 내 돈)의 예상·실제 칸. 보이지 않는 쪽도 hidden 으로 그려 두어 전환해도 적던 값이 남는다.
 // 실제 칸은 고치기 양식에만 있고, 실제가 없으면 접힌 "실제 지출 적기"를 누를 때 펼친다(미리 결제, §5.6).
-// 펼친 쪽만 actualShown 표시를 보낸다(서버는 표시가 있는 쪽의 실제만 읽는다).
+// 펼친 쪽 중 실제 칸을 고친 쪽만 actualShown 표시를 보낸다(서버는 표시가 있는 쪽의 실제만 읽는다).
 function SideMoneyFields({
   side,
   hidden,
@@ -392,6 +406,7 @@ function SideMoneyFields({
   errors,
   actual,
   actualOpen,
+  actualDirty,
   onOpenActual,
   onChange,
 }: {
@@ -403,15 +418,29 @@ function SideMoneyFields({
   errors: ScheduleFieldErrors;
   actual: { open: boolean; rateSource: RateSource | null } | undefined;
   actualOpen: boolean;
+  actualDirty: boolean;
   onOpenActual: () => void;
-  onChange: () => void;
+  onChange: (actualChanged: boolean) => void;
 }) {
   const f = SIDE_FIELDS[side];
   // 펼친 직후에만 실제 금액 칸에 초점을 옮긴다(처음부터 펼친 칸은 그대로).
   const focusActual = useRef(false);
   return (
     // 칸의 change 가 여기까지 올라오면 이 쪽을 고친 것으로 본다.
-    <div hidden={hidden} onChange={onChange} className="flex flex-col gap-3">
+    // 실제 칸이 바뀐 것인지는 칸 이름으로 가린다(예상 칸만 고치면 실제는 건드리지 않은 것).
+    <div
+      hidden={hidden}
+      onChange={(event) => {
+        const name = (event.target as HTMLInputElement).name;
+        onChange(
+          name === f.actualAmount ||
+            name === f.actualCurrency ||
+            name === f.actualPaidOn ||
+            name === f.actualRate,
+        );
+      }}
+      className="flex flex-col gap-3"
+    >
       {side === "mine" && <PrivateBadge />}
       <MoneyField
         id={`${idPrefix}-estimate`}
@@ -426,11 +455,13 @@ function SideMoneyFields({
       {actual &&
         (actualOpen ? (
           <>
-            <input
-              type="hidden"
-              name={side === "mine" ? "mineActualShown" : "actualShown"}
-              value="1"
-            />
+            {actualDirty && (
+              <input
+                type="hidden"
+                name={side === "mine" ? "mineActualShown" : "actualShown"}
+                value="1"
+              />
+            )}
             <ActualMoneyFields
               idPrefix={idPrefix}
               currencies={budget}
