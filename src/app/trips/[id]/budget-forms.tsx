@@ -119,6 +119,15 @@ export const SIDE_LABELS: Record<Side, string> = {
 
 export type BudgetConfig = NonNullable<PanelBudget>["config"];
 
+// 모두가 함께 쓰는 설정 칸(내 예산 myTotal 은 빠진다).
+const SHARED_FIELD_NAMES: ReadonlySet<string> = new Set([
+  "currency",
+  "localCurrency",
+  "plannedRate",
+  "totalAmount",
+  "mode",
+]);
+
 function settingsFields(config: BudgetConfig | null): BudgetSettingsFields {
   if (!config) return EMPTY_BUDGET_SETTINGS_FIELDS;
   const unit = config.localCurrency
@@ -170,8 +179,22 @@ export function BudgetSettingsForm({
     formError: null,
     savedAt: null,
   });
+  // 모임 값 칸을 고쳤는가(#89 최종 리뷰 I1). 서버는 이것이 "1" 일 때만 모임 설정을 쓴다(처음 정하기는 언제나).
+  // 오류로 칸을 다시 그려도 남도록 다시 그리지 않는 이 컴포넌트에 둔다. 한번 고치면 되돌려도 켜 둔다.
+  const [sharedDirty, setSharedDirty] = useState(config === null);
   return (
-    <form action={formAction} noValidate className={formClass}>
+    <form
+      action={formAction}
+      noValidate
+      className={formClass}
+      onChange={(e) => {
+        const name = (e.target as { name?: unknown }).name;
+        if (typeof name === "string" && SHARED_FIELD_NAMES.has(name)) {
+          setSharedDirty(true);
+        }
+      }}
+    >
+      <input type="hidden" name="sharedDirty" value={sharedDirty ? "1" : ""} />
       <FormError message={state.formError} />
       <SettingsFields
         key={resultKey(state)}

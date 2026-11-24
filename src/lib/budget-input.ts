@@ -134,6 +134,18 @@ export function parseBudgetSettings(
   };
 }
 
+// 설정 양식이 모임 값(통화·현지 통화·환율·모임 총액·방식)을 써야 하는가(#89 최종 리뷰 I1).
+// 양식은 그 칸들을 고쳤을 때만 hidden "sharedDirty" 를 "1" 로 보낸다. 내 예산만 저장한 사람이
+// 양식을 연 뒤 다른 사람이 바꾼 모임 값을 옛 값으로 되돌리지 않게.
+// 설정이 아직 없으면(처음 정하기) 언제나 쓴다. 칸이 없는 낡은 양식(raw null)은 예전처럼 쓴다.
+export function writesSharedSettings(
+  hasConfig: boolean,
+  raw: unknown,
+): boolean {
+  if (!hasConfig || raw === null) return true;
+  return raw === "1";
+}
+
 // --- 예상·실제 칸 ---
 
 export type AmountFields = {

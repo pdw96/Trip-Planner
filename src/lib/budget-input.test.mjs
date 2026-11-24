@@ -7,6 +7,7 @@ import {
   parseBudgetSettings,
   parseExtraItem,
   parseSide,
+  writesSharedSettings,
 } from "./budget-input.ts";
 
 const p = { currencyInfo, parseAmount, parseRateInput };
@@ -398,4 +399,16 @@ test("parseSide·일정 밖 항목의 쪽", () => {
     "어느 돈인지 골라 주세요.",
   );
   assert.equal(parseExtraItem(item("mine"), allowed, p, o).value.side, "mine");
+});
+
+test("writesSharedSettings·모임 값은 고쳤을 때만 쓴다", () => {
+  // 처음 정하기는 언제나 쓴다.
+  assert.equal(writesSharedSettings(false, ""), true);
+  assert.equal(writesSharedSettings(false, null), true);
+  // 설정이 있으면 "1" 일 때만.
+  assert.equal(writesSharedSettings(true, "1"), true);
+  assert.equal(writesSharedSettings(true, ""), false);
+  assert.equal(writesSharedSettings(true, "0"), false);
+  // 칸이 없는 낡은 양식은 예전처럼 쓴다.
+  assert.equal(writesSharedSettings(true, null), true);
 });

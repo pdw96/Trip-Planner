@@ -28,6 +28,7 @@ import {
   parseBudgetSettings,
   parseExtraItem,
   parseSide,
+  writesSharedSettings,
 } from "@/lib/budget-input";
 import type { Side } from "@/lib/budget-wallets";
 import { tripDays } from "@/lib/schedule";
@@ -138,24 +139,35 @@ export async function saveBudgetSettingsAction(
   const { currency, localCurrency, plannedRate, sharedTotal, mode, myTotal } =
     parsed.value;
 
-  let result: Awaited<ReturnType<typeof upsertTripBudget>>;
-  try {
-    result = await upsertTripBudget(user.id, tripId, {
-      currency,
-      localCurrency,
-      plannedRate,
-      sharedTotal,
-      mode,
-    });
-  } catch {
-    return fail(SAVE_FAILED);
+  // 모임 값은 이 양식에서 고쳤을 때만 쓴다(처음 정하기·낡은 양식은 언제나). 내 예산만 저장하면
+  // 양식을 연 뒤 다른 사람이 바꾼 모임 총액·환율을 옛 값으로 되돌리지 않게 설정 쓰기를 건너뛴다.
+  const writeShared = writesSharedSettings(
+    config !== null,
+    formData.get("sharedDirty"),
+  );
+  // 건너뛰면 방식도 바꾸지 않았으니 내 예산 판단은 지금 방식(config.mode)으로 한다.
+  const effectiveMode = writeShared || !config ? mode : config.mode;
+
+  if (writeShared) {
+    let result: Awaited<ReturnType<typeof upsertTripBudget>>;
+    try {
+      result = await upsertTripBudget(user.id, tripId, {
+        currency,
+        localCurrency,
+        plannedRate,
+        sharedTotal,
+        mode,
+      });
+    } catch {
+      return fail(SAVE_FAILED);
+    }
+    if (result === "missing") notFound();
+    if (result === "locked") return fail(BUDGET_CURRENCY_LOCKED);
   }
-  if (result === "missing") notFound();
-  if (result === "locked") return fail(BUDGET_CURRENCY_LOCKED);
 
   // 내 예산은 내 돈을 쓰는 방식일 때만 쓴다(빈칸이면 지움). 모임 통장으로 바꿀 때는 그대로 둔다.
   // 내 예산 칸을 그린 양식(myTotal 칸이 있음)일 때만 쓴다. 칸이 없던 낡은 양식이 내 예산을 지우지 않게.
-  if (mode !== "shared" && formData.has("myTotal")) {
+  if (effectiveMode !== "shared" && formData.has("myTotal")) {
     let saved: boolean;
     try {
       saved = await setPersonalBudget(user.id, tripId, myTotal);
@@ -163,7 +175,7 @@ export async function saveBudgetSettingsAction(
       saved = false;
     }
     if (!saved) {
-      // 설정은 이미 저장됐다. 화면을 새로 그리고, 내 예산만 못 했다고 알린다.
+      // 설정은 이미 저장됐다(모임 값을 고치지 않았으면 그대로다). 화면을 새로 그리고, 내 예산만 못 했다고 알린다.
       revalidatePath(tripPath(tripId));
       return fail(PERSONAL_BUDGET_SAVE_FAILED);
     }
