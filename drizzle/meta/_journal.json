@@ -64,6 +64,13 @@
       "when": 1795500585633,
       "tag": "0008_aberrant_black_panther",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1795540686895,
+      "tag": "0009_odd_mauler",
+      "breakpoints": true
     }
   ]
 }

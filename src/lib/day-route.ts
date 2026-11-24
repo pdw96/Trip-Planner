@@ -215,13 +215,12 @@ export function buildDayRoute(
 }
 
 // 모두 것(forUserId 없음/null) + viewerId 것만, 순서 유지(#90).
-// T 를 object 로 둔 것은 forUserId 열이 생기기 전 행(속성이 하나도 겹치지 않음)도 받기 위해서다.
-export function routeItemsFor<T extends object>(
+export function routeItemsFor<T extends { forUserId?: string | null }>(
   items: T[],
   viewerId: string,
 ): T[] {
   return items.filter((item) => {
-    const owner = (item as { forUserId?: string | null }).forUserId ?? null;
+    const owner = item.forUserId ?? null;
     return owner === null || owner === viewerId;
   });
 }

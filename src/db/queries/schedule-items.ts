@@ -2,7 +2,13 @@ import "server-only";
 import { and, asc, eq, inArray, type SQL, sql } from "drizzle-orm";
 import { cache } from "react";
 import { db } from "@/db";
-import { places, type ScheduleItem, scheduleItems, trips } from "@/db/schema";
+import {
+  places,
+  type ScheduleItem,
+  scheduleItems,
+  tripMembers,
+  trips,
+} from "@/db/schema";
 import { EXTRA_TITLE_MAX } from "@/lib/budget-input";
 import { isUuid } from "@/lib/ids";
 import type { GooglePlacePick, ScheduleInput } from "@/lib/schedule-input";
@@ -33,6 +39,23 @@ function itemCondition(userId: string, tripId: string, itemId: string): SQL {
 
 function validIds(...ids: string[]): boolean {
   return ids.every(isUuid);
+}
+
+// "누구"(for_user_id, #90)로 쓸 수 있는 값인지. 쓰는 문의 where 에 넣어 사람 확인과 쓰기를 한 문으로 한다
+// (neon-http 는 트랜잭션이 없다). null(모두)이면 늘 참. 값이면 그 여행의 주인이거나 함께하는 사람이어야 하고,
+// 고치기(itemId 있음)에서는 그 일정의 지금 값과 같아도 된다(나간 사람 값을 그대로 저장, 설계 §5.6).
+// 하위 질의의 표 이름은 바깥 문과 같아도 안쪽 표를 가리킨다.
+function forUserAllowed(
+  tripId: string,
+  forUserId: string | null,
+  itemId: string | null,
+): SQL {
+  if (forUserId === null) return sql`true`;
+  const isOwner = sql`exists (select 1 from ${trips} where ${trips.id} = ${tripId}::uuid and ${trips.userId} = ${forUserId}::text)`;
+  const isMember = sql`exists (select 1 from ${tripMembers} where ${tripMembers.tripId} = ${tripId}::uuid and ${tripMembers.userId} = ${forUserId}::text)`;
+  if (itemId === null) return sql`(${isOwner} or ${isMember})`;
+  const keepsCurrent = sql`exists (select 1 from ${scheduleItems} where ${scheduleItems.id} = ${itemId}::uuid and ${scheduleItems.tripId} = ${tripId}::uuid and ${scheduleItems.forUserId} = ${forUserId}::text)`;
+  return sql`(${isOwner} or ${isMember} or ${keepsCurrent})`;
 }
 
 // 입력 중 일정 열에 쓰는 값만. Google 장소(google)는 Google 장소 경로의 쿼리가 따로 쓴다.
@@ -142,56 +165,81 @@ function placeInAccessibleTrip(
   ) as SQL;
 }
 
-// 접근할 수 있는 여행일 때만 넣는다. 넣지 못했으면 null.
-// 장소를 이으면(placeId) 한 문(insert … select from places)으로 넣고, place 글자는 그 장소의 이름표로 저장한다.
-// 장소가 같은 여행·접근 가능한 것이 아니면 0행이라 null.
-// 확인과 넣기 사이에 여행이 지워지면 FK 오류가 나고, 액션이 저장 실패로 처리한다.
+// insert … select 로 넣을 한 행. 모든 열을 테이블 정의 순서대로 고른다(drizzle 이 순서를 확인한다).
+// 기본값(id·done·시각)도 여기서 채우고, 매개변수는 열 타입으로 바꿔 둔다. 여행·장소 쪽 세 열만 부르는 쪽이 정한다.
+function insertedRow(
+  input: ScheduleInput,
+  from: {
+    tripId: typeof places.tripId | typeof trips.id;
+    place: typeof places.label | SQL.Aliased<string | null>;
+    placeId: typeof places.id | SQL.Aliased<string | null>;
+  },
+) {
+  return {
+    id: sql<string>`gen_random_uuid()`.as("id"),
+    tripId: from.tripId,
+    date: sql<string>`${input.date}::date`.as("date"),
+    time: sql<string | null>`${input.time}::time`.as("time"),
+    title: sql<string | null>`${input.title}::text`.as("title"),
+    place: from.place,
+    placeId: from.placeId,
+    memo: sql<string | null>`${input.memo}::text`.as("memo"),
+    done: sql<boolean>`false`.as("done"),
+    // 자리는 액션이 넣은 뒤 그날 순서를 다시 쓰며 정한다(#41).
+    position: sql<number | null>`null::integer`.as("position"),
+    forUserId: sql<string | null>`${input.forUserId}::text`.as("for_user_id"),
+    createdAt: sql<Date>`now()`.as("created_at"),
+    updatedAt: sql<Date>`now()`.as("updated_at"),
+  };
+}
+
+// 접근할 수 있는 여행이고 "누구"가 쓸 수 있는 값일 때만 넣는다(forUserAllowed). 넣지 못했으면 null.
+// 두 분기 모두 한 문(insert … select)이다. 장소를 이으면(placeId) places 에서 고르고 place 글자는 그 장소의 이름표로
+// 저장한다(장소가 같은 여행·접근 가능한 것이 아니면 0행). 잇지 않으면 trips 에서 고르고 적은 글자를 그대로 둔다.
 export async function createScheduleItem(
   userId: string,
   tripId: string,
   input: ScheduleInput,
 ): Promise<string | null> {
   if (!validIds(tripId)) return null;
+  const allowed = forUserAllowed(tripId, input.forUserId, null);
   if (input.placeId !== null) {
     if (!validIds(input.placeId)) return null;
-    // insert … select 는 모든 열을 테이블 정의 순서대로 고른다. 기본값(id·done·시각)도 여기서 채우고,
-    // 매개변수는 열 타입으로 바꿔 둔다.
     const [row] = await db
       .insert(scheduleItems)
       .select(
         db
-          .select({
-            id: sql<string>`gen_random_uuid()`.as("id"),
-            tripId: places.tripId,
-            date: sql<string>`${input.date}::date`.as("date"),
-            time: sql<string | null>`${input.time}::time`.as("time"),
-            title: sql<string>`${input.title}::text`.as("title"),
-            place: places.label,
-            placeId: places.id,
-            memo: sql<string | null>`${input.memo}::text`.as("memo"),
-            done: sql<boolean>`false`.as("done"),
-            // 자리는 액션이 넣은 뒤 그날 순서를 다시 쓰며 정한다(#41).
-            position: sql<number | null>`null::integer`.as("position"),
-            createdAt: sql<Date>`now()`.as("created_at"),
-            updatedAt: sql<Date>`now()`.as("updated_at"),
-          })
+          .select(
+            insertedRow(input, {
+              tripId: places.tripId,
+              place: places.label,
+              placeId: places.id,
+            }),
+          )
           .from(places)
-          .where(placeInAccessibleTrip(userId, tripId, input.placeId)),
+          .where(
+            and(placeInAccessibleTrip(userId, tripId, input.placeId), allowed),
+          ),
       )
       .returning({ id: scheduleItems.id });
     return row?.id ?? null;
   }
-  const [trip] = await db
-    .select({ id: trips.id })
-    .from(trips)
-    .where(and(eq(trips.id, tripId), accessibleTrips(userId)))
-    .limit(1);
-  if (!trip) return null;
   const [row] = await db
     .insert(scheduleItems)
-    .values({ ...columnsOf(input), placeId: null, tripId: trip.id })
+    .select(
+      db
+        .select(
+          insertedRow(input, {
+            tripId: trips.id,
+            place: sql<string | null>`${input.place}::text`.as("place"),
+            placeId: sql<string | null>`null::uuid`.as("place_id"),
+          }),
+        )
+        .from(trips)
+        .where(and(eq(trips.id, tripId), accessibleTrips(userId), allowed)),
+    )
     .returning({ id: scheduleItems.id });
-  return row.id;
+  return row?.id ?? null;
 }
 
 // --- Google 장소 경로 (#35) ---
@@ -226,7 +274,8 @@ function chosenPlaceCtes(
     )`;
 }
 
-// 장소 넣기(같은 Google 장소가 이미 있으면 그것) + 일정 넣기. 접근할 수 없는 여행이면 아무것도 넣지 않고 null.
+// 장소 넣기(같은 Google 장소가 이미 있으면 그것) + 일정 넣기. 접근할 수 없는 여행이거나 "누구"가 쓸 수 없는 값이면
+// (forUserAllowed 를 t 에 넣음) 아무것도 넣지 않고 null.
 // 좌표는 서버가 Google 에서 받은 값만 받는다.
 export async function createScheduleItemWithNewPlace(
   userId: string,
@@ -238,20 +287,26 @@ export async function createScheduleItemWithNewPlace(
   const tripRows = db
     .select({ id: trips.id })
     .from(trips)
-    .where(and(eq(trips.id, tripId), accessibleTrips(userId)))
+    .where(
+      and(
+        eq(trips.id, tripId),
+        accessibleTrips(userId),
+        forUserAllowed(tripId, input.forUserId, null),
+      ),
+    )
     .getSQL();
   const result = await db.execute<{ id: string }>(sql`
     WITH ${chosenPlaceCtes(tripRows, input.google, coords)}
-    INSERT INTO schedule_items (trip_id, date, time, title, place, place_id, memo)
+    INSERT INTO schedule_items (trip_id, date, time, title, place, place_id, memo, for_user_id)
     SELECT ${tripId}::uuid, ${input.date}::date, ${input.time}::time, ${input.title}::text,
-      chosen.label, chosen.id, ${input.memo}::text
+      chosen.label, chosen.id, ${input.memo}::text, ${input.forUserId}::text
     FROM chosen
     RETURNING id`);
   return result.rows[0]?.id ?? null;
 }
 
-// 장소 넣기(같은 것이 있으면 그것) + 일정 고치기. t 에 "이 일정이 이 여행에 있음"을 넣어, 일정이 조건에 안 맞으면
-// 장소도 들어가지 않는다. 바뀐 행이 없으면 false.
+// 장소 넣기(같은 것이 있으면 그것) + 일정 고치기. t 에 "이 일정이 이 여행에 있음"과 "누구" 조건(forUserAllowed)을
+// 넣어, 둘 중 하나라도 안 맞으면 장소도 들어가지 않는다. 바뀐 행이 없으면 false.
 export async function updateScheduleItemWithNewPlace(
   userId: string,
   tripId: string,
@@ -268,6 +323,7 @@ export async function updateScheduleItemWithNewPlace(
         eq(trips.id, tripId),
         accessibleTrips(userId),
         sql`exists (select 1 from ${scheduleItems} where ${scheduleItems.id} = ${itemId}::uuid and ${scheduleItems.tripId} = ${trips.id})`,
+        forUserAllowed(tripId, input.forUserId, itemId),
       ),
     )
     .getSQL();
@@ -278,6 +334,7 @@ export async function updateScheduleItemWithNewPlace(
       time = ${input.time}::time,
       title = ${input.title}::text,
       memo = ${input.memo}::text,
+      for_user_id = ${input.forUserId}::text,
       place = chosen.label,
       place_id = chosen.id,
       updated_at = now()
@@ -287,7 +344,7 @@ export async function updateScheduleItemWithNewPlace(
   return result.rows.length > 0;
 }
 
-// 바뀐 행이 없으면(없거나 남의 것이거나 id 형식이 틀림, 이을 장소가 조건에 안 맞음) false.
+// 바뀐 행이 없으면(없거나 남의 것이거나 id 형식이 틀림, 이을 장소나 "누구"가 조건에 안 맞음) false.
 // 장소를 이으면 place 글자는 그 장소의 이름표로, 잇지 않으면 place_id 를 비우고 적은 글자를 그대로 둔다.
 export async function updateScheduleItem(
   userId: string,
@@ -296,6 +353,7 @@ export async function updateScheduleItem(
   input: ScheduleInput,
 ): Promise<boolean> {
   if (!validIds(tripId, itemId)) return false;
+  const allowed = forUserAllowed(tripId, input.forUserId, itemId);
   if (input.placeId !== null) {
     if (!validIds(input.placeId)) return false;
     // 한 문(update … from places): 일정과 장소가 모두 같은 접근 가능한 여행일 때만 바뀐다.
@@ -307,6 +365,7 @@ export async function updateScheduleItem(
         and(
           itemCondition(userId, tripId, itemId),
           placeInAccessibleTrip(userId, tripId, input.placeId),
+          allowed,
         ),
       )
       .returning({ id: scheduleItems.id });
@@ -315,7 +374,7 @@ export async function updateScheduleItem(
   const rows = await db
     .update(scheduleItems)
     .set({ ...columnsOf(input), placeId: null })
-    .where(itemCondition(userId, tripId, itemId))
+    .where(and(itemCondition(userId, tripId, itemId), allowed))
     .returning({ id: scheduleItems.id });
   return rows.length > 0;
 }
