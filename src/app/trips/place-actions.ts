@@ -86,6 +86,8 @@ export async function createPlaceAction(
   // 남의 여행에 대해 Google 을 부르지 않도록 여행 접근을 먼저 확인한다.
   const trip = await getTrip(user.id, tripId);
   if (!trip) notFound();
+  // 떼어 낸 기록에는 새 장소를 만들지 않는다(#103). 접근할 수 없는 여행과 같게 찾을 수 없음으로 돌려, Google 을 부르기 전에 막는다.
+  if (trip.detachedAt !== null) notFound();
 
   // 장소 수 상한도 Google 을 부르기 전에 확인한다(호출 비용 상한). 동시에 넣으면 몇 개 넘을 수 있지만
   // 목적은 끝없는 호출을 막는 것이라 그 정도는 받아들인다.

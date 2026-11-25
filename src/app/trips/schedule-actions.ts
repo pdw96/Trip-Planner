@@ -382,6 +382,7 @@ type WriteOutcome =
 async function writeWithPlace(
   userId: string,
   tripId: string,
+  isRecord: boolean,
   input: ScheduleInput,
   write: (input: ScheduleInput) => Promise<boolean>,
   writeWithNewPlace: (
@@ -390,6 +391,8 @@ async function writeWithPlace(
   ) => Promise<boolean>,
 ): Promise<WriteOutcome> {
   const { google } = input;
+  // 떼어 낸 기록(#103)에는 새 장소를 만들지 않는다. Google 을 부르기 전에 막고 "장소를 다시 골라 주세요"로 돌려준다.
+  if (google && isRecord) return { kind: "missed", placeLinked: true };
   let resolution: GoogleResolution | null = null;
   if (google) {
     resolution = await resolveGooglePlace(userId, tripId, google.googlePlaceId);
@@ -463,6 +466,7 @@ export async function createScheduleItemAction(
   const outcome = await writeWithPlace(
     user.id,
     tripId,
+    trip.detachedAt !== null,
     parsed.value,
     async (input) => {
       created.id = await createScheduleItem(user.id, tripId, input);
@@ -604,6 +608,7 @@ export async function updateScheduleItemAction(
   const outcome = await writeWithPlace(
     user.id,
     tripId,
+    trip.detachedAt !== null,
     parsed.value,
     (input) => updateScheduleItem(user.id, tripId, itemId, input),
     (input, coords) =>
@@ -694,6 +699,7 @@ export async function setScheduleItemMineMoneyAction(
   if (!user) redirect("/");
 
   const values = readScheduleFields(formData, null);
+  // 금액 검증에 그 여행의 통화 설정이 필요해 일정·금액을 먼저 읽는다(id 의 uuid 검사는 쿼리 함수가 한다).
   const [item, budgetRows] = await Promise.all([
     getScheduleItem(user.id, tripId, itemId),
     getScheduleBudgetRows(user.id, tripId, itemId),

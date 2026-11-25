@@ -1,3 +1,4 @@
+// 읽기 쿼리(listRecordCompanions, getReattachPreview)도 여기 둔다: trips·trip_record_companions·trip_members·budget_items 를 가로질러 기록 기능 한 곳에서만 쓰여서 테이블별 파일로 나누지 않았다.
 import "server-only";
 import { and, asc, desc, eq, isNotNull, type SQL, sql } from "drizzle-orm";
 import { db } from "@/db";
