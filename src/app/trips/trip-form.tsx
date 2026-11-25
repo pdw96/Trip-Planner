@@ -11,6 +11,7 @@ import {
 } from "@/app/ui/styles";
 import type { CalendarRange } from "@/lib/calendar";
 import type { TripFields, TripFormState } from "@/lib/trip-input";
+import { type CountryChoices, CountrySelect } from "./country-field";
 import { DateRangePicker } from "./date-range-picker";
 
 type TripFormProps = {
@@ -21,6 +22,8 @@ type TripFormProps = {
   today: string;
   range: CalendarRange;
   holidays: Promise<string[]>;
+  // 나라 고르기 목록(서버의 countryOptions()).
+  countries: CountryChoices;
 };
 
 // 만들기·고치기가 같이 쓰는 양식. 검증은 서버에서 하고, 오류와 입력값을 action 상태로 돌려받는다.
@@ -40,6 +43,7 @@ function TripFormFields({
   today,
   range,
   holidays,
+  countries,
 }: TripFormProps) {
   const [state, formAction, pending] = useActionState(action, {
     values: initialValues,
@@ -47,6 +51,8 @@ function TripFormFields({
     formError: null,
   });
   const { values, errors } = state;
+  // 나라 짐작에 쓰는 여행지 글자(칸 자체는 지금처럼 defaultValue).
+  const [destination, setDestination] = useState(values.destination);
 
   return (
     <form action={formAction} noValidate className="flex flex-col gap-3.5">
@@ -74,7 +80,18 @@ function TripFormFields({
             {...props}
             type="text"
             defaultValue={values.destination}
+            onChange={(e) => setDestination(e.target.value)}
             className={`w-full ${fieldClass}`}
+          />
+        )}
+      </Field>
+      <Field label="나라 (선택)" name="countryCode" error={errors.countryCode}>
+        {(props) => (
+          <CountrySelect
+            controlProps={props}
+            countries={countries}
+            destination={destination}
+            initialValue={values.countryCode}
           />
         )}
       </Field>
