@@ -7,6 +7,8 @@ export type TripFields = {
   startDate: string;
   endDate: string;
   notes: string;
+  // 나라 코드(#100). 빈칸 = 고르지 않음.
+  countryCode: string;
 };
 
 export type TripInput = {
@@ -15,6 +17,7 @@ export type TripInput = {
   startDate: string;
   endDate: string;
   notes: string | null;
+  countryCode: string | null;
 };
 
 export type TripFieldErrors = Partial<Record<keyof TripFields, string>>;
@@ -35,6 +38,7 @@ export const EMPTY_TRIP_FIELDS: TripFields = {
   startDate: "",
   endDate: "",
   notes: "",
+  countryCode: "",
 };
 
 const NAME_MAX = 100;
@@ -64,12 +68,17 @@ function checkDate(value: string, emptyMessage: string): string | undefined {
   return undefined;
 }
 
-export function parseTripInput(raw: TripFields): TripInputResult {
+// isCountry: 나라 목록에 있는 코드인가(src/lib/countries.ts 의 isCountryCode). 이 모듈은 다른 모듈을 import 하지 않아 받는다.
+export function parseTripInput(
+  raw: TripFields,
+  isCountry: (code: string) => boolean,
+): TripInputResult {
   const title = raw.title.trim();
   const destination = raw.destination.trim();
   const startDate = raw.startDate.trim();
   const endDate = raw.endDate.trim();
   const notes = raw.notes.trim();
+  const countryCode = raw.countryCode.trim();
 
   const errors: TripFieldErrors = {};
   const titleError = checkName(title, "여행 이름을 입력해 주세요.");
@@ -87,9 +96,20 @@ export function parseTripInput(raw: TripFields): TripInputResult {
     errors.notes = `${NOTES_MAX}자 이하로 입력해 주세요.`;
   }
 
+  if (countryCode !== "" && !isCountry(countryCode)) {
+    errors.countryCode = "나라를 목록에서 다시 골라 주세요.";
+  }
+
   if (Object.keys(errors).length > 0) return { ok: false, errors };
   return {
     ok: true,
-    value: { title, destination, startDate, endDate, notes: notes || null },
+    value: {
+      title,
+      destination,
+      startDate,
+      endDate,
+      notes: notes || null,
+      countryCode: countryCode || null,
+    },
   };
 }

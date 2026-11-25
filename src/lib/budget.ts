@@ -304,6 +304,26 @@ export function rateInputValue(rate: string, unit: 1 | 100): string {
   return canonical(shifted.int, shifted.frac);
 }
 
+// 예산을 처음 정할 때 양식의 현지 통화·예정 환율 처음 값(#100 설계 §5.5). 예산 통화는 늘 KRW 라 KRW 기준이다.
+export type BudgetStartValues = { localCurrency: string; plannedRate: string };
+
+// localCurrency: 여행 나라의 통화(없으면 null). ecbRate: 그 통화 1 단위 = 원(기준환율, 받지 못했으면 null).
+export function budgetStartValues(
+  localCurrency: string | null,
+  ecbRate: string | null,
+): BudgetStartValues | null {
+  if (localCurrency === null || localCurrency === "KRW") return null;
+  const info = currencyInfo(localCurrency);
+  if (!info) return null;
+  return {
+    localCurrency,
+    plannedRate:
+      info.ecb && ecbRate !== null
+        ? rateInputValue(ecbRate, info.rateUnit)
+        : "",
+  };
+}
+
 // DB 의 numeric 글자("9.2000000000")를 표준 글자로. 양수가 아니거나 소수 10자리를 넘으면 null.
 export function normalizeRate(text: string): string | null {
   const parts = cleanDecimal(text);

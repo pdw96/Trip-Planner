@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { calendarRange, yearsInRange } from "@/lib/calendar";
+import { countryOptions } from "@/lib/countries";
 import { getHolidays } from "@/lib/holidays-api";
 import { getCurrentUser } from "@/lib/session";
 import { todayInSeoul } from "@/lib/trip-dates";
@@ -31,6 +32,7 @@ async function NewTripForm() {
       today={today}
       range={range}
       holidays={getHolidays(yearsInRange(range))}
+      countries={countryOptions()}
       action={createTripAction}
       initialValues={EMPTY_TRIP_FIELDS}
       submitLabel="만들기"

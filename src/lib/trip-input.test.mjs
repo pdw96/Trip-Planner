@@ -3,8 +3,11 @@ import { test } from "node:test";
 import {
   EMPTY_TRIP_FIELDS,
   isValidIsoDate,
-  parseTripInput,
+  parseTripInput as parseRaw,
 } from "./trip-input.ts";
+
+const isCountry = (code) => code === "JP" || code === "KR";
+const parseTripInput = (raw) => parseRaw(raw, isCountry);
 
 const valid = {
   title: "겨울 휴가",
@@ -12,6 +15,7 @@ const valid = {
   startDate: "2026-12-20",
   endDate: "2026-12-23",
   notes: "",
+  countryCode: "",
 };
 
 function errorsOf(raw) {
@@ -23,7 +27,7 @@ function errorsOf(raw) {
 test("accepts valid input", () => {
   assert.deepEqual(parseTripInput(valid), {
     ok: true,
-    value: { ...valid, notes: null },
+    value: { ...valid, notes: null, countryCode: null },
   });
 });
 
@@ -36,7 +40,7 @@ test("trims values", () => {
   });
   assert.deepEqual(result, {
     ok: true,
-    value: { ...valid, notes: "메모" },
+    value: { ...valid, notes: "메모", countryCode: null },
   });
 });
 
@@ -117,4 +121,25 @@ test("reports every field at once", () => {
     "startDate",
     "title",
   ]);
+});
+
+test("country code: empty is null, listed code is kept trimmed", () => {
+  const result = parseTripInput({ ...valid, countryCode: " JP " });
+  assert.equal(result.ok, true);
+  assert.equal(result.value.countryCode, "JP");
+  assert.equal(parseTripInput(valid).value.countryCode, null);
+});
+
+test("country code outside the list is a field error", () => {
+  for (const code of ["jp", "ZZ", "JPN"]) {
+    assert.equal(
+      errorsOf({ ...valid, countryCode: code }).countryCode,
+      "나라를 목록에서 다시 골라 주세요.",
+      code,
+    );
+  }
+});
+
+test("EMPTY_TRIP_FIELDS has an empty country", () => {
+  assert.equal(EMPTY_TRIP_FIELDS.countryCode, "");
 });

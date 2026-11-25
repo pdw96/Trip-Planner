@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { getTrip } from "@/db/queries/trips";
 import { calendarRange, yearsInRange } from "@/lib/calendar";
+import { countryOptions } from "@/lib/countries";
 import { getHolidays } from "@/lib/holidays-api";
 import { getCurrentUser } from "@/lib/session";
 import { todayInSeoul } from "@/lib/trip-dates";
@@ -40,6 +41,7 @@ async function EditTripForm({
       today={today}
       range={range}
       holidays={getHolidays(yearsInRange(range))}
+      countries={countryOptions()}
       action={updateTripAction.bind(null, trip.id)}
       initialValues={{
         title: trip.title,
@@ -47,6 +49,7 @@ async function EditTripForm({
         startDate: trip.startDate,
         endDate: trip.endDate,
         notes: trip.notes ?? "",
+        countryCode: trip.countryCode ?? "",
       }}
       submitLabel="저장"
       cancelHref={`/trips/${trip.id}`}

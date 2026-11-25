@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, use, useState } from "react";
 import {
   buttonClass,
   cardClass,
@@ -9,6 +9,7 @@ import {
 } from "@/app/ui/styles";
 import {
   type ActualMoney,
+  type BudgetStartValues,
   type CurrencySettings,
   formatMoney,
   type Money,
@@ -45,6 +46,8 @@ type Props = {
   budget: PanelBudget;
   // 여행 주인인지. 예산이 없을 때(budget null) 설정 양식의 방식 고르기에 쓴다. 있으면 budget.config.isOwner.
   isOwner: boolean;
+  // 예산을 처음 정할 때의 현지 통화·환율 처음 값(#100). budget 이 null 일 때만 쓴다.
+  startValues: Promise<BudgetStartValues | null> | null;
   // "all" 또는 날짜.
   tab: string;
   days: TripDay[];
@@ -71,6 +74,7 @@ function CardsBody({
   tripId,
   budget,
   isOwner,
+  startValues,
   tab,
   days,
   onSelectTab,
@@ -86,12 +90,14 @@ function CardsBody({
         className={open === "settings" ? budgetCardClass : emptyStateClass}
       >
         {open === "settings" ? (
-          <BudgetSettingsForm
-            tripId={tripId}
-            config={null}
-            isOwner={isOwner}
-            onClose={close}
-          />
+          <Suspense fallback={<p className="text-sm text-sub">불러오는 중…</p>}>
+            <FirstSettingsForm
+              tripId={tripId}
+              startValues={startValues}
+              isOwner={isOwner}
+              onClose={close}
+            />
+          </Suspense>
         ) : (
           <div className="flex w-full flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-sub">
@@ -719,5 +725,28 @@ function ExtraList({
         </button>
       )}
     </div>
+  );
+}
+
+// 예산을 처음 정하는 양식. 처음 값(기준환율)을 기다린 뒤 양식을 만든다(양식은 처음 값으로 한 번만 시작한다).
+function FirstSettingsForm({
+  tripId,
+  startValues,
+  isOwner,
+  onClose,
+}: {
+  tripId: string;
+  startValues: Promise<BudgetStartValues | null> | null;
+  isOwner: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <BudgetSettingsForm
+      tripId={tripId}
+      config={null}
+      startValues={startValues ? use(startValues) : null}
+      isOwner={isOwner}
+      onClose={onClose}
+    />
   );
 }

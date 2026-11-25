@@ -110,6 +110,8 @@ export const trips = pgTable(
     startDate: date("start_date").notNull(),
     endDate: date("end_date").notNull(),
     notes: text("notes"),
+    // 여행 나라(#100). ISO 3166-1 alpha-2 대문자. 사용자가 우리 목록에서 고른 값이다(Google 값 아님). null = 고르지 않음.
+    countryCode: text("country_code"),
     // 초대 링크(#15). 비밀값 원문은 저장하지 않고 SHA-256 hex 만 둔다. null 이면 링크가 꺼져 있다.
     inviteTokenHash: text("invite_token_hash").unique(),
     inviteTokenCreatedAt: timestamp("invite_token_created_at", {
@@ -126,6 +128,11 @@ export const trips = pgTable(
   (t) => [
     index("trips_user_id_idx").on(t.userId),
     check("trips_dates_check", sql`${t.endDate} >= ${t.startDate}`),
+    // 모양만 막는다. 어떤 코드가 있는 나라인지는 앱(src/lib/countries.ts)이 정한다.
+    check(
+      "trips_country_code_check",
+      sql`${t.countryCode} IS NULL OR ${t.countryCode} ~ '^[A-Z]{2}$'`,
+    ),
   ],
 );
 
