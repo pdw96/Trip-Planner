@@ -47,6 +47,7 @@ async function EditTripForm({
         startDate: trip.startDate,
         endDate: trip.endDate,
         notes: trip.notes ?? "",
+        countryCode: trip.countryCode ?? "",
       }}
       submitLabel="저장"
       cancelHref={`/trips/${trip.id}`}

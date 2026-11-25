@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
 import { createTrip, deleteTrip, updateTrip } from "@/db/queries/trips";
+import { isCountryCode } from "@/lib/countries";
 import { getCurrentUser } from "@/lib/session";
 import {
   parseTripInput,
@@ -23,6 +24,7 @@ function readTripFields(formData: FormData): TripFields {
     startDate: field("startDate"),
     endDate: field("endDate"),
     notes: field("notes"),
+    countryCode: field("countryCode"),
   };
 }
 
@@ -34,7 +36,7 @@ export async function createTripAction(
   if (!user) redirect("/");
 
   const values = readTripFields(formData);
-  const parsed = parseTripInput(values);
+  const parsed = parseTripInput(values, isCountryCode);
   if (!parsed.ok) return { values, errors: parsed.errors, formError: null };
 
   let id: string;
@@ -58,7 +60,7 @@ export async function updateTripAction(
   if (!user) redirect("/");
 
   const values = readTripFields(formData);
-  const parsed = parseTripInput(values);
+  const parsed = parseTripInput(values, isCountryCode);
   if (!parsed.ok) return { values, errors: parsed.errors, formError: null };
 
   let updated: boolean;
