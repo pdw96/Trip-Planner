@@ -31,7 +31,8 @@ async function EditTripForm({
   if (!user) redirect("/");
   const { id } = await params;
   const trip = await getTrip(user.id, id);
-  if (!trip) notFound();
+  // 떼어 낸 기록(#103)의 여행 정보는 사본이라 고치지 않는다(쓰기도 서버가 막는다).
+  if (!trip || trip.detachedAt !== null) notFound();
 
   const today = todayInSeoul();
   const range = calendarRange(today, trip.startDate, trip.endDate);

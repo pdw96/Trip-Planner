@@ -51,6 +51,8 @@ type Props = {
   maps: Maps | null;
   // 국내 여행이면 장소·구간 링크를 네이버 지도로(#36).
   naverMap: boolean;
+  // 떼어 낸 기록(#103): 장소·기준점은 사본이라 넣기·고치기·지우기·기준점 정하기를 그리지 않는다(보기는 그대로).
+  record: boolean;
 };
 
 const ERROR_VISIBLE_MS = 4000;
@@ -76,6 +78,7 @@ function PanelBody({
   defaultOverviewBaseId,
   maps,
   naverMap,
+  record,
 }: Props) {
   const { selected, reselectCount } = useSelectedDay();
   const [overviewBaseId, setOverviewBaseId] = useState(defaultOverviewBaseId);
@@ -239,10 +242,10 @@ function PanelBody({
         )}
         {day ? (
           <div className="flex flex-col gap-3">
-            {(day.hasNight && places.length > 0) ||
+            {(!record && day.hasNight && places.length > 0) ||
             day.morningBaseId !== null ? (
               <div className="flex flex-col gap-1">
-                {day.hasNight && places.length > 0 && (
+                {!record && day.hasNight && places.length > 0 && (
                   <DayBasePicker
                     key={day.date}
                     day={day}
@@ -308,7 +311,7 @@ function PanelBody({
         <h2 id="places-heading" className={sectionTitleClass}>
           가 볼 곳
         </h2>
-        {maps && <PlaceAddForm tripId={tripId} />}
+        {maps && !record && <PlaceAddForm tripId={tripId} />}
         {listed.length > 0 ? (
           <ul className="flex flex-col divide-y divide-rule">
             {listed.map(({ place, distance }) => (
@@ -327,6 +330,7 @@ function PanelBody({
                 }
                 onShowOnMap={maps ? () => showOnMap(place.id) : null}
                 naverMap={naverMap}
+                readOnly={record}
               />
             ))}
           </ul>

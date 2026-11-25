@@ -36,6 +36,7 @@ export async function BudgetSection({
       startValues={startValues}
       days={tripDays(trip.startDate, trip.endDate)}
       today={todayInTrip ? today : null}
+      record={trip.detachedAt !== null}
     />
   );
 }

@@ -75,6 +75,8 @@ type ScheduleItemFormProps = {
   // "누구" 선택지(#90, 첫 값 "" = 모두). 없으면 칸을 그리지 않는다: forUserId 를 보내지 않으므로
   // 추가는 모두로, 고치기는 지금 값 그대로 저장된다.
   whoOptions?: WhoOption[];
+  // "누구" 칸 없이 늘 이 값으로 보낸다(떼어 낸 기록 #103: 새 일정·고친 일정은 언제나 나만). whoOptions 와 함께 쓰지 않는다.
+  fixedForUserId?: string;
   // 고치기 양식의 실제 지출 칸(완료와 상관없이, #89 §5.6). 쪽마다 처음부터 펼칠지(실제가 있으면)와 환율 출처.
   // undefined = 실제 칸 없음(추가 양식).
   actual?: Record<Side, { open: boolean; rateSource: RateSource | null }>;
@@ -157,6 +159,7 @@ function ScheduleItemFields({
   initialSide,
   sideFor,
   whoOptions,
+  fixedForUserId,
   actual,
   notice,
   onSaved,
@@ -328,6 +331,9 @@ function ScheduleItemFields({
           error={errors.forUserId}
           onChange={onWhoChange}
         />
+      )}
+      {!whoOptions && fixedForUserId !== undefined && (
+        <input type="hidden" name="forUserId" value={fixedForUserId} />
       )}
       {!whoOptions && errors.forUserId && (
         <p role="alert" className={errorTextClass}>

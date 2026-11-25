@@ -38,6 +38,7 @@ export function BudgetSheet({
   isOwner,
   startValues,
   days,
+  record,
   request,
   onClose,
 }: {
@@ -47,6 +48,8 @@ export function BudgetSheet({
   isOwner: boolean;
   startValues: Promise<BudgetStartValues | null> | null;
   days: TripDay[];
+  // 떼어 낸 기록(#103).
+  record: boolean;
   // null 이면 닫힘. id 가 바뀔 때마다 새로 연다(안의 양식이 지난 입력 없이 시작).
   request: SheetRequest | null;
   onClose: () => void;
@@ -231,6 +234,7 @@ export function BudgetSheet({
             startValues={startValues}
             tab={selected}
             days={days}
+            record={record}
             onSelectTab={select}
             initialForm={request.mode === "settings" ? "settings" : undefined}
           />

@@ -179,6 +179,7 @@ export async function ScheduleSection({
         viewerId={userId}
         people={people}
         naverMap={usesNaverMap(trip.countryCode)}
+        record={trip.detachedAt !== null}
         budget={
           budget
             ? {

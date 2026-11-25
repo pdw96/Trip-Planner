@@ -37,6 +37,7 @@ export function PlaceRow({
   onCloseEdit,
   onShowOnMap,
   naverMap,
+  readOnly,
 }: {
   tripId: string;
   place: PanelPlace;
@@ -50,6 +51,8 @@ export function PlaceRow({
   onShowOnMap: (() => void) | null;
   // 국내 여행이면 이름 링크를 네이버 지도 검색으로(#36).
   naverMap: boolean;
+  // 떼어 낸 기록(#103)의 장소: ⋯ 메뉴(고치기·삭제) 없이 보기만.
+  readOnly: boolean;
 }) {
   const [deleting, startDelete] = useTransition();
 
@@ -60,7 +63,7 @@ export function PlaceRow({
     });
   }
 
-  if (editing) {
+  if (editing && !readOnly) {
     return (
       <li className="py-2">
         <PlaceEditForm tripId={tripId} place={place} onClose={onCloseEdit} />
@@ -111,12 +114,14 @@ export function PlaceRow({
           지도
         </button>
       )}
-      <RowMenu
-        label={place.label}
-        disabled={deleting}
-        onEdit={onEdit}
-        onDelete={onDelete}
-      />
+      {!readOnly && (
+        <RowMenu
+          label={place.label}
+          disabled={deleting}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
+      )}
     </li>
   );
 }

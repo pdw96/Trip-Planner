@@ -92,9 +92,10 @@ export function toPanelBudget(
   if (!loaded) return null;
   const { config, shared, mine } = loaded;
   const personal = personalTotalFor(config.myBudget, config.currency);
+  // 떼어 낸 기록(#103)에서는 내 몫만 쓰므로 방식과 관계없이 내 돈 카드를 늘 보인다.
   const sides = visibleSides(config.mode, {
     shared: shared.length > 0,
-    mine: mine.length > 0,
+    mine: mine.length > 0 || trip.detachedAt !== null,
   });
   const wallets: PanelWallet[] = sides.map((side) => {
     const lines = side === "shared" ? shared : mine;

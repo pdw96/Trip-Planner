@@ -16,6 +16,7 @@ export function BudgetArea({
   startValues,
   days,
   today,
+  record,
 }: {
   tripId: string;
   budget: PanelBudget;
@@ -26,6 +27,8 @@ export function BudgetArea({
   days: TripDay[];
   // 여행 중이면 오늘, 아니면 null.
   today: string | null;
+  // 떼어 낸 기록(#103): 예산 설정·모임 쪽은 보기만, 내 돈·내 예산만 쓴다.
+  record: boolean;
 }) {
   const [request, setRequest] = useState<SheetRequest | null>(null);
   const openerRef = useRef<HTMLButtonElement>(null);
@@ -36,6 +39,9 @@ export function BudgetArea({
     setRequest({ mode, id: openCount.current });
   };
 
+  // 기록에 예산 설정이 없으면 정할 수 없으므로(설정은 사본) 줄도 시트도 그리지 않는다.
+  if (record && !budget) return null;
+
   return (
     <>
       {budget ? (
@@ -44,6 +50,7 @@ export function BudgetArea({
           budget={budget}
           days={days}
           today={today}
+          record={record}
           onOpen={() => open("view")}
           openerRef={openerRef}
         />
@@ -56,6 +63,7 @@ export function BudgetArea({
         isOwner={isOwner}
         startValues={startValues}
         days={days}
+        record={record}
         request={request}
         onClose={() => {
           setRequest(null);
