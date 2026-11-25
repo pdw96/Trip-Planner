@@ -49,6 +49,8 @@ type Props = {
   defaultOverviewBaseId: string | null;
   // 없으면 지도·장소 검색 대신 "지도를 쓸 수 없어요"(§3.3).
   maps: Maps | null;
+  // 국내 여행이면 장소·구간 링크를 네이버 지도로(#36).
+  naverMap: boolean;
 };
 
 const ERROR_VISIBLE_MS = 4000;
@@ -73,6 +75,7 @@ function PanelBody({
   overviewBaseIds,
   defaultOverviewBaseId,
   maps,
+  naverMap,
 }: Props) {
   const { selected, reselectCount } = useSelectedDay();
   const [overviewBaseId, setOverviewBaseId] = useState(defaultOverviewBaseId);
@@ -323,6 +326,7 @@ function PanelBody({
                   )
                 }
                 onShowOnMap={maps ? () => showOnMap(place.id) : null}
+                naverMap={naverMap}
               />
             ))}
           </ul>

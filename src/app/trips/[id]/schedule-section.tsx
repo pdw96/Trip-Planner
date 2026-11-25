@@ -18,7 +18,7 @@ import {
   routesByDate,
 } from "@/lib/day-route";
 import { distanceMeters, formatDistance } from "@/lib/geo";
-import { directionsUrl } from "@/lib/leg-display";
+import { directionsUrl, usesNaverMap } from "@/lib/leg-display";
 import { dateLabel, displayTime, groupSchedule } from "@/lib/schedule";
 import { loadBudget } from "./budget-data";
 import { lodgingFirst, type PlaceOption, toCategory } from "./map-types";
@@ -178,6 +178,7 @@ export async function ScheduleSection({
         browserKey={browserKey}
         viewerId={userId}
         people={people}
+        naverMap={usesNaverMap(trip.countryCode)}
         budget={
           budget
             ? {
