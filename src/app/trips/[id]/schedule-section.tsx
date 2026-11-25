@@ -179,6 +179,7 @@ export async function ScheduleSection({
         viewerId={userId}
         people={people}
         naverMap={usesNaverMap(trip.countryCode)}
+        record={trip.detachedAt !== null}
         budget={
           budget
             ? {
@@ -246,8 +247,9 @@ export async function ScheduleSection({
                   여행 기간 밖 일정
                 </h3>
                 <p className="text-sm text-sub">
-                  여행 날짜를 바꿔 기간 밖에 남은 일정이에요. 눌러서 날짜를
-                  옮기거나 지울 수 있어요.
+                  {trip.detachedAt !== null
+                    ? "여행 날짜를 바꿔 기간 밖에 남은 일정이에요. 내 일정만 눌러서 날짜를 옮기거나 지울 수 있어요."
+                    : "여행 날짜를 바꿔 기간 밖에 남은 일정이에요. 눌러서 날짜를 옮기거나 지울 수 있어요."}
                 </p>
               </div>
               {outside.map((group) => (

@@ -51,6 +51,8 @@ type Props = {
   // "all" 또는 날짜.
   tab: string;
   days: TripDay[];
+  // 떼어 낸 기록(#103): 예산 설정·모임 예산 정하기 없음, 모임 지출은 보기만. 내 돈 지출과 내 예산은 그대로.
+  record: boolean;
   onSelectTab: (tab: string) => void;
   // 이 양식이 열린 채로 시작한다(예산 없는 여행의 "예산 정하기", #97). 처음 연 탭에서만.
   initialForm?: "settings";
@@ -77,6 +79,7 @@ function CardsBody({
   startValues,
   tab,
   days,
+  record,
   onSelectTab,
   initialForm,
 }: Props) {
@@ -128,9 +131,14 @@ function CardsBody({
         config.mode === "personal" && wallets.some((w) => w.side === "shared")
       }
       focus={open === "settings:mine" ? "mine" : "total"}
+      mineOnly={record}
       onClose={close}
     />
   ) : null;
+  // 설정 양식이 열리는 카드. 기록에서는 내 예산 칸만 있는 양식이라 내 카드에 연다.
+  const settingsIndex = record
+    ? wallets.findIndex((wallet) => wallet.side === "mine")
+    : 0;
 
   return (
     <div className="flex flex-col gap-3">
@@ -145,9 +153,10 @@ function CardsBody({
           onSelectTab={onSelectTab}
           first={index === 0}
           paired={wallets.length > 1}
+          record={record}
           open={open}
           setOpen={setOpen}
-          settingsForm={index === 0 ? settingsForm : null}
+          settingsForm={index === settingsIndex ? settingsForm : null}
         />
       ))}
     </div>
@@ -163,6 +172,7 @@ function BudgetCard({
   onSelectTab,
   first,
   paired,
+  record,
   open,
   setOpen,
   settingsForm,
@@ -178,6 +188,7 @@ function BudgetCard({
   first: boolean;
   // 지갑이 둘 보이면 모임 카드 제목을 "모임 예산"으로(하나면 지금 제목 "전체 예산" 그대로).
   paired: boolean;
+  record: boolean;
   open: OpenForm;
   setOpen: (key: OpenForm) => void;
   // 열린 설정 양식(첫 카드에만 넘어온다).
@@ -201,10 +212,13 @@ function BudgetCard({
   );
   // 예산 정하기 버튼: [전체]에서만(설정 양식이 거기 있다). 내 예산은 모임 통장 방식에서는 저장되지 않으므로
   // (서버가 내 돈을 쓰는 방식에서만 내 예산을 쓴다) 남은 내 돈 행 때문에 보이는 카드에는 버튼이 없다.
+  // 기록(#103)의 모임 예산은 사본이라 정하지 않는다.
   const onSet =
-    !day && !settingsOpen && (!mine || config.mode !== "shared")
+    !day && !settingsOpen && (mine ? config.mode !== "shared" : !record)
       ? () => setOpen(mine ? "settings:mine" : "settings")
       : null;
+  // 기록의 모임 지출은 보기만(고치기·지우기·넣기 없음).
+  const readOnly = record && !mine;
 
   // 고치는 항목의 날짜가 기간 밖이면 그 날짜도 고를 수 있게 둔다(저장해도 그대로 남도록).
   // 쪽은 이 카드의 지갑(넣기는 서버가 이 값으로 모임·내 돈을 정하고, 고치기는 저장된 행의 쪽을 쓴다).
@@ -236,9 +250,10 @@ function BudgetCard({
       settings={config}
       open={open}
       setOpen={setOpen}
-      addKey={`add:${wallet.side}`}
+      addKey={readOnly ? null : `add:${wallet.side}`}
       addLabel={day ? "+ 지출 추가" : "+ 항목 추가"}
       renderForm={renderForm}
+      readOnly={readOnly}
     />
   );
 
@@ -279,13 +294,19 @@ function BudgetCard({
     <section aria-label={title} className={budgetCardClass}>
       <div className="flex items-center justify-between gap-2">
         <CardTitle mine={mine}>{title}</CardTitle>
-        {first && !settingsOpen && (
+        {first && !record && !settingsOpen && (
           <button
             type="button"
             onClick={() => setOpen("settings")}
             className={linkButtonClass}
           >
             설정
+          </button>
+        )}
+        {/* 기록(#103)에는 설정이 없으니 정한 내 예산은 여기서 고친다(정하지 않았으면 머리의 "내 예산 정하기"). */}
+        {record && mine && onSet && wallet.total !== null && !wallet.stale && (
+          <button type="button" onClick={onSet} className={linkButtonClass}>
+            내 예산 고치기
           </button>
         )}
       </div>
@@ -310,6 +331,7 @@ function BudgetCard({
             addKey={null}
             addLabel={null}
             renderForm={renderForm}
+            readOnly={readOnly}
           />
         </>
       )}
@@ -665,6 +687,7 @@ function ExtraList({
   addKey,
   addLabel,
   renderForm,
+  readOnly,
 }: {
   extras: PanelExtra[];
   settings: CurrencySettings;
@@ -674,26 +697,32 @@ function ExtraList({
   addKey: string | null;
   addLabel: string | null;
   renderForm: (item: PanelExtra | null) => React.ReactNode;
+  // 기록(#103)의 모임 지출: 이름을 눌러 고치지 않는다.
+  readOnly: boolean;
 }) {
   return (
     <div className="flex flex-col gap-1">
       {extras.length > 0 && (
         <ul className="flex flex-col gap-1 text-sm">
           {extras.map((item) =>
-            open === `edit:${item.id}` ? (
+            !readOnly && open === `edit:${item.id}` ? (
               <li key={item.id}>{renderForm(item)}</li>
             ) : (
               <li
                 key={item.id}
                 className="flex flex-wrap items-baseline justify-between gap-x-3"
               >
-                <button
-                  type="button"
-                  onClick={() => setOpen(`edit:${item.id}`)}
-                  className="min-w-0 text-left break-words hover:underline"
-                >
-                  {item.title}
-                </button>
+                {readOnly ? (
+                  <span className="min-w-0 break-words">{item.title}</span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setOpen(`edit:${item.id}`)}
+                    className="min-w-0 text-left break-words hover:underline"
+                  >
+                    {item.title}
+                  </button>
+                )}
                 <span className="tabular-nums">
                   <span className="text-sub">예상 </span>
                   <MoneyCell

@@ -76,11 +76,19 @@ export async function updateTripAction(
   redirect(`/trips/${tripId}`);
 }
 
-export async function deleteTripAction(tripId: string): Promise<void> {
+export async function deleteTripAction(
+  tripId: string,
+): Promise<{ error: string }> {
   const user = await getCurrentUser();
   if (!user) redirect("/");
 
-  if (!(await deleteTrip(user.id, tripId))) notFound();
+  let deleted: boolean;
+  try {
+    deleted = await deleteTrip(user.id, tripId);
+  } catch {
+    return { error: SAVE_FAILED };
+  }
+  if (!deleted) notFound();
 
   revalidatePath("/trips");
   redirect("/trips");

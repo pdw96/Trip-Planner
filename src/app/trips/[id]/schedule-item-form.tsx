@@ -75,6 +75,8 @@ type ScheduleItemFormProps = {
   // "누구" 선택지(#90, 첫 값 "" = 모두). 없으면 칸을 그리지 않는다: forUserId 를 보내지 않으므로
   // 추가는 모두로, 고치기는 지금 값 그대로 저장된다.
   whoOptions?: WhoOption[];
+  // "누구" 칸 없이 늘 이 값으로 보낸다(떼어 낸 기록 #103: 새 일정·고친 일정은 언제나 나만). whoOptions 와 함께 쓰지 않는다.
+  fixedForUserId?: string;
   // 고치기 양식의 실제 지출 칸(완료와 상관없이, #89 §5.6). 쪽마다 처음부터 펼칠지(실제가 있으면)와 환율 출처.
   // undefined = 실제 칸 없음(추가 양식).
   actual?: Record<Side, { open: boolean; rateSource: RateSource | null }>;
@@ -157,6 +159,7 @@ function ScheduleItemFields({
   initialSide,
   sideFor,
   whoOptions,
+  fixedForUserId,
   actual,
   notice,
   onSaved,
@@ -329,6 +332,9 @@ function ScheduleItemFields({
           onChange={onWhoChange}
         />
       )}
+      {!whoOptions && fixedForUserId !== undefined && (
+        <input type="hidden" name="forUserId" value={fixedForUserId} />
+      )}
       {!whoOptions && errors.forUserId && (
         <p role="alert" className={errorTextClass}>
           {errors.forUserId}
@@ -424,6 +430,112 @@ function ScheduleItemFields({
             {deleting ? "삭제하는 중…" : "삭제"}
           </button>
         )}
+      </div>
+    </form>
+  );
+}
+
+// 떼어 낸 기록(#103)의 모두 일정 사본에서 내 돈만 적는 양식. 일정 칸(날짜·시각·제목·장소·누구·메모)은 없고
+// 모임 금액은 글자로만 보인다(사본은 보기만). 내 돈 예상·실제를 넣고 고치고, 비워 저장하면 지운다.
+// ScheduleItemForm 의 내 돈 쪽과 같은 규칙: 고쳤을 때만 sides="mine" 을, 실제 칸을 고쳤을 때만 mineActualShown 을 보낸다.
+export function ScheduleMoneyForm({
+  action,
+  initialValues,
+  name,
+  sharedLines,
+  budget,
+  actual,
+  onClose,
+}: {
+  action: (
+    prev: ScheduleFormState,
+    formData: FormData,
+  ) => Promise<ScheduleFormState>;
+  initialValues: ScheduleFields;
+  // 일정 이름(제목, 없으면 장소).
+  name: string;
+  // 모임 금액 글자(예 "예상 ₩10,000"). 없으면 빈 배열.
+  sharedLines: string[];
+  budget: BudgetCurrencies;
+  actual: { open: boolean; rateSource: RateSource | null };
+  onClose: () => void;
+}) {
+  const [state, formAction, pending] = useActionState(action, {
+    values: initialValues,
+    errors: {},
+    formError: null,
+    savedAt: null,
+  });
+  const idPrefix = useId();
+  const [dirty, setDirty] = useState(false);
+  const [actualDirty, setActualDirty] = useState(false);
+  const [actualOpen, setActualOpen] = useState(actual.open);
+
+  // 열릴 때 내 돈 예상 칸에 초점.
+  useLayoutEffect(() => {
+    document.getElementById(`${idPrefix}-mine-estimate`)?.focus();
+  }, [idPrefix]);
+
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useEffect(() => {
+    if (state.savedAt !== null) onCloseRef.current();
+  }, [state.savedAt]);
+
+  return (
+    <form
+      action={formAction}
+      noValidate
+      className={`flex flex-col gap-4 ${cardClass}`}
+    >
+      <div className="flex flex-col gap-1">
+        <p className="font-medium break-words">{name}</p>
+        <p className="text-sm text-sub">
+          함께 쓰던 일정이라 내 돈만 적을 수 있어요.
+        </p>
+        {sharedLines.length > 0 && (
+          <p className="text-sm text-sub">모임 {sharedLines.join(" · ")}</p>
+        )}
+      </div>
+      {state.formError && (
+        <p
+          role="alert"
+          className="rounded-[10px] bg-danger/10 px-4 py-3 text-sm text-danger"
+        >
+          {state.formError}
+        </p>
+      )}
+      <input type="hidden" name="sides" value={dirty ? "mine" : ""} />
+      <div key={`money-${resultKey(state)}`} className="flex flex-col gap-3">
+        <SideMoneyFields
+          side="mine"
+          hidden={false}
+          idPrefix={`${idPrefix}-mine`}
+          budget={budget}
+          values={state.values}
+          errors={state.errors}
+          actual={actual}
+          actualOpen={actualOpen}
+          actualDirty={actualDirty}
+          onOpenActual={() => setActualOpen(true)}
+          onChange={(actualChanged) => {
+            setDirty(true);
+            if (actualChanged) setActualDirty(true);
+          }}
+        />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button type="submit" disabled={pending} className={primaryButtonClass}>
+          {pending ? "저장하는 중…" : "저장"}
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={pending}
+          className={secondaryButtonClass}
+        >
+          취소
+        </button>
       </div>
     </form>
   );

@@ -29,7 +29,7 @@ import {
 } from "@/lib/budget";
 import { type BudgetMode, isBudgetMode, type Side } from "@/lib/budget-wallets";
 import { isUuid } from "@/lib/ids";
-import { accessibleTrips } from "./trips";
+import { accessibleTrips, editableTrips, isRecordTripSql } from "./trips";
 
 // 예산 쿼리(#14). 여행 접근은 trips.ts 의 accessibleTrips 조건 하나로만 판단하고, 같은 SQL 문 안에 넣는다.
 // neon-http 는 대화형 트랜잭션이 없으므로 조건 확인과 쓰기를 한 문(조건부 insert/update, 데이터를 바꾸는 CTE)으로 한다.
@@ -96,6 +96,17 @@ function scheduleConflictTarget(owner: string | null): SQL {
   return owner === null
     ? sql`(schedule_item_id) WHERE owner_user_id IS NULL`
     : sql`(schedule_item_id, owner_user_id) WHERE owner_user_id IS NOT NULL`;
+}
+
+// 기록 여행(#103)에서 모임 쪽(owner null) 쓰기를 막는 조건. 기록의 모임 지출은 사본이라 읽기만 한다.
+// owner 는 ownerFor 가 정한 값(null 또는 본인), tripId 는 validIds 를 거친 값이다.
+function sideWritable(owner: string | null, tripId: string): SQL {
+  return sql`(${owner}::text IS NOT NULL OR NOT ${isRecordTripSql(tripId)})`;
+}
+
+// 이미 있는 지출 행(alias)이 기록 여행(#103)의 모임 행이 아닌가.
+function rowWritableSql(alias: string, tripId: string): SQL {
+  return sql`(${sql.raw(alias)}.owner_user_id IS NOT NULL OR NOT ${isRecordTripSql(tripId)})`;
 }
 
 // 접근 가능한 여행 id 서브쿼리(원시 SQL 문 안에서 쓴다).
@@ -253,6 +264,7 @@ export async function countBudgetItems(
 // 예산 통화는 금액 행이 하나도 없을 때만, 현지 통화 바꾸기·없애기는 그 통화로 적은 금액이 없을 때만.
 // 모임 예산 총액(sharedTotal)은 함께하는 사람 누구나 고친다(비울 수 있음). 방식(mode)은 여행 주인만 바꾼다(#89):
 // 처음 넣을 때 주인이 아니면 'shared', 고칠 때 주인이 아니면 기존 값을 그대로 둔다.
+// 기록 여행(#103)에서는 예산 설정이 사본이라 쓰지 않는다(t 와 뒤의 확인 모두 editableTrips, "missing").
 export async function upsertTripBudget(
   userId: string,
   tripId: string,
@@ -267,7 +279,7 @@ export async function upsertTripBudget(
   const result = await db.execute<{ trip_id: string }>(sql`
     WITH t AS (
       SELECT ${trips.id} AS id, ${trips.userId} = ${userId}::text AS is_owner FROM ${trips}
-      WHERE ${trips.id} = ${tripId}::uuid AND ${accessibleTrips(userId)}
+      WHERE ${trips.id} = ${tripId}::uuid AND ${editableTrips(userId)}
     ),
     blocked AS (
       SELECT 1 FROM ${budgetItems} b
@@ -303,7 +315,7 @@ export async function upsertTripBudget(
   const [trip] = await db
     .select({ id: trips.id })
     .from(trips)
-    .where(and(eq(trips.id, tripId), accessibleTrips(userId)))
+    .where(and(eq(trips.id, tripId), editableTrips(userId)))
     .limit(1);
   return trip ? "locked" : "missing";
 }
@@ -359,11 +371,12 @@ export async function setPersonalBudget(
   return settings ? "currency-changed" : "missing";
 }
 
-// 이 사용자가 접근할 수 있는 여행 tripId 의 일정인가.
-async function scheduleItemVisible(
+// 이 사용자가 접근할 수 있는 여행 tripId 의 일정이고, 이 쪽(owner)을 쓸 수 있는가(기록 여행(#103)의 모임 쪽은 아님).
+async function scheduleSideWritable(
   userId: string,
   tripId: string,
   scheduleItemId: string,
+  owner: string | null,
 ): Promise<boolean> {
   const [row] = await db
     .select({ id: scheduleItems.id })
@@ -373,6 +386,7 @@ async function scheduleItemVisible(
         eq(scheduleItems.id, scheduleItemId),
         eq(scheduleItems.tripId, tripId),
         inArray(scheduleItems.tripId, accessibleTripIds(userId)),
+        sideWritable(owner, tripId),
       ),
     )
     .limit(1);
@@ -392,6 +406,7 @@ function actualValues(actual: ActualMoney | null) {
 // 일정의 한 쪽(side: 모임 / 내 돈) 예상·실제를 모두 쓴다(일정 양식). 둘 다 null 이면 그 쪽 행을 지운다.
 // 일정이 접근 가능한 여행 tripId 의 것이고 그 여행에 예산 설정이 있으며 통화가 맞을 때만 true.
 // 내 돈 쪽은 owner_user_id = userId 행만 넣고 고치고 지운다.
+// 기록 여행(#103)에서는 모임 쪽을 넣지도 지우지도 않는다(sideWritable, false). 모두 일정 사본에 내 돈은 붙인다.
 export async function setScheduleItemAmounts(
   userId: string,
   tripId: string,
@@ -410,9 +425,10 @@ export async function setScheduleItemAmounts(
           itemInAccessibleTrip(userId, tripId),
           visibleToUser(userId),
           sameOwner(owner),
+          sideWritable(owner, tripId),
         ),
       );
-    return scheduleItemVisible(userId, tripId, scheduleItemId);
+    return scheduleSideWritable(userId, tripId, scheduleItemId, owner);
   }
   const e = amounts.estimate;
   const a = actualValues(amounts.actual);
@@ -423,7 +439,7 @@ export async function setScheduleItemAmounts(
       ${a.amount}::bigint, ${a.currency}::text, ${a.paidOn}::date, ${a.rate}::numeric, ${a.source}::text
     FROM ${scheduleItems} si JOIN ${tripBudgets} tb ON tb.trip_id = si.trip_id
     WHERE si.id = ${scheduleItemId}::uuid AND si.trip_id = ${tripId}::uuid
-      AND si.trip_id IN ${accessibleTripIdsSql(userId)}
+      AND si.trip_id IN ${accessibleTripIdsSql(userId)} AND ${sideWritable(owner, tripId)}
       AND ${currencyAllowed(e?.currency ?? null)} AND ${currencyAllowed(a.currency)}
     ON CONFLICT ${scheduleConflictTarget(owner)} DO UPDATE SET
       estimate_amount = EXCLUDED.estimate_amount,
@@ -439,6 +455,7 @@ export async function setScheduleItemAmounts(
 }
 
 // 한 쪽(side)의 실제만 쓴다(완료 체크칸의 실제 지출 칸). null 이면 그 쪽 실제를 비우고, 예상도 없으면 그 행을 지운다.
+// 기록 여행(#103)에서는 모임 쪽을 쓰지 않는다(sideWritable, false).
 export async function setScheduleItemActual(
   userId: string,
   tripId: string,
@@ -455,6 +472,7 @@ export async function setScheduleItemActual(
         WHERE b.schedule_item_id = ${scheduleItemId}::uuid AND b.trip_id = ${tripId}::uuid
           AND b.trip_id IN ${accessibleTripIdsSql(userId)}
           AND ${visibleToUserSql("b", userId)} AND ${sameOwnerSql("b", owner)}
+          AND ${sideWritable(owner, tripId)}
       ),
       removed AS (
         DELETE FROM ${budgetItems}
@@ -468,7 +486,7 @@ export async function setScheduleItemActual(
         RETURNING id
       )
       SELECT id FROM removed UNION ALL SELECT id FROM cleared`);
-    return scheduleItemVisible(userId, tripId, scheduleItemId);
+    return scheduleSideWritable(userId, tripId, scheduleItemId, owner);
   }
   const a = actualValues(actual);
   const result = await db.execute<{ id: string }>(sql`
@@ -478,7 +496,7 @@ export async function setScheduleItemActual(
       ${a.amount}::bigint, ${a.currency}::text, ${a.paidOn}::date, ${a.rate}::numeric, ${a.source}::text
     FROM ${scheduleItems} si JOIN ${tripBudgets} tb ON tb.trip_id = si.trip_id
     WHERE si.id = ${scheduleItemId}::uuid AND si.trip_id = ${tripId}::uuid
-      AND si.trip_id IN ${accessibleTripIdsSql(userId)}
+      AND si.trip_id IN ${accessibleTripIdsSql(userId)} AND ${sideWritable(owner, tripId)}
       AND ${currencyAllowed(a.currency)}
     ON CONFLICT ${scheduleConflictTarget(owner)} DO UPDATE SET
       actual_amount = EXCLUDED.actual_amount,
@@ -498,6 +516,7 @@ export type ExtraItemWrite = {
 
 // 일정 밖 항목 넣기. 예산 설정이 있는 접근 가능한 여행일 때만. 없으면 null.
 // owner_user_id 는 side 로 서버가 정한다(모임 null, 내 돈 본인).
+// 기록 여행(#103)에서는 모임 쪽을 넣지 않는다(sideWritable, null).
 export async function createExtraItem(
   userId: string,
   tripId: string,
@@ -516,6 +535,7 @@ export async function createExtraItem(
       ${a.amount}::bigint, ${a.currency}::text, ${a.paidOn}::date, ${a.rate}::numeric, ${a.source}::text
     FROM ${tripBudgets} tb
     WHERE tb.trip_id = ${tripId}::uuid AND tb.trip_id IN ${accessibleTripIdsSql(userId)}
+      AND ${sideWritable(owner, tripId)}
       AND ${currencyAllowed(e?.currency ?? null)} AND ${currencyAllowed(a.currency)}
     RETURNING id`);
   return result.rows[0]?.id ?? null;
@@ -523,6 +543,7 @@ export async function createExtraItem(
 
 // 일정 밖 항목 고치기. 항목 id·여행 id·접근 조건·보이는 범위(모임 행 또는 내 행)·통화를 한 문에서 확인한다.
 // 쪽(owner_user_id)은 바꾸지 않는다.
+// 기록 여행(#103)에서는 모임 행을 고치지 않는다(rowWritableSql, false). 내 돈 행은 고친다.
 export async function updateExtraItem(
   userId: string,
   tripId: string,
@@ -542,6 +563,7 @@ export async function updateExtraItem(
     FROM ${tripBudgets} tb
     WHERE b.id = ${itemId}::uuid AND b.trip_id = ${tripId}::uuid AND b.schedule_item_id IS NULL
       AND b.trip_id IN ${accessibleTripIdsSql(userId)} AND ${visibleToUserSql("b", userId)}
+      AND ${rowWritableSql("b", tripId)}
       AND tb.trip_id = b.trip_id
       AND ${currencyAllowed(e?.currency ?? null)} AND ${currencyAllowed(a.currency)}
     RETURNING b.id`);
@@ -549,6 +571,7 @@ export async function updateExtraItem(
 }
 
 // 일정 밖 항목 지우기. 모임 행이거나 내 행일 때만.
+// 기록 여행(#103)에서는 모임 행을 지우지 않는다(false). 내 돈 행은 지운다.
 export async function deleteExtraItem(
   userId: string,
   tripId: string,
@@ -563,6 +586,7 @@ export async function deleteExtraItem(
         isNull(budgetItems.scheduleItemId),
         itemInAccessibleTrip(userId, tripId),
         visibleToUser(userId),
+        sql`(${budgetItems.ownerUserId} IS NOT NULL OR NOT ${isRecordTripSql(tripId)})`,
       ),
     )
     .returning({ id: budgetItems.id });

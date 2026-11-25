@@ -5,7 +5,7 @@ import { db } from "@/db";
 import { type Place, places, scheduleItems, trips } from "@/db/schema";
 import { isUuid } from "@/lib/ids";
 import type { PlaceCategory, PlaceInput } from "@/lib/place-input";
-import { accessibleTrips } from "./trips";
+import { accessibleTrips, editableTrips } from "./trips";
 
 // 장소 쿼리. 여행 접근은 trips.ts 의 accessibleTrips 조건 하나로만 판단한다(schedule-items.ts 와 같은 방식).
 // neon-http 는 대화형 트랜잭션이 없으므로, 소유권 확인은 읽기·쓰기 문 자체의 where 조건으로 한다.
@@ -35,6 +35,24 @@ function placeCondition(userId: string, tripId: string, placeId: string): SQL {
   return and(
     eq(places.id, placeId),
     placeInAccessibleTrip(userId, tripId),
+  ) as SQL;
+}
+
+// 쓰기용 짝: 기록 여행(#103)을 뺀 여행만. 기록의 장소는 사본이라 넣기·고치기·지우기를 막는다.
+// 읽기(listPlaces 등)와 좌표 갱신(setPlaceCoords, 시스템 동작)은 위의 accessible 쪽을 그대로 쓴다.
+function editableTripIds(userId: string) {
+  return db.select({ id: trips.id }).from(trips).where(editableTrips(userId));
+}
+
+function editablePlaceCondition(
+  userId: string,
+  tripId: string,
+  placeId: string,
+): SQL {
+  return and(
+    eq(places.id, placeId),
+    eq(places.tripId, tripId),
+    inArray(places.tripId, editableTripIds(userId)),
   ) as SQL;
 }
 
@@ -101,6 +119,7 @@ export async function findPlaceIdByGoogleId(
 
 // 접근할 수 있는 여행일 때만 넣는다. 좌표는 서버가 Google 에서 받은 값만 받는다.
 // 확인과 넣기 사이에 여행이 지워지면 FK 오류가 나고, 액션이 저장 실패로 처리한다.
+// 기록 여행(#103)에서는 장소를 넣지 않는다(editableTrips, "not_found").
 export async function createPlace(
   userId: string,
   tripId: string,
@@ -113,7 +132,7 @@ export async function createPlace(
   const [trip] = await db
     .select({ id: trips.id })
     .from(trips)
-    .where(and(eq(trips.id, tripId), accessibleTrips(userId)))
+    .where(and(eq(trips.id, tripId), editableTrips(userId)))
     .limit(1);
   if (!trip) return { ok: false, reason: "not_found" };
   try {
@@ -140,6 +159,7 @@ export async function createPlace(
 // 바뀐 행이 없으면(없거나 남의 것이거나 id 형식이 틀림) false.
 // 이름표가 바뀌면 같은 여행에서 이 장소에 이어진 일정의 place 글자도 새 이름표로 바꾼다.
 // 둘을 한 문(데이터를 바꾸는 CTE)으로 묶어, 장소 행이 바뀐 경우에만 일정 글자도 바뀐다. 두 쪽 모두 접근 조건을 건다.
+// 기록 여행(#103)에서는 장소가 사본이라 고치지 않는다(두 쪽 모두 editable 조건, 0행 → false).
 export async function updatePlace(
   userId: string,
   tripId: string,
@@ -151,7 +171,7 @@ export async function updatePlace(
     db
       .update(places)
       .set({ label: input.label, category: input.category, memo: input.memo })
-      .where(placeCondition(userId, tripId, placeId))
+      .where(editablePlaceCondition(userId, tripId, placeId))
       .returning({ id: places.id }),
   );
   const updatedItems = db.$with("updated_items").as(
@@ -165,7 +185,7 @@ export async function updatePlace(
             db.select({ id: updatedPlace.id }).from(updatedPlace),
           ),
           eq(scheduleItems.tripId, tripId),
-          inArray(scheduleItems.tripId, accessibleTripIds(userId)),
+          inArray(scheduleItems.tripId, editableTripIds(userId)),
         ),
       )
       .returning({ id: scheduleItems.id }),
@@ -178,6 +198,7 @@ export async function updatePlace(
 }
 
 // 이어진 일정은 place_id 가 null 이 되고(place 글자는 남음), 기준점 행은 함께 지워진다(FK).
+// 기록 여행(#103)에서는 장소가 사본이라 지우지 않는다(editablePlaceCondition, 0행 → false).
 export async function deletePlace(
   userId: string,
   tripId: string,
@@ -186,7 +207,7 @@ export async function deletePlace(
   if (!validIds(tripId, placeId)) return false;
   const rows = await db
     .delete(places)
-    .where(placeCondition(userId, tripId, placeId))
+    .where(editablePlaceCondition(userId, tripId, placeId))
     .returning({ id: places.id });
   return rows.length > 0;
 }

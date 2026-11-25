@@ -156,6 +156,8 @@ function settingsFields(config: BudgetConfig | null): BudgetSettingsFields {
 // 예산 설정(#14) + 방식·내 예산(#89). config 가 null 이면 예산을 처음 정한다(방식은 모임 통장부터).
 // sharedLeftover: 각자 방식인데 모임 행이 남아 모임 카드가 보인다 → 모임 총 예산 칸도 보인다.
 // focus: 처음 초점을 둘 칸("내 예산 정하기"로 열었으면 내 예산).
+// mineOnly: 떼어 낸 기록(#103). 모임 설정은 사본이라 내 예산 칸만 보이고, 나머지는 지금 값을 숨은 칸으로 보낸다
+// (sharedDirty 가 비어 서버는 모임 설정을 쓰지 않는다).
 export function BudgetSettingsForm({
   tripId,
   config,
@@ -163,6 +165,7 @@ export function BudgetSettingsForm({
   isOwner,
   sharedLeftover = false,
   focus = "total",
+  mineOnly = false,
   onClose,
 }: {
   tripId: string;
@@ -172,6 +175,7 @@ export function BudgetSettingsForm({
   isOwner: boolean;
   sharedLeftover?: boolean;
   focus?: "total" | "mine";
+  mineOnly?: boolean;
   onClose: () => void;
 }) {
   const [state, formAction, pending] = useActionState<
@@ -206,14 +210,18 @@ export function BudgetSettingsForm({
       <input type="hidden" name="sharedDirty" value={sharedDirty ? "1" : ""} />
       <input type="hidden" name="myDirty" value={myDirty ? "1" : ""} />
       <FormError message={state.formError} />
-      <SettingsFields
-        key={resultKey(state)}
-        state={state}
-        currentMode={config?.mode ?? "shared"}
-        isOwner={isOwner}
-        sharedLeftover={sharedLeftover}
-        focus={focus}
-      />
+      {mineOnly ? (
+        <MineOnlyFields key={resultKey(state)} state={state} />
+      ) : (
+        <SettingsFields
+          key={resultKey(state)}
+          state={state}
+          currentMode={config?.mode ?? "shared"}
+          isOwner={isOwner}
+          sharedLeftover={sharedLeftover}
+          focus={focus}
+        />
+      )}
       <div className="flex gap-2">
         <button type="submit" disabled={pending} className={primaryButtonClass}>
           {pending ? "저장하는 중…" : "저장"}
@@ -451,6 +459,50 @@ function SettingsFields({
           <FieldError id={`${id}-rate-error`} message={errors.plannedRate} />
         </div>
       )}
+    </>
+  );
+}
+
+// 기록(#103)의 예산 양식: 내 예산 칸 하나. 모임 칸은 지금 값 그대로 숨겨 보내 검증만 통과시킨다.
+function MineOnlyFields({ state }: { state: BudgetSettingsFormState }) {
+  const { values, errors } = state;
+  const id = useId();
+  const mineRef = useRef<HTMLInputElement>(null);
+  useLayoutEffect(() => {
+    mineRef.current?.focus();
+  }, []);
+  return (
+    <>
+      <input type="hidden" name="mode" value={values.mode} />
+      <input type="hidden" name="currency" value={values.currency} />
+      <input type="hidden" name="totalAmount" value={values.totalAmount} />
+      <input type="hidden" name="localCurrency" value={values.localCurrency} />
+      <input type="hidden" name="plannedRate" value={values.plannedRate} />
+      <div className="flex flex-col gap-1">
+        <div className="flex flex-wrap items-center gap-x-2">
+          <label htmlFor={`${id}-mine`} className="text-sm font-medium">
+            내 예산
+          </label>
+          <PrivateBadge />
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            ref={mineRef}
+            id={`${id}-mine`}
+            name="myTotal"
+            defaultValue={values.myTotal}
+            inputMode="decimal"
+            autoComplete="off"
+            aria-invalid={errors.myTotal ? true : undefined}
+            aria-describedby={errors.myTotal ? `${id}-mine-error` : undefined}
+            className={`${fieldClass} min-w-0 flex-1`}
+          />
+          <span className="shrink-0 text-sm text-sub">
+            {currencyLabel(values.currency)}
+          </span>
+        </div>
+        <FieldError id={`${id}-mine-error`} message={errors.myTotal} />
+      </div>
     </>
   );
 }

@@ -25,6 +25,7 @@ export function BudgetDock({
   budget,
   days,
   today,
+  record,
   onOpen,
   openerRef,
 }: {
@@ -33,6 +34,8 @@ export function BudgetDock({
   days: TripDay[];
   // 여행 중이면 오늘, 아니면 null.
   today: string | null;
+  // 떼어 낸 기록(#103): 새 지출은 내 돈만, 모임 예산을 정하라는 문구 없음.
+  record: boolean;
   onOpen: () => void;
   // 요약 버튼. 예산 시트를 닫았는데 연 버튼이 사라졌을 때(예산을 처음 정함) 초점을 여기로 돌린다.
   openerRef?: React.Ref<HTMLButtonElement>;
@@ -54,8 +57,15 @@ export function BudgetDock({
     selected === "all" ? null : (days.find((d) => d.date === selected) ?? null);
   const defaultDate = day ? day.date : (today ?? "");
   // 새 지출의 누구 돈은 방식대로(설계 §5.1): 모임 통장 → 모임, 각자 → 내 돈, 둘 다 → 고르기(처음은 모임).
-  const sides: Side[] =
-    config.mode === "both" ? ["shared", "mine"] : [defaultSide(config.mode)];
+  // 기록(#103)에서는 내 돈만(모임 쪽 쓰기는 서버가 막는다).
+  const sides: Side[] = record
+    ? ["mine"]
+    : config.mode === "both"
+      ? ["shared", "mine"]
+      : [defaultSide(config.mode)];
+  // 이 지갑의 예산을 정할 수 있는가: 모임 통장 여행의 남은 내 돈은 아님, 기록의 모임 예산(사본)도 아님.
+  const settableOf = (wallet: PanelWallet) =>
+    wallet.side === "mine" ? config.mode !== "shared" : !record;
 
   function openSheet() {
     setOpenCount((n) => n + 1);
@@ -84,9 +94,7 @@ export function BudgetDock({
                 wallet={wallets[0]}
                 currency={config.currency}
                 day={day}
-                settable={
-                  wallets[0].side !== "mine" || config.mode !== "shared"
-                }
+                settable={settableOf(wallets[0])}
               />
             ) : (
               wallets.map((wallet) => (
@@ -95,7 +103,7 @@ export function BudgetDock({
                   wallet={wallet}
                   currency={config.currency}
                   day={day}
-                  settable={wallet.side !== "mine" || config.mode !== "shared"}
+                  settable={settableOf(wallet)}
                   compact
                 />
               ))

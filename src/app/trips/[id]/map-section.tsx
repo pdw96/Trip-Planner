@@ -165,6 +165,7 @@ export async function MapSection({
       }
       maps={maps}
       naverMap={usesNaverMap(trip.countryCode)}
+      record={trip.detachedAt !== null}
     />
   );
 }

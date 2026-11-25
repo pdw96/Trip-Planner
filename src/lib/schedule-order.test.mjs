@@ -5,6 +5,7 @@ import {
   isReorderOf,
   keepsTimeOrder,
   orderWithItem,
+  settleMovedItems,
 } from "./schedule-order.ts";
 
 const o = (id, time = null) => ({ id, time });
@@ -115,4 +116,21 @@ test("isReorderOf rejects missing/extra/duplicate", () => {
   assert.equal(isReorderOf(["a", "b", "c"], ["a", "b"]), false);
   assert.equal(isReorderOf(["a", "a"], ["a", "b"]), false);
   assert.equal(isReorderOf(["a", "c"], ["a", "b"]), false);
+});
+
+test("settleMovedItems: 옮겨 온 일정을 시각 순 자리에", () => {
+  const order = [
+    o("a", "09:00"),
+    o("b"),
+    o("c", "18:00"),
+    o("m1", "12:00:00"),
+    o("m2"),
+  ];
+  assert.deepEqual(settleMovedItems(order, ["m1", "m2"]), [
+    "a",
+    "b",
+    "m1",
+    "c",
+    "m2",
+  ]);
 });

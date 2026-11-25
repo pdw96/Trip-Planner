@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { secondaryButtonClass } from "@/app/ui/styles";
 import { findInvite } from "@/db/queries/trip-members";
+import { getReattachPreview } from "@/db/queries/trip-records";
 import { getTrip } from "@/db/queries/trips";
 import { hashInviteToken, isInviteToken } from "@/lib/invite-token";
 import { getCurrentUser } from "@/lib/session";
@@ -56,6 +57,9 @@ async function Invite({
     redirect(`/trips/${invite.tripId}`);
   }
 
+  const preview = await getReattachPreview(user.id, invite.tripId);
+  const notice = reattachNotice(preview);
+
   return (
     <>
       <p className="max-w-md break-words text-lg">
@@ -64,10 +68,24 @@ async function Invite({
           {formatLongRange(invite.startDate, invite.endDate)}
         </span>
       </p>
+      {notice && <p className="max-w-md text-sm text-sub">{notice}</p>}
       <p className="text-sub">함께할까요?</p>
       <JoinButton token={token} />
     </>
   );
+}
+
+// 전에 떼어 낸 기록이 있을 때의 안내(#103). 한 번에 가장 최근 기록 하나만 붙으므로 "모두"라고 쓰지 않는다.
+function reattachNotice(preview: { reattach: boolean; blocked: boolean }) {
+  const lead = "전에 이 여행에서 떼어 낸 기록이 있어요.";
+  if (preview.reattach) {
+    const base = `${lead} 참여하면 내 일정과 내 돈이 원래 자리로 돌아가고, 떼어 낸 기록은 목록에서 없어져요.`;
+    return preview.blocked ? `${base} 통화가 바뀐 기록은 따로 남아요.` : base;
+  }
+  if (preview.blocked) {
+    return `${lead} 그 사이 예산 통화가 바뀌어 기록은 다시 붙지 않고 내 여행 목록에 따로 남아요.`;
+  }
+  return null;
 }
 
 function InvalidInvite({ signedIn }: { signedIn: boolean }) {

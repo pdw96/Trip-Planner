@@ -3,7 +3,7 @@ import { and, asc, eq, exists, inArray, type SQL, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { places, tripBases, trips } from "@/db/schema";
 import { isUuid } from "@/lib/ids";
-import { accessibleTrips } from "./trips";
+import { accessibleTrips, editableTrips } from "./trips";
 
 // 기준 숙소 쿼리. 여행 접근은 trips.ts 의 accessibleTrips 조건 하나로만 판단한다(schedule-items.ts 와 같은 방식).
 // neon-http 는 대화형 트랜잭션이 없으므로, 소유권 확인은 읽기·쓰기 문 자체의 where 조건으로 한다.
@@ -39,6 +39,7 @@ export async function listTripBases(
 // 한 문으로: 접근할 수 있는 여행이고, placeId 가 있으면 그 장소가 같은 여행의 것일 때만 넣거나 바꾼다.
 // 내 여행 id 에 남의 여행 장소 id 를 섞어 보내면 select 가 0행이라 아무것도 바뀌지 않는다.
 // 넣거나 바뀐 행이 없으면(없거나 남의 것이거나 id 형식이 틀림) false.
+// 기록 여행(#103)에서는 기준점이 사본이라 정하지 않는다(editableTrips, 0행 → false).
 export async function setTripBase(
   userId: string,
   tripId: string,
@@ -47,7 +48,7 @@ export async function setTripBase(
 ): Promise<boolean> {
   if (!validIds(tripId)) return false;
   if (placeId !== null && !validIds(placeId)) return false;
-  const conditions: SQL[] = [eq(trips.id, tripId), accessibleTrips(userId)];
+  const conditions: SQL[] = [eq(trips.id, tripId), editableTrips(userId)];
   if (placeId !== null) {
     conditions.push(
       exists(

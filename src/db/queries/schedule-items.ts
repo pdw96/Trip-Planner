@@ -14,7 +14,7 @@ import { EXTRA_TITLE_MAX } from "@/lib/budget-input";
 import { isUuid } from "@/lib/ids";
 import type { GooglePlacePick, ScheduleInput } from "@/lib/schedule-input";
 import type { OrderItem } from "@/lib/schedule-order";
-import { accessibleTrips } from "./trips";
+import { accessibleTrips, editableTrips, isRecordTripSql } from "./trips";
 
 // 일정 쿼리. 여행 접근은 trips.ts 의 accessibleTrips 조건 하나로만 판단한다(공유 #15 가 그것만 바꾸도록).
 // neon-http 는 대화형 트랜잭션이 없으므로, 소유권 확인은 읽기·쓰기 문 자체의 where 조건으로 한다.
@@ -38,25 +38,43 @@ function itemCondition(userId: string, tripId: string, itemId: string): SQL {
   ) as SQL;
 }
 
+// 쓰기용 짝(#103): 고치기·지우기·끝냄 대상 일정. 기록 여행(#103)에서는 내 나만 일정(for_user_id = 나)만 쓴다.
+// 모두 일정 사본과 남의 일정은 0행. tripId 는 validIds 를 거친 값이다(isRecordTripSql 의 전제).
+function writableItemCondition(
+  userId: string,
+  tripId: string,
+  itemId: string,
+): SQL {
+  return and(
+    itemCondition(userId, tripId, itemId),
+    sql`(NOT ${isRecordTripSql(tripId)} OR ${scheduleItems.forUserId} = ${userId}::text)`,
+  ) as SQL;
+}
+
 function validIds(...ids: string[]): boolean {
   return ids.every(isUuid);
 }
 
 // "누구"(for_user_id, #90)로 쓸 수 있는 값인지. 쓰는 문의 where 에 넣어 사람 확인과 쓰기를 한 문으로 한다
-// (neon-http 는 트랜잭션이 없다). null(모두)이면 늘 참. 값이면 그 여행의 주인이거나 함께하는 사람이어야 하고,
+// (neon-http 는 트랜잭션이 없다). null(모두)이면 보통 여행에서는 참. 값이면 그 여행의 주인이거나 함께하는 사람이어야 하고,
 // 고치기(itemId 있음)에서는 그 일정의 지금 값과 같아도 된다(나간 사람 값을 그대로 저장, 설계 §5.6).
+// 기록 여행(#103)에서는 새 값이 언제나 쓰는 사람 본인이어야 한다(모두·남은 0행).
 // 하위 질의의 표 이름은 바깥 문과 같아도 안쪽 표를 가리킨다.
 function forUserAllowed(
+  userId: string,
   tripId: string,
   forUserId: string | null,
   itemId: string | null,
 ): SQL {
-  if (forUserId === null) return sql`true`;
+  const notRecord = sql`NOT ${isRecordTripSql(tripId)}`;
+  if (forUserId === null) return notRecord;
+  const recordOk = sql`(${notRecord} OR ${forUserId}::text = ${userId}::text)`;
   const isOwner = sql`exists (select 1 from ${trips} where ${trips.id} = ${tripId}::uuid and ${trips.userId} = ${forUserId}::text)`;
   const isMember = sql`exists (select 1 from ${tripMembers} where ${tripMembers.tripId} = ${tripId}::uuid and ${tripMembers.userId} = ${forUserId}::text)`;
-  if (itemId === null) return sql`(${isOwner} or ${isMember})`;
+  if (itemId === null)
+    return sql`(${recordOk} and (${isOwner} or ${isMember}))`;
   const keepsCurrent = sql`exists (select 1 from ${scheduleItems} where ${scheduleItems.id} = ${itemId}::uuid and ${scheduleItems.tripId} = ${tripId}::uuid and ${scheduleItems.forUserId} = ${forUserId}::text)`;
-  return sql`(${isOwner} or ${isMember} or ${keepsCurrent})`;
+  return sql`(${recordOk} and (${isOwner} or ${isMember} or ${keepsCurrent}))`;
 }
 
 // 입력 중 일정 열에 쓰는 값만. Google 장소(google)는 Google 장소 경로의 쿼리가 따로 쓴다.
@@ -189,6 +207,8 @@ function insertedRow(
     // 자리는 액션이 넣은 뒤 그날 순서를 다시 쓰며 정한다(#41).
     position: sql<number | null>`null::integer`.as("position"),
     forUserId: sql<string | null>`${input.forUserId}::text`.as("for_user_id"),
+    // 사본 표시(#103)는 떼기만 쓴다. 새 일정은 비운다.
+    copiedFromId: sql<string | null>`null::uuid`.as("copied_from_id"),
     createdAt: sql<Date>`now()`.as("created_at"),
     updatedAt: sql<Date>`now()`.as("updated_at"),
   };
@@ -197,13 +217,14 @@ function insertedRow(
 // 접근할 수 있는 여행이고 "누구"가 쓸 수 있는 값일 때만 넣는다(forUserAllowed). 넣지 못했으면 null.
 // 두 분기 모두 한 문(insert … select)이다. 장소를 이으면(placeId) places 에서 고르고 place 글자는 그 장소의 이름표로
 // 저장한다(장소가 같은 여행·접근 가능한 것이 아니면 0행). 잇지 않으면 trips 에서 고르고 적은 글자를 그대로 둔다.
+// 기록 여행(#103)에서는 내 나만 일정(forUserId = 나)만 넣는다(forUserAllowed). 기록에 이미 있는 장소는 고를 수 있다.
 export async function createScheduleItem(
   userId: string,
   tripId: string,
   input: ScheduleInput,
 ): Promise<string | null> {
   if (!validIds(tripId)) return null;
-  const allowed = forUserAllowed(tripId, input.forUserId, null);
+  const allowed = forUserAllowed(userId, tripId, input.forUserId, null);
   if (input.placeId !== null) {
     if (!validIds(input.placeId)) return null;
     const [row] = await db
@@ -278,6 +299,7 @@ function chosenPlaceCtes(
 // 장소 넣기(같은 Google 장소가 이미 있으면 그것) + 일정 넣기. 접근할 수 없는 여행이거나 "누구"가 쓸 수 없는 값이면
 // (forUserAllowed 를 t 에 넣음) 아무것도 넣지 않고 null.
 // 좌표는 서버가 Google 에서 받은 값만 받는다.
+// 기록 여행(#103)에서는 장소를 새로 만들지 않으므로 이 경로 전체를 막는다(editableTrips, 설계 §5.5).
 export async function createScheduleItemWithNewPlace(
   userId: string,
   tripId: string,
@@ -291,8 +313,8 @@ export async function createScheduleItemWithNewPlace(
     .where(
       and(
         eq(trips.id, tripId),
-        accessibleTrips(userId),
-        forUserAllowed(tripId, input.forUserId, null),
+        editableTrips(userId),
+        forUserAllowed(userId, tripId, input.forUserId, null),
       ),
     )
     .getSQL();
@@ -308,6 +330,7 @@ export async function createScheduleItemWithNewPlace(
 
 // 장소 넣기(같은 것이 있으면 그것) + 일정 고치기. t 에 "이 일정이 이 여행에 있음"과 "누구" 조건(forUserAllowed)을
 // 넣어, 둘 중 하나라도 안 맞으면 장소도 들어가지 않는다. 바뀐 행이 없으면 false.
+// 기록 여행(#103)에서는 장소를 새로 만들지 않으므로 이 경로 전체를 막는다(editableTrips, 설계 §5.5).
 export async function updateScheduleItemWithNewPlace(
   userId: string,
   tripId: string,
@@ -322,9 +345,9 @@ export async function updateScheduleItemWithNewPlace(
     .where(
       and(
         eq(trips.id, tripId),
-        accessibleTrips(userId),
+        editableTrips(userId),
         sql`exists (select 1 from ${scheduleItems} where ${scheduleItems.id} = ${itemId}::uuid and ${scheduleItems.tripId} = ${trips.id})`,
-        forUserAllowed(tripId, input.forUserId, itemId),
+        forUserAllowed(userId, tripId, input.forUserId, itemId),
       ),
     )
     .getSQL();
@@ -347,6 +370,7 @@ export async function updateScheduleItemWithNewPlace(
 
 // 바뀐 행이 없으면(없거나 남의 것이거나 id 형식이 틀림, 이을 장소나 "누구"가 조건에 안 맞음) false.
 // 장소를 이으면 place 글자는 그 장소의 이름표로, 잇지 않으면 place_id 를 비우고 적은 글자를 그대로 둔다.
+// 기록 여행(#103)에서는 내 나만 일정만, 그대로 내 것으로 고친다(writableItemCondition + forUserAllowed).
 export async function updateScheduleItem(
   userId: string,
   tripId: string,
@@ -354,7 +378,7 @@ export async function updateScheduleItem(
   input: ScheduleInput,
 ): Promise<boolean> {
   if (!validIds(tripId, itemId)) return false;
-  const allowed = forUserAllowed(tripId, input.forUserId, itemId);
+  const allowed = forUserAllowed(userId, tripId, input.forUserId, itemId);
   if (input.placeId !== null) {
     if (!validIds(input.placeId)) return false;
     // 한 문(update … from places): 일정과 장소가 모두 같은 접근 가능한 여행일 때만 바뀐다.
@@ -364,7 +388,7 @@ export async function updateScheduleItem(
       .from(places)
       .where(
         and(
-          itemCondition(userId, tripId, itemId),
+          writableItemCondition(userId, tripId, itemId),
           placeInAccessibleTrip(userId, tripId, input.placeId),
           allowed,
         ),
@@ -375,11 +399,12 @@ export async function updateScheduleItem(
   const rows = await db
     .update(scheduleItems)
     .set({ ...columnsOf(input), placeId: null })
-    .where(and(itemCondition(userId, tripId, itemId), allowed))
+    .where(and(writableItemCondition(userId, tripId, itemId), allowed))
     .returning({ id: scheduleItems.id });
   return rows.length > 0;
 }
 
+// 기록 여행(#103)에서는 내 나만 일정만 끝냄을 표시한다(writableItemCondition, 모두 일정 사본은 0행 → false).
 export async function setScheduleItemDone(
   userId: string,
   tripId: string,
@@ -390,7 +415,7 @@ export async function setScheduleItemDone(
   const rows = await db
     .update(scheduleItems)
     .set({ done })
-    .where(itemCondition(userId, tripId, itemId))
+    .where(writableItemCondition(userId, tripId, itemId))
     .returning({ id: scheduleItems.id });
   return rows.length > 0;
 }
@@ -409,6 +434,7 @@ export async function setScheduleItemDone(
 //   moved 의 스냅숏에 없어 옮겨지지 않고 cascade 로 지워진다. 창은 이 문 하나 길이로 좁고, 받아들인다.
 // 이 동작은 마이그레이션 적용 뒤 실제 DB 에서 확인한다(구현 계획 Task 9 Step 4). 어긋나면 moved 를 먼저 따로 실행한다.
 // 제목은 일정 밖 항목 이름 상한(EXTRA_TITLE_MAX)에 맞춰 자른다(LEFT 와 입력 검증 모두 글자(코드 포인트) 수).
+// 기록 여행(#103)에서는 내 나만 일정만 지운다(s 에 writableItemCondition, 모두 일정 사본이면 s 가 비어 아무것도 안 바뀜).
 export async function deleteScheduleItem(
   userId: string,
   tripId: string,
@@ -421,7 +447,7 @@ export async function deleteScheduleItem(
         LEFT(COALESCE(NULLIF(${scheduleItems.title}, ''), p.label, NULLIF(${scheduleItems.place}, ''), '지운 일정'), ${EXTRA_TITLE_MAX}::integer) AS title
       FROM ${scheduleItems}
       LEFT JOIN ${places} p ON p.id = ${scheduleItems.placeId}
-      WHERE ${itemCondition(userId, tripId, itemId)}
+      WHERE ${writableItemCondition(userId, tripId, itemId)}
     ),
     moved AS (
       UPDATE budget_items

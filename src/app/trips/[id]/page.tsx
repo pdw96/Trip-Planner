@@ -2,10 +2,12 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { buttonClass } from "@/app/ui/styles";
+import { listRecordCompanions } from "@/db/queries/trip-records";
 import { getTrip } from "@/db/queries/trips";
 import { tripDays } from "@/lib/schedule";
 import { getCurrentUser } from "@/lib/session";
 import { formatLongRange, stayLength, todayInSeoul } from "@/lib/trip-dates";
+import { companionsLine, recordNotice } from "@/lib/trip-records";
 import { DeleteTripButton } from "../delete-trip-button";
 import { BudgetSection } from "./budget-section";
 import { DayRouteProvider } from "./day-route-store";
@@ -38,6 +40,9 @@ async function TripDetail({
   const today = todayInSeoul();
 
   const todayInTrip = today >= trip.startDate && today <= trip.endDate;
+  // 떼어 낸 기록(#103): 함께 쓰던 것은 보기만, 내 몫만 쓴다. 각 칸은 trip.detachedAt 으로 같은 판단을 한다.
+  const record = trip.detachedAt !== null;
+  const companions = record ? await listRecordCompanions(user.id, trip.id) : [];
 
   return (
     <article className="flex flex-col gap-8">
@@ -47,13 +52,17 @@ async function TripDetail({
             ← 내 여행
           </Link>
           <div className="flex gap-2">
-            <Link
-              href={`/trips/${trip.id}/edit`}
-              className={buttonClass("secondary", "small")}
-            >
-              고치기
-            </Link>
-            {trip.isOwner && <DeleteTripButton tripId={trip.id} />}
+            {!record && (
+              <Link
+                href={`/trips/${trip.id}/edit`}
+                className={buttonClass("secondary", "small")}
+              >
+                고치기
+              </Link>
+            )}
+            {trip.isOwner && (
+              <DeleteTripButton tripId={trip.id} record={record} />
+            )}
           </div>
         </div>
         <div className="flex flex-col gap-1">
@@ -63,14 +72,25 @@ async function TripDetail({
             · {stayLength(trip.startDate, trip.endDate)}
           </p>
         </div>
+        {trip.detachedAt !== null && (
+          <RecordBanner
+            detachedAt={trip.detachedAt}
+            ownerName={
+              companions.find((person) => person.wasOwner)?.name ?? null
+            }
+            names={companions.map((person) => person.name)}
+          />
+        )}
         {trip.notes && (
           <p className="whitespace-pre-wrap break-words rounded-[14px] bg-surface px-4 py-3">
             {trip.notes}
           </p>
         )}
-        <Suspense fallback={null}>
-          <MembersSection userId={user.id} trip={trip} />
-        </Suspense>
+        {!record && (
+          <Suspense fallback={null}>
+            <MembersSection userId={user.id} trip={trip} />
+          </Suspense>
+        )}
       </header>
       {/* 지도 N일차 탭과 일정표(#37)가 구간 이동 정보를 함께 쓴다. */}
       <DayRouteProvider key={trip.id} tripId={trip.id}>
@@ -100,5 +120,27 @@ async function TripDetail({
         </SelectedDayProvider>
       </DayRouteProvider>
     </article>
+  );
+}
+
+// 떼어 낸 기록(#103)의 안내 띠와 함께한 사람 줄. 주인이 탈퇴했으면 "함께한 여행에서".
+function RecordBanner({
+  detachedAt,
+  ownerName,
+  names,
+}: {
+  detachedAt: Date;
+  ownerName: string | null;
+  names: string[];
+}) {
+  const line = companionsLine(names);
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="rounded-[14px] bg-warn-surface px-4 py-3 text-sm break-words">
+        <strong className="font-semibold">떼어 낸 기록</strong> ·{" "}
+        {recordNotice(ownerName, detachedAt)}
+      </p>
+      {line && <p className="text-sm text-sub break-words">{line}</p>}
+    </div>
   );
 }

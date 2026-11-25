@@ -61,3 +61,18 @@ export function isReorderOf(ids: string[], current: string[]): boolean {
   if (set.size !== ids.length || ids.length !== current.length) return false;
   return current.every((id) => set.has(id));
 }
+
+// 떼어 낸 여행에서 옮겨 온 일정(movedIds, 옮겨 온 순서)을 그날 순서의 시각 순 자리에 넣은 id 목록.
+// 옮겨 온 일정은 order 에 들어 있어도 먼저 빼고, insertByTime 으로 하나씩 넣는다.
+export function settleMovedItems(
+  order: OrderItem[],
+  movedIds: string[],
+): string[] {
+  const moved = new Set(movedIds);
+  let settled = order.filter((item) => !moved.has(item.id));
+  for (const id of movedIds) {
+    const item = order.find((other) => other.id === id);
+    if (item) settled = insertByTime(settled, item);
+  }
+  return settled.map((item) => item.id);
+}

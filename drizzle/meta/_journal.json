@@ -78,6 +78,13 @@
       "when": 1795599185862,
       "tag": "0010_large_sprite",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1795610289900,
+      "tag": "0011_fat_sandman",
+      "breakpoints": true
     }
   ]
 }

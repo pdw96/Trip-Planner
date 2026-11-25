@@ -14,7 +14,7 @@ import {
   useTransition,
 } from "react";
 import { buttonClass, errorTextClass, fieldClass } from "@/app/ui/styles";
-import type { ActualMoney, Money } from "@/lib/budget";
+import { type ActualMoney, formatMoney, type Money } from "@/lib/budget";
 import {
   type BudgetMode,
   defaultSideFor,
@@ -33,6 +33,7 @@ import {
   createScheduleItemAction,
   deleteScheduleItemAction,
   setScheduleItemDoneAction,
+  setScheduleItemMineMoneyAction,
   updateScheduleItemAction,
 } from "../schedule-actions";
 import { SideSwitch } from "./budget-forms";
@@ -46,6 +47,7 @@ import {
 import {
   type DateOption,
   ScheduleItemForm,
+  ScheduleMoneyForm,
   type WhoOption,
 } from "./schedule-item-form";
 import { useSelectedDay } from "./selected-day";
@@ -98,6 +100,9 @@ function rowSides(budget: EditorBudget, money: RowItem["money"]): Side[] {
   });
 }
 
+// 떼어 낸 기록(#103)의 금액 칸은 내 돈 쪽만(모임 쪽 쓰기는 서버가 막는다).
+const RECORD_SIDES: Side[] = ["mine"];
+
 const ERROR_VISIBLE_MS = 4000;
 
 // 노선 줄 칸: 시각 | 레일·역 | 내용 | 손잡이. 이동 줄·일정 추가 줄도 같은 칸을 쓴다(schedule-day-items).
@@ -106,7 +111,8 @@ export const ROW_GRID =
 // 레일 토막. 색은 날 묶음이 물려준 --line(노선 색, 기간 밖은 회색).
 export const RAIL = "absolute left-1/2 w-1.5 -translate-x-1/2 bg-(--line)";
 
-// 입력칸은 화면 전체에서 하나만 열린다. 키: "add:<날짜>" 또는 "edit:<일정 id>".
+// 입력칸은 화면 전체에서 하나만 열린다. 키: "add:<날짜>", "edit:<일정 id>", "actual:<일정 id>"(실제 지출 칸),
+// "money:<일정 id>"(기록의 모두 일정 사본에서 여는 내 돈 양식, #103).
 // places: 이 여행의 장소(숙소 먼저). 양식의 장소 고르기와 이어진 장소의 링크에 쓴다.
 // searchEnabled: 장소 칸에서 Google 검색을 보일지(브라우저 키가 있을 때, #35).
 // budget: 예산 설정의 두 통화(#14). 없으면 null(금액 칸 대신 안내).
@@ -121,6 +127,9 @@ type OpenState = {
   people: WhoPerson[];
   // 국내 여행이면 장소·이동 링크를 네이버 지도로(#36).
   naverMap: boolean;
+  // 떼어 낸 기록(#103): 모두 일정은 보기만(내 돈만 적는다), 새 일정·고친 일정은 나만, 금액은 내 돈 쪽만, 장소는 Google 검색 없이
+  // 이 기록의 장소 고르기와 직접 적기만(서버가 같은 규칙으로 막는다). 끌어 옮기기는 그대로.
+  record: boolean;
   // 고른 날을 보다가 일정의 날짜를 옮기면 그 날 목록 아래에 잠깐 보이는 안내(#53 §5.4.1).
   moved: { fromDate: string; text: string } | null;
   setMoved: (moved: { fromDate: string; text: string } | null) => void;
@@ -145,6 +154,7 @@ export function ScheduleEditorProvider({
   viewerId,
   people,
   naverMap,
+  record,
   children,
 }: {
   places: PlaceOption[];
@@ -153,6 +163,7 @@ export function ScheduleEditorProvider({
   viewerId: string;
   people: WhoPerson[];
   naverMap: boolean;
+  record: boolean;
   children: React.ReactNode;
 }) {
   const [openKey, setOpenKey] = useState<string | null>(null);
@@ -164,11 +175,12 @@ export function ScheduleEditorProvider({
         openKey,
         setOpenKey,
         places,
-        searchEnabled: browserKey !== null,
+        searchEnabled: browserKey !== null && !record,
         budget,
         viewerId,
         people,
         naverMap,
+        record,
         moved,
         setMoved,
       }}
@@ -218,6 +230,7 @@ export function AddScheduleItem({
     budget,
     viewerId,
     people,
+    record,
   } = useOpen();
   const key = `add:${date}`;
 
@@ -237,6 +250,23 @@ export function AddScheduleItem({
         </span>
         <span className="text-sm text-sub">+ 일정 추가</span>
       </button>
+    );
+  }
+  if (record) {
+    // 기록의 새 일정은 언제나 나만(서버도 그것만 넣는다). 예산이 없으면 정할 수 없으니 안내도 없다.
+    return (
+      <ScheduleItemForm
+        mode="add"
+        action={createScheduleItemAction.bind(null, tripId, date)}
+        initialValues={{ ...EMPTY_SCHEDULE_FIELDS, date }}
+        places={places}
+        searchEnabled={searchEnabled}
+        budget={budget ?? undefined}
+        sides={budget ? RECORD_SIDES : undefined}
+        initialSide={budget ? "mine" : undefined}
+        fixedForUserId={viewerId}
+        onClose={() => setOpenKey(null)}
+      />
     );
   }
   return (
@@ -314,10 +344,15 @@ export function ScheduleItemRow({
     viewerId,
     people,
     naverMap,
+    record,
     setMoved,
   } = useOpen();
   const { selected } = useSelectedDay();
   const offRoute = item.who.kind === "other";
+  // 기록(#103)에서 내 나만 일정이 아닌 줄(모두 일정의 사본)은 고치기·지우기·끝냄 없이 보기만. 끌어 옮기기는 된다.
+  const readOnly = record && item.who.kind !== "me";
+  // 기록의 모두 일정 사본에는 내 돈만 적을 수 있다(설계 §5.5). 예산이 있으면 제목을 눌러 내 돈 양식을 연다.
+  const moneyOnly = readOnly && item.who.kind === "all" && budget !== null;
   const [expanded, setExpanded] = useState(false);
   // 펼치기·접기 단추는 서로 다른 요소라, 누른 뒤 초점을 새 단추로 옮긴다.
   const focusToggle = useRef(false);
@@ -328,10 +363,13 @@ export function ScheduleItemRow({
     }
   };
   const key = `edit:${item.id}`;
-  const editing = openKey === key;
+  const editing = !readOnly && openKey === key;
   // 완료 체크칸을 켜면 열리는 실제 지출 칸(#14 §5.7.3).
   const actualKey = `actual:${item.id}`;
-  const enteringActual = budget !== null && openKey === actualKey;
+  const enteringActual = !readOnly && budget !== null && openKey === actualKey;
+  // 기록의 모두 일정 사본에서 여는 내 돈 양식.
+  const moneyKey = `money:${item.id}`;
+  const enteringMoney = moneyOnly && openKey === moneyKey;
   // 입력칸으로 열린 줄은 끌지 않는다. 다른 줄이 움직일 때 자리를 비켜 주도록 노드는 늘 등록한다.
   const {
     attributes,
@@ -343,7 +381,7 @@ export function ScheduleItemRow({
     isDragging,
   } = useSortable({
     id: item.id,
-    disabled: !sortable || editing,
+    disabled: !sortable || editing || enteringMoney,
     attributes: { roleDescription: "순서 바꾸기" },
   });
   const sortStyle = {
@@ -445,7 +483,11 @@ export function ScheduleItemRow({
     };
     const shared = fieldsOf(item.money.shared);
     const mine = fieldsOf(item.money.mine);
-    const sides = budget ? rowSides(budget, item.money) : undefined;
+    const sides = budget
+      ? record
+        ? RECORD_SIDES
+        : rowSides(budget, item.money)
+      : undefined;
     const forUserId = whoValue(item.who, viewerId);
     const preferred = budget
       ? defaultSideFor(budget.mode, forUserId || null, viewerId)
@@ -459,8 +501,9 @@ export function ScheduleItemRow({
       !people.some((person) => person.userId === who.userId)
         ? { value: who.userId, label: who.label }
         : undefined;
+    // 기록(#103)에서는 칸 없이 늘 나로 보낸다(fixedForUserId).
     const editWhoOptions =
-      people.length >= 2 || item.who.kind !== "all"
+      !record && (people.length >= 2 || item.who.kind !== "all")
         ? whoOptions(people, departed)
         : undefined;
     // 실제가 있는 쪽은 펼쳐 연다. 완료한 일정은 실제가 없어도 처음 보이는 쪽을 펼쳐 연다(#89 전과 같은 모양).
@@ -494,15 +537,16 @@ export function ScheduleItemRow({
           dateOptions={dateOptions}
           places={places}
           searchEnabled={searchEnabled}
-          budget={budget}
+          budget={record ? (budget ?? undefined) : budget}
           sides={sides}
           initialSide={initialSide}
           sideFor={
-            budget
+            budget && !record
               ? (value) => defaultSideFor(budget.mode, value || null, viewerId)
               : undefined
           }
           whoOptions={editWhoOptions}
+          fixedForUserId={record ? viewerId : undefined}
           actual={{
             shared: actualOf(item.money.shared, "shared"),
             mine: actualOf(item.money.mine, "mine"),
@@ -512,6 +556,51 @@ export function ScheduleItemRow({
           }
           onDelete={onDelete}
           deleting={deleting}
+        />
+      </li>
+    );
+  }
+
+  if (enteringMoney && budget) {
+    const mine = {
+      estimate: amountFieldValues(item.money.mine?.estimate ?? null, budget),
+      actual: amountFieldValues(item.money.mine?.actual ?? null, budget),
+      detail: actualDetailValues(item.money.mine?.actual ?? null),
+    };
+    const shared = item.money.shared;
+    const sharedLines = [
+      shared?.estimate
+        ? `예상 ${formatMoney(shared.estimate.amount, shared.estimate.currency)}`
+        : null,
+      shared?.actual
+        ? `실제 ${formatMoney(shared.actual.amount, shared.actual.currency)}`
+        : null,
+    ].filter((line): line is string => line !== null);
+    return (
+      <li ref={setNodeRef} style={sortStyle}>
+        <ScheduleMoneyForm
+          action={setScheduleItemMineMoneyAction.bind(null, tripId, item.id)}
+          initialValues={{
+            ...EMPTY_SCHEDULE_FIELDS,
+            date: item.date,
+            mineEstimateAmount: mine.estimate.amount,
+            mineEstimateCurrency: mine.estimate.currency,
+            mineActualAmount: mine.actual.amount,
+            mineActualCurrency: mine.actual.currency,
+            mineActualPaidOn: mine.detail.paidOn,
+            mineActualRate: mine.detail.rate,
+          }}
+          name={item.title ?? item.place ?? ""}
+          sharedLines={sharedLines}
+          budget={budget}
+          actual={{
+            // 일정 고치기 양식과 같이 실제가 있거나 끝낸 일정이면 실제 칸을 펼쳐 연다.
+            open: item.money.mine?.actual != null || item.done,
+            rateSource: item.money.mine?.actual?.rateSource ?? null,
+          }}
+          onClose={() =>
+            setOpenKey((current) => (current === moneyKey ? null : current))
+          }
         />
       </li>
     );
@@ -627,28 +716,51 @@ export function ScheduleItemRow({
       <span className="relative flex justify-center self-stretch">
         {/* 줄의 py-1 만큼 위아래로 늘려 이웃 줄의 레일과 잇는다. 역 중심은 이 칸 위에서 20px. */}
         {rails}
-        <label className="relative z-10 flex size-10 cursor-pointer items-center justify-center">
-          <input
-            type="checkbox"
-            checked={done}
-            onChange={toggleDone}
-            aria-label={`${name} 완료`}
-            // 펼친 남의 일정은 내 동선 밖이라 점선 동그라미(#90).
-            className={`size-5 cursor-pointer appearance-none rounded-full border-[3px] border-(--line) bg-background checked:bg-(--line) ${offRoute ? "border-dashed" : ""}`}
-          />
-        </label>
+        {readOnly ? (
+          // 기록의 모두 일정(#103): 끝냄은 그날 모습 그대로 보이기만 한다.
+          <span className="relative z-10 flex size-10 items-center justify-center">
+            <span
+              className={`size-5 rounded-full border-[3px] border-(--line) ${done ? "bg-(--line)" : "bg-background"}`}
+            />
+            <span className="sr-only">{done ? "완료함" : "완료 안 함"}</span>
+          </span>
+        ) : (
+          <label className="relative z-10 flex size-10 cursor-pointer items-center justify-center">
+            <input
+              type="checkbox"
+              checked={done}
+              onChange={toggleDone}
+              aria-label={`${name} 완료`}
+              // 펼친 남의 일정은 내 동선 밖이라 점선 동그라미(#90).
+              className={`size-5 cursor-pointer appearance-none rounded-full border-[3px] border-(--line) bg-background checked:bg-(--line) ${offRoute ? "border-dashed" : ""}`}
+            />
+          </label>
+        )}
       </span>
       <div className="flex min-w-0 flex-col gap-0.5 pt-1.5">
         {/* 완료된 일정은 보조 색. 완료 뒤에 여는 실제 지출 칸은 그대로 둔다(#14 리뷰). */}
         <div className={`flex flex-col gap-0.5 ${done ? "text-sub" : ""}`}>
           <div className="flex items-start gap-2">
-            <button
-              type="button"
-              onClick={() => setOpenKey(key)}
-              className="min-w-0 text-left font-medium break-words hover:underline"
-            >
-              {name}
-            </button>
+            {moneyOnly ? (
+              <button
+                type="button"
+                onClick={() => setOpenKey(moneyKey)}
+                className="min-w-0 text-left font-medium break-words hover:underline"
+              >
+                {name}
+                <span className="sr-only">, 내 돈 적기</span>
+              </button>
+            ) : readOnly ? (
+              <span className="min-w-0 font-medium break-words">{name}</span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setOpenKey(key)}
+                className="min-w-0 text-left font-medium break-words hover:underline"
+              >
+                {name}
+              </button>
+            )}
             {item.who.kind === "me" && (
               <span className="mt-0.5 ml-auto">
                 <WhoBadge label="나" />
@@ -727,7 +839,10 @@ function ActualEntry({
   viewerId: string;
   onClose: () => void;
 }) {
-  const [sides] = useState(() => rowSides(budget, item.money));
+  const { record } = useOpen();
+  const [sides] = useState(() =>
+    record ? RECORD_SIDES : rowSides(budget, item.money),
+  );
   const [side, setSide] = useState<Side>(() => {
     const preferred = defaultSideFor(
       budget.mode,

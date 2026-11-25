@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   bigint,
   boolean,
   check,
@@ -117,6 +118,12 @@ export const trips = pgTable(
     inviteTokenCreatedAt: timestamp("invite_token_created_at", {
       withTimezone: true,
     }),
+    // 떼어 낸 기록(#103). detached_at 이 있으면 기록 여행(주인 = 나간 사람). 원래 여행이 지워지면 detached_from_trip_id 만 null.
+    detachedFromTripId: uuid("detached_from_trip_id").references(
+      (): AnyPgColumn => trips.id,
+      { onDelete: "set null" },
+    ),
+    detachedAt: timestamp("detached_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -127,6 +134,14 @@ export const trips = pgTable(
   },
   (t) => [
     index("trips_user_id_idx").on(t.userId),
+    check(
+      "trips_detached_check",
+      sql`${t.detachedFromTripId} IS NULL OR ${t.detachedAt} IS NOT NULL`,
+    ),
+    // 고유 아님: 같은 여행에서 떼어 낸 기록이 한 사람에게 여럿일 수 있다.
+    index("trips_detached_from_idx")
+      .on(t.userId, t.detachedFromTripId)
+      .where(sql`${t.detachedFromTripId} IS NOT NULL`),
     check("trips_dates_check", sql`${t.endDate} >= ${t.startDate}`),
     // 모양만 막는다. 어떤 코드가 있는 나라인지는 앱(src/lib/countries.ts)이 정한다.
     check(
@@ -162,6 +177,25 @@ export const tripMembers = pgTable(
 );
 
 export type TripMember = typeof tripMembers.$inferSelect;
+
+// --- 기록 여행의 함께한 사람 (#103) ---
+// 기록 여행에 그때 함께한 사람. 이름은 저장하지 않고 user.name 에서 읽는다. 탈퇴하면 행이 함께 지워진다.
+
+export const tripRecordCompanions = pgTable(
+  "trip_record_companions",
+  {
+    tripId: uuid("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    wasOwner: boolean("was_owner").notNull().default(false),
+  },
+  (t) => [primaryKey({ columns: [t.tripId, t.userId] })],
+);
+
+export type TripRecordCompanion = typeof tripRecordCompanions.$inferSelect;
 
 // --- 장소 ---
 // Google 값은 google_place_id(무기한)와 lat·lng(30일, coords_fetched_at 기준)만 저장한다. label 은 사용자가 확인한 이름표다.
@@ -231,6 +265,8 @@ export const scheduleItems = pgTable(
     forUserId: text("for_user_id").references(() => user.id, {
       onDelete: "cascade",
     }),
+    // 기록 안 모두 일정 사본의 원래 일정 id(#103). 다시 붙일 때 내 돈을 원래 일정에 잇는 데만 쓴다.
+    copiedFromId: uuid("copied_from_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
