@@ -4,7 +4,7 @@ import { cache } from "react";
 import { db } from "@/db";
 import { tripMembers, trips, user } from "@/db/schema";
 import { isUuid } from "@/lib/ids";
-import { detachMembersCtes } from "./trip-records";
+import { detachMembersCtes, reattachRecordCtes } from "./trip-records";
 import { accessibleTrips, ownedTrips } from "./trips";
 
 // 함께하는 사람·초대 링크 쿼리(#15). 보기는 accessibleTrips, 링크·내보내기는 ownedTrips 를 같은 SQL 문 안에 넣는다.
@@ -148,24 +148,58 @@ export async function findInvite(hash: string): Promise<InvitePreview | null> {
   return row ?? null;
 }
 
+export type JoinResult = {
+  tripId: string;
+  // 붙인 기록 R 의 id(같은 문에서 지웠다). 붙지 않았으면 null.
+  reattachedRecordId: string | null;
+  // R 에서 T 로 옮긴 나만 일정(날짜 "YYYY-MM-DD", 시각 "HH:MM:SS"). 부르는 쪽이 그날 순서를 맞춘다.
+  movedItems: { id: string; date: string; time: string | null }[];
+};
+
 // 링크 확인과 넣기를 한 문으로 한다. 주인·상한 초과·틀린 해시·이미 멤버면 null.
 // 동시에 참여하면 상한을 조금 넘을 수 있다(설계 §5.1).
 // 기록 여행(#103)에는 참여하지 않는다(t.detached_at IS NULL, 링크가 남아 있어도 null).
+// 같은 문에서 이 사람이 이 여행에서 떼어 낸 기록 하나를 붙인다(#103 §5.4, trip-records.ts 의 reattachRecordCtes).
+// 행은 옮긴 일정마다 하나(없으면 일정 칸이 빈 한 행), 참여하지 못했으면 0행이다.
 export async function joinTrip(
   userId: string,
   hash: string,
-): Promise<string | null> {
-  const result = await db.execute<{ trip_id: string }>(sql`
-    INSERT INTO ${tripMembers} (trip_id, user_id)
-    SELECT t.id, ${userId}::text FROM ${trips} t
-    WHERE t.invite_token_hash = ${hash}::text
-      AND t.detached_at IS NULL
-      AND t.user_id <> ${userId}::text
-      AND (SELECT count(*) FROM ${tripMembers} m WHERE m.trip_id = t.id) < ${MAX_MEMBERS_PER_TRIP}
-    ON CONFLICT DO NOTHING
-    RETURNING trip_id
-  `);
-  return result.rows[0]?.trip_id ?? null;
+): Promise<JoinResult | null> {
+  const result = await db.execute<{
+    trip_id: string;
+    reattached_record_id: string | null;
+    item_id: string | null;
+    item_date: string | null;
+    item_time: string | null;
+  }>(sql`
+    WITH joined AS (
+      INSERT INTO trip_members (trip_id, user_id)
+      SELECT t.id, ${userId}::text FROM trips t
+      WHERE t.invite_token_hash = ${hash}::text
+        AND t.detached_at IS NULL
+        AND t.user_id <> ${userId}::text
+        AND (SELECT count(*) FROM trip_members m WHERE m.trip_id = t.id) < ${MAX_MEMBERS_PER_TRIP}
+      ON CONFLICT DO NOTHING
+      RETURNING trip_id, user_id
+    ),
+    ${reattachRecordCtes(userId)}
+    SELECT j.trip_id, (SELECT id FROM gone_record) AS reattached_record_id,
+      bi.id AS item_id, bi.date::text AS item_date, bi.time::text AS item_time
+    FROM joined j
+    LEFT JOIN back_items bi ON true
+    LEFT JOIN item_src src ON src.id = bi.id
+    ORDER BY bi.date, src.old_position NULLS LAST, bi.time NULLS LAST, bi.id`);
+  const first = result.rows[0];
+  if (!first) return null;
+  return {
+    tripId: first.trip_id,
+    reattachedRecordId: first.reattached_record_id ?? null,
+    movedItems: result.rows.flatMap((row) =>
+      row.item_id !== null && row.item_date !== null
+        ? [{ id: row.item_id, date: row.item_date, time: row.item_time }]
+        : [],
+    ),
+  };
 }
 
 // [참여] 실패 사유를 가리는 데만 쓴다. 초대 해시로 찾은 여행에만 부른다(findInvite 와 같은 까닭으로 userId 를 받지 않는다).

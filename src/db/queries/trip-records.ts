@@ -226,6 +226,165 @@ export function detachMembersCtes(
     )`;
 }
 
+// 붙이기(설계 §5.4)의 통화 판정: 기록(별칭 recordAlias 의 trips 행)에 있는 userId 의 내 돈 행이 모두, 예상·실제 통화가
+// 대상 여행의 지금 예산 통화나 현지 통화인가. 대상에 예산 설정이 없는데 금액 행이 있으면 false. 행이 없으면 true.
+// 내 예산(trip_personal_budgets)의 통화는 보지 않는다(옮긴 뒤 "낡은 내 예산" 처리가 맡는다).
+// recordAlias 는 코드에 적은 별칭만 받는다(SQL 에 그대로 들어간다).
+export function currencyFitsSql(
+  recordAlias: string,
+  targetTripId: SQL,
+  userId: string,
+): SQL {
+  if (!/^[a-z_][a-z0-9_]*$/.test(recordAlias)) {
+    throw new Error("currencyFitsSql: 별칭 형식이 틀렸어요.");
+  }
+  const record = sql.raw(recordAlias);
+  return sql`NOT EXISTS (
+    SELECT 1 FROM budget_items cb
+    LEFT JOIN trip_budgets ctb ON ctb.trip_id = ${targetTripId}
+    WHERE cb.trip_id = ${record}.id
+      AND cb.owner_user_id = ${userId}::text
+      AND (
+        (cb.estimate_currency IS NOT NULL
+          AND cb.estimate_currency IS DISTINCT FROM ctb.currency
+          AND cb.estimate_currency IS DISTINCT FROM ctb.local_currency)
+        OR (cb.actual_currency IS NOT NULL
+          AND cb.actual_currency IS DISTINCT FROM ctb.currency
+          AND cb.actual_currency IS DISTINCT FROM ctb.local_currency)
+      )
+  )`;
+}
+
+// 붙이기(설계 §5.4): P(userId)가 여행 T 에 참여하는 문에서, P 가 T 에서 떼어 낸 기록 R 하나를 T 로 되돌리고 R 을 지운다.
+// 앞에 joined(trip_id, user_id) CTE(참여 INSERT … RETURNING)가 있어야 한다. 참여가 0행이면 rec 이 비어 아무것도 바뀌지 않는다.
+// 기록 id·여행 id 를 입력으로 받지 않는다. T 는 초대 해시로 넣은 joined 행, R 은 "P 가 주인이고 detached_from_trip_id = T" 로 찾는다(§5.9).
+// 떼기(detachMembersCtes)의 거울이다. 같은 규칙: 한 행을 두 CTE 가 쓰지 않는다(schedule_items 는 back_items 만,
+// budget_items 는 back_money 만, trip_personal_budgets 는 back_budget 만, trips 는 gone_record 만, trip_members 는 joined 만).
+//
+// CTE:
+//  rec          P 의 기록 가운데 detached_from_trip_id = T 이고 통화가 맞는(currencyFitsSql) 것 중 detached_at 가장 최근 하나.
+//               여럿이어도 한 번에 하나만 붙인다. 나머지는 기록으로 남는다(다음에 나갔다 들어오면 그다음 것이 붙는다).
+//  item_src     R 의 P 나만 일정(떼어 낸 동안 만든 것 포함)과 옮길 장소: R 의 장소 사본과 google_place_id 가 같은 T 의 장소.
+//               T 에 없으면 장소 id 를 비우고, 글자 장소(place)가 비었으면 그 장소 이름표를 넣는다(§5.4-1). 옛 순서(old_position)는
+//               돌려줄 movedItems 의 차례에만 쓴다.
+//  back_items   그 일정을 T 로(원래 id 그대로, position = NULL). 그날 순서는 joinTripAction 이 settleMovedItems 로 맞춘다.
+//  money_src    R 의 P 내 돈마다 T 에서 이을 일정: P 나만 일정에 붙은 것 → 그대로(일정과 함께 간다). 사본 일정에 붙은 것 →
+//               원래 일정(copied_from_id)이 아직 T 에 있고 T 에 그 일정·P 의 행이 없을 때만 원래 일정(budget_items_schedule_owner_idx
+//               를 깨지 않음), 아니면 일정 밖 지출(제목·날짜는 사본 일정에서, deleteScheduleItem 과 같은 제목 규칙). 일정 밖 → 그대로.
+//  back_money   그 행을 T 로.
+//  back_budget  P 의 내 예산을 T 로. T 에 (T, P) 행이 이미 있으면 옮기지 않는다(R 과 함께 지워진다).
+//  gone_record  R 을 지운다. 사본(모두 일정·장소·기준점·예산 설정·모임 지출)과 함께한 사람 행은 cascade 로 지워진다.
+//               cascade 는 문 끝에 돌아 같은 문에서 T 로 옮긴 행은 지우지 않는다(deleteTrip 의 떼기와 같은 까닭, PGlite 로 확인).
+//
+// 동시성(§6). 읽기는 문 시작 스냅숏이다.
+// - 참여는 새 멤버 행을 넣을 때만 붙인다(ON CONFLICT 로 0행이면 rec 이 비어 아무것도 안 함). 이미 멤버인 사람(옛 배포로 참여)은 붙지 않는다.
+// - 이 문과 동시에 P 가 R 에 새 내 돈·나만 일정을 넣으면 스냅숏에 없어 옮기지 않고 R 과 함께 지워진다. 같은 사람이 초대 화면에서
+//   [참여]를 누르는 동시에 다른 탭에서 기록을 고치는 경우뿐이라 받아들인다. 고치기(UPDATE)는 기다렸다가 고친 판을 옮긴다.
+// - 동시에 남이 원래 일정 X 나 T 의 장소를 지우면 옮긴 행의 FK 검사가 실패해 문 전체가 오류로 끝난다(아무것도 바뀌지 않고 다시 누르면 된다).
+// - 동시에 남이 T 의 예산 통화를 바꾸면 스냅숏의 통화로 판정해 맞지 않는 금액이 붙을 수 있다. upsertTripBudget 의 통화 잠금도
+//   스냅숏 판정이라 지금 두 사람이 동시에 금액·통화를 쓰는 창과 같다. 받아들인다.
+export function reattachRecordCtes(userId: string): SQL {
+  return sql`
+    rec AS (
+      SELECT r.id, j.trip_id AS to_trip_id
+      FROM joined j
+      JOIN trips r ON r.user_id = ${userId}::text
+        AND r.detached_from_trip_id = j.trip_id
+        AND r.detached_at IS NOT NULL
+      WHERE j.user_id = ${userId}::text
+        AND ${currencyFitsSql("r", sql`j.trip_id`, userId)}
+      ORDER BY r.detached_at DESC, r.id DESC
+      LIMIT 1
+    ),
+    item_src AS (
+      SELECT s.id, s.position AS old_position, tp.id AS to_place_id,
+        CASE WHEN rp.id IS NOT NULL AND tp.id IS NULL THEN COALESCE(NULLIF(s.place, ''), rp.label) ELSE s.place END AS place
+      FROM rec
+      JOIN schedule_items s ON s.trip_id = rec.id AND s.for_user_id = ${userId}::text
+      LEFT JOIN places rp ON rp.id = s.place_id
+      LEFT JOIN places tp ON tp.trip_id = rec.to_trip_id AND tp.google_place_id = rp.google_place_id
+    ),
+    back_items AS (
+      UPDATE schedule_items s
+      SET trip_id = rec.to_trip_id, place_id = src.to_place_id, place = src.place, position = NULL, updated_at = now()
+      FROM item_src src, rec
+      WHERE s.id = src.id AND s.trip_id = rec.id AND s.for_user_id = ${userId}::text
+      RETURNING s.id, s.date, s.time
+    ),
+    money_links AS (
+      SELECT b.id, b.schedule_item_id AS old_link, b.title AS old_title, b.date AS old_date,
+        CASE
+          WHEN b.schedule_item_id IS NULL THEN NULL
+          WHEN ri.for_user_id = ${userId}::text THEN b.schedule_item_id
+          WHEN x.id IS NOT NULL AND NOT EXISTS (
+            SELECT 1 FROM budget_items tb
+            WHERE tb.schedule_item_id = x.id AND tb.owner_user_id = ${userId}::text
+          ) THEN x.id
+        END AS new_link,
+        LEFT(COALESCE(NULLIF(ri.title, ''), rp.label, NULLIF(ri.place, ''), '지운 일정'), ${EXTRA_TITLE_MAX}::integer) AS item_title,
+        ri.date AS item_date
+      FROM rec
+      JOIN budget_items b ON b.trip_id = rec.id AND b.owner_user_id = ${userId}::text
+      LEFT JOIN schedule_items ri ON ri.id = b.schedule_item_id AND ri.trip_id = rec.id
+      LEFT JOIN places rp ON rp.id = ri.place_id
+      LEFT JOIN schedule_items x ON x.id = ri.copied_from_id AND x.trip_id = rec.to_trip_id
+    ),
+    money_src AS (
+      SELECT id, new_link AS schedule_item_id,
+        CASE WHEN old_link IS NULL THEN old_title WHEN new_link IS NOT NULL THEN NULL ELSE item_title END AS title,
+        CASE WHEN old_link IS NULL THEN old_date WHEN new_link IS NOT NULL THEN NULL ELSE item_date END AS date
+      FROM money_links
+    ),
+    back_money AS (
+      UPDATE budget_items b
+      SET trip_id = rec.to_trip_id, schedule_item_id = ms.schedule_item_id, title = ms.title, date = ms.date, updated_at = now()
+      FROM money_src ms, rec
+      WHERE b.id = ms.id AND b.trip_id = rec.id AND b.owner_user_id = ${userId}::text
+      RETURNING b.id
+    ),
+    back_budget AS (
+      UPDATE trip_personal_budgets pb
+      SET trip_id = rec.to_trip_id, updated_at = now()
+      FROM rec
+      WHERE pb.trip_id = rec.id AND pb.user_id = ${userId}::text
+        AND NOT EXISTS (
+          SELECT 1 FROM trip_personal_budgets tpb
+          WHERE tpb.trip_id = rec.to_trip_id AND tpb.user_id = ${userId}::text
+        )
+      RETURNING pb.user_id
+    ),
+    gone_record AS (
+      DELETE FROM trips r
+      USING rec
+      WHERE r.id = rec.id AND r.user_id = ${userId}::text AND r.detached_at IS NOT NULL
+      RETURNING r.id
+    )`;
+}
+
+// 초대 화면(설계 §5.4)용: 이 사람이 tripId 에서 떼어 낸 기록 가운데 참여하면 붙을 것이 있는지(reattach), 통화 때문에 붙지 않을
+// 것이 있는지(blocked). 판정은 joinTrip 의 rec 과 같은 currencyFitsSql. 기록이 없거나 id 형식이 틀리면 둘 다 false.
+// 이 사람 자신의 기록만 본다(r.user_id = userId). 화면 판정과 참여 사이에 통화가 바뀌면 참여 때의 판정이 정한다.
+export async function getReattachPreview(
+  userId: string,
+  tripId: string,
+): Promise<{ reattach: boolean; blocked: boolean }> {
+  if (!isUuid(tripId)) return { reattach: false, blocked: false };
+  const result = await db.execute<{
+    reattach: boolean | null;
+    blocked: boolean | null;
+  }>(sql`
+    SELECT bool_or(f.fits) AS reattach, bool_or(NOT f.fits) AS blocked
+    FROM (
+      SELECT ${currencyFitsSql("r", sql`${tripId}::uuid`, userId)} AS fits
+      FROM trips r
+      WHERE r.user_id = ${userId}::text
+        AND r.detached_from_trip_id = ${tripId}::uuid
+        AND r.detached_at IS NOT NULL
+    ) f`);
+  const row = result.rows[0];
+  return { reattach: row?.reattach === true, blocked: row?.blocked === true };
+}
+
 // 기록 여행에 함께했던 사람의 이름. 기록의 주인만 읽는다. user id 는 돌려주지 않는다(브라우저로 나가지 않게, #103).
 // 주인 조건은 trips.ts 의 ownedTrips 와 같은 것(trips.user_id = userId)을 여기 적는다. trips.ts 가 이 파일의
 // detachMembersCtes 를 쓰므로 거꾸로 import 하면 순환이 된다.
