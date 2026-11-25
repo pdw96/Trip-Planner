@@ -191,9 +191,12 @@ export async function removeMember(
     .where(ownedTrips(ownerId))
     .getSQL();
   const result = await db.execute<{ trip_id: string }>(sql`
-    WITH ${detachMembersCtes(sql`trip_members.trip_id = ${tripId}::uuid
+    WITH ${detachMembersCtes(
+      sql`trip_members.trip_id = ${tripId}::uuid
         AND trip_members.user_id = ${memberUserId}::text
-        AND trip_members.trip_id IN (${ownedTripIds})`)}
+        AND trip_members.trip_id IN (${ownedTripIds})`,
+      { sourceDeleted: false },
+    )}
     SELECT trip_id FROM removed`);
   return result.rows.length > 0;
 }
@@ -205,8 +208,11 @@ export async function leaveTrip(
 ): Promise<boolean> {
   if (!isUuid(tripId)) return false;
   const result = await db.execute<{ trip_id: string }>(sql`
-    WITH ${detachMembersCtes(sql`trip_members.trip_id = ${tripId}::uuid
-        AND trip_members.user_id = ${userId}::text`)}
+    WITH ${detachMembersCtes(
+      sql`trip_members.trip_id = ${tripId}::uuid
+        AND trip_members.user_id = ${userId}::text`,
+      { sourceDeleted: false },
+    )}
     SELECT trip_id FROM removed`);
   return result.rows.length > 0;
 }

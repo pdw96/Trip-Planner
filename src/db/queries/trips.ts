@@ -150,20 +150,22 @@ export async function updateTrip(
 // - ON DELETE CASCADE·SET NULL 은 RI 트리거(AFTER ROW)로, 모든 CTE 가 끝난 뒤 문 끝에서 돈다. 그 트리거의
 //   `DELETE FROM … WHERE trip_id = $1` 은 새 스냅숏으로 돌아 이미 trip_id 가 R 로 바뀐 행을 보지 않는다. 사본이 가리키는
 //   장소도 R 의 사본이라 T 장소 삭제의 SET NULL·cascade 에 걸리지 않는다.
-// - 기록의 detached_from_trip_id(= T)는 같은 cascade 단계의 SET NULL 로 null 이 된다(원래 여행이 없어졌으므로 다시 붙을 곳이 없다).
-//   새 기록 행의 FK 검사(AFTER INSERT)는 그 행이 SET NULL 로 이미 바뀌었으면 건너뛴다. 트리거는 행이 바뀐 차례로 돌므로
-//   T 삭제가 기록 넣기보다 먼저여야 한다. 바깥 SELECT 가 gone 만 읽어 gone 이 먼저 끝까지 돌고, 나머지 CTE 는 그 뒤에 돈다.
-//   Postgres 문서는 WITH 안 문들의 순서를 정하지 않으므로(구현이 이렇게 돈다) 바깥 SELECT 를 바꾸지 않는다.
-//   PGlite 로 확인: 바깥이 gone 을 읽으면 통과(시나리오 C), 기록 쪽을 먼저 읽게 하면 FK 오류로 문 전체가 실패한다.
-//   어긋나도 문 전체가 실패할 뿐 데이터가 반만 바뀌지는 않는다.
+// - 기록은 detached_from_trip_id = NULL 로 넣는다(sourceDeleted, 원래 여행이 없어지므로 다시 붙을 곳이 없다). T 를 넣으면
+//   그 FK 검사가 T 삭제의 SET NULL 보다 먼저 돌 때(CTE 실행 순서에 달림) FK 오류가 나므로 처음부터 넣지 않는다.
+//   그 밖에 새로 넣거나 FK 칸을 바꾼 행은 모두 R 이나 R 의 사본을 가리킨다(kept_on_mine 은 T 행의 일정 연결을 NULL 로 바꿀
+//   뿐). T 를 가리키는 새 FK 값이 없으므로 FK 검사가 T 삭제와 얽히지 않고, 이 문은 CTE 실행 순서에 기대지 않는다
+//   (PGlite 하네스 "task5: 순서 무관 여행 지우기": 바깥 SELECT 가 records 를 먼저 읽어도 같은 결과).
 export async function deleteTrip(
   userId: string,
   tripId: string,
 ): Promise<boolean> {
   if (!isUuid(tripId)) return false;
   const result = await db.execute<{ id: string }>(sql`
-    WITH ${detachMembersCtes(sql`trip_members.trip_id = ${tripId}::uuid
-        AND trip_members.trip_id IN (SELECT id FROM trips WHERE ${ownedTrips(userId)})`)},
+    WITH ${detachMembersCtes(
+      sql`trip_members.trip_id = ${tripId}::uuid
+        AND trip_members.trip_id IN (SELECT id FROM trips WHERE ${ownedTrips(userId)})`,
+      { sourceDeleted: true },
+    )},
     gone AS (
       DELETE FROM trips WHERE id = ${tripId}::uuid AND ${ownedTrips(userId)}
       RETURNING id

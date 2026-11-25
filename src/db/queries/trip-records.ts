@@ -4,7 +4,6 @@ import { db } from "@/db";
 import { tripRecordCompanions, trips, user } from "@/db/schema";
 import { EXTRA_TITLE_MAX } from "@/lib/budget-input";
 import { isUuid } from "@/lib/ids";
-import { ownedTrips } from "./trips";
 
 // 떼어 낸 기록(#103) 쿼리. 설계: docs/superpowers/specs/2026-11-25-detached-trip-record-design.md
 //
@@ -13,9 +12,16 @@ import { ownedTrips } from "./trips";
 // 멤버 행 지우기와 함께 데이터를 바꾸는 CTE 한 문이라 원자적이다(neon-http 에는 트랜잭션이 없다, §6).
 // 모든 CTE 는 removed(실제로 지운 멤버 행) → records(그 행마다 새 R) 에 이어져, 자격 조건(memberCondition)이
 // 맞지 않아 removed 가 비면 아무것도 바뀌지 않는다. 여행 지우기에서는 records 가 여러 행이라 모든 결합을 R(rec.id) 단위로 한다.
+// memberCondition 은 여행 하나(trip_members.trip_id = T)로 좁혀야 한다. records 가 removed 와 user_id 로 다시 결합해
+// 원래 여행을 찾으므로, 지운 행 안에서 user_id 가 고유해야 한다(여행 하나 안에서는 기본 키라 고유).
 //
 // CTE(설계 §5.3 번호):
-//  1 records        R 을 만든다(T 의 제목·목적지·날짜·메모·나라, detached_from_trip_id = T, 초대 칸은 비움).
+//  1 records        R 을 만든다(T 의 제목·목적지·날짜·메모·나라, 초대 칸은 비움). new_records 가 넣고, records 가
+//                   removed 와 user_id 로 결합해 원래 여행 id(from_trip_id)를 붙인다(INSERT … RETURNING 은 넣은 칸만 돌려준다).
+//                   detached_from_trip_id 는 나가기·내보내기면 T, 여행 지우기(sourceDeleted)면 처음부터 NULL 이다.
+//                   여행 지우기에서 T 를 넣으면 그 FK 검사(문 끝 AFTER INSERT 트리거)가 같은 문의 T 삭제 SET NULL 보다
+//                   먼저 도는 경우(CTE 실행 순서에 달림, Postgres 는 순서를 정하지 않음) FK 오류로 문이 실패한다.
+//                   NULL 이면 FK 검사가 없어 순서에 기대지 않는다. T 가 같은 문에서 지워지므로 어차피 마지막 값도 NULL 이다.
 //  2 companions     T 의 주인(was_owner, R 마다 정확히 하나 — listTrips 가 이 행으로 결합한다)과 P 를 뺀 멤버.
 //                   문 시작 스냅숏을 보므로 같은 문에서 지운 멤버도 보인다(여행 지우기에서 A·C 가 서로를 적는다).
 //  3 new_places     T 의 장소 모두 복사(좌표·coords_fetched_at·created_at 포함). 장소 id 는 google_place_id 로 맞춘다(여행마다 고유).
@@ -57,19 +63,29 @@ import { ownedTrips } from "./trips";
 //
 // 제목 규칙은 deleteScheduleItem 과 같다(일정 제목 → 장소 이름표 → 적은 장소 글자 → "지운 일정", EXTRA_TITLE_MAX 로 자름).
 // INSERT … SELECT 는 칸을 모두 이름으로 적는다(칸 순서에 기대지 않음).
-export function detachMembersCtes(memberCondition: SQL): SQL {
+// sourceDeleted: 같은 문에서 원래 여행을 지우는가(deleteTrip 만 true).
+export function detachMembersCtes(
+  memberCondition: SQL,
+  { sourceDeleted }: { sourceDeleted: boolean },
+): SQL {
+  const detachedFrom = sourceDeleted ? sql`NULL::uuid` : sql`t.id`;
   return sql`
     removed AS (
       DELETE FROM trip_members
       WHERE ${memberCondition}
       RETURNING trip_id, user_id
     ),
-    records AS (
+    new_records AS (
       INSERT INTO trips (user_id, title, destination, start_date, end_date, notes, country_code, detached_from_trip_id, detached_at)
-      SELECT r.user_id, t.title, t.destination, t.start_date, t.end_date, t.notes, t.country_code, t.id, now()
+      SELECT r.user_id, t.title, t.destination, t.start_date, t.end_date, t.notes, t.country_code, ${detachedFrom}, now()
       FROM removed r
       JOIN trips t ON t.id = r.trip_id
-      RETURNING id, user_id, detached_from_trip_id AS from_trip_id
+      RETURNING id, user_id
+    ),
+    records AS (
+      SELECT nr.id, nr.user_id, r.trip_id AS from_trip_id
+      FROM new_records nr
+      JOIN removed r ON r.user_id = nr.user_id
     ),
     companions AS (
       INSERT INTO trip_record_companions (trip_id, user_id, was_owner)
@@ -208,6 +224,8 @@ export function detachMembersCtes(memberCondition: SQL): SQL {
 }
 
 // 기록 여행에 함께했던 사람의 이름. 기록의 주인만 읽는다. user id 는 돌려주지 않는다(브라우저로 나가지 않게, #103).
+// 주인 조건은 trips.ts 의 ownedTrips 와 같은 것(trips.user_id = userId)을 여기 적는다. trips.ts 가 이 파일의
+// detachMembersCtes 를 쓰므로 거꾸로 import 하면 순환이 된다.
 export async function listRecordCompanions(
   userId: string,
   tripId: string,
@@ -221,7 +239,7 @@ export async function listRecordCompanions(
     .where(
       and(
         eq(tripRecordCompanions.tripId, tripId),
-        ownedTrips(userId),
+        eq(trips.userId, userId),
         isNotNull(trips.detachedAt),
       ),
     )
