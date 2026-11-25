@@ -27,6 +27,7 @@
 - **쿼리 구조**:
   - 여행 접근 조건은 `src/db/queries/trips.ts` 의 `accessibleTrips(userId)`(주인 또는 함께하는 사람) 하나, 주인만 하는 일은 `ownedTrips(userId)`. 하위 데이터 쿼리는 `schedule-items.ts`·`places.ts`·`budget.ts` 처럼 이 조건을 같은 SQL 문 안에 넣는다(하위 id 와 여행 id 를 함께 묶어 섞어 보내기를 막는다). `accessibleTrips` 는 `trips` 를 별칭 없이 FROM 에 둔 쿼리에서만 쓴다(안의 EXISTS 가 바깥 `trips.id` 를 가리킨다). 여러 테이블을 함께 쓰려면 neon-http 에 트랜잭션이 없으므로 데이터를 바꾸는 CTE 한 문으로 한다(`updatePlace`, `createScheduleItemWithNewPlace`).
   - 지출 행(`budget_items`)은 여행 접근 조건에 더해 `budget.ts` 의 `visibleToUser`/`visibleToUserSql`(모임 행 또는 본인 행, #89)을 같은 문에 건다. 보이는 행 = 쓸 수 있는 행이고 주인도 예외가 없다. 예외는 통화 잠금 검사(모든 행)와 `deleteScheduleItem`·`removeMember`·`leaveTrip` 의 시스템 동작뿐이다. `owner_user_id` 는 입력으로 받지 않고 `side`(모임/내 돈)로 서버가 정한다. 화면 데이터(`budget-data.ts`)는 `splitByOwner` 로 한 번 더 거른다.
+  - 떼어 낸 기록(#103): 기록 여행 = `trips.detached_at IS NOT NULL`(주인 = 나간 사람). 떼기(나가기·내보내기·여행 지우기)와 붙이기(다시 참여)는 `src/db/queries/trip-records.ts` 의 CTE 한 문(`detachMembersCtes`·`reattachRecordCtes`). 모두의 것을 쓰는 쿼리는 `editableTrips(userId)`(= 접근 가능 + 기록 아님), 내 몫을 쓰는 쿼리는 기록이면 "그 행이 내 것"(`isRecordTripSql`, `forUserAllowed`·`writableItemCondition`·`sideWritable`)을 같은 문에 건다. 새 쓰기 쿼리를 더할 때 이 둘 중 하나를 꼭 건다. SQL 검증은 PGlite 하네스로 했다(scratchpad, 커밋 안 함 — '마이그레이션 SQL 을 적용 전에 확인').
 
 - **Dependabot(#65)**:
   - 걸어 둔 ignore: 없음(`@dependabot ignore …` 를 쓰면 여기 적는다. 확인은 `@dependabot show <패키지> ignore conditions`).
