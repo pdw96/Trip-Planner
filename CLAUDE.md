@@ -67,7 +67,13 @@
 - 코드를 고쳐야 하면 Dependabot 브랜치에 push 하지 않고, 세션 브랜치에 올림과 수정을 함께 담아 새 PR 을 연다(본문에 Dependabot PR 번호. 올림이 main 에 들어가면 Dependabot PR 은 저절로 닫힌다). 스키마 변경이 필요하면 마이그레이션 PR 규칙을 따른다.
 - 받지 않기로 하면 패키지 하나짜리 PR 은 `@dependabot ignore this major version`(또는 `this minor version`), 묶음 PR 은 패키지마다 `@dependabot ignore <패키지> major version`. `docs/status.md` 에 적는다.
 
-**마이그레이션 PR.** 자동 머지를 켜지 않는다. 사람이 SQL 을 보고 `human-approved` 라벨을 붙이면 `npm run db:migrate` 를 실행하고(실행 직전 사람 확인), 적용이 성공하면 자동 머지를 켠다. 적용 뒤 PR 을 포기하게 되면 되돌리는 방법을 보고한다.
+**마이그레이션 PR.** 자동 머지를 켜지 않는다. 사람이 SQL 을 보고 `human-approved` 라벨을 붙이면 `npm run db:migrate` 를 실행하고(실행 직전 사람 확인), 적용이 성공하면 자동 머지를 켠다(검사가 이미 다 통과했으면 바로 squash 머지). 적용 뒤 PR 을 포기하게 되면 되돌리는 방법을 보고한다.
+- 배포는 순간에 바뀌지 않아 옛 코드가 새 DB 에서 도는 때가 두 번 있다. PR 본문 "옛 코드와 새 DB" 에 둘 다 판정한다(안전 / 깨짐: 무엇이 얼마나 / 보안·데이터 손상).
+  1. 적용부터 새 배포 READY 까지(몇 분). 비어도 되는 칸·새 테이블은 대개 안전하고, 기본값 없는 NOT NULL 칸이나 색인·제약 교체는 옛 쿼리를 깰 수 있다(#89 `ON CONFLICT`).
+  2. 그 뒤 옛 배포로 되돌릴 때(Instant Rollback, 머지 커밋 revert). 새 모양 데이터가 쌓인 뒤라 칸 추가도 위험하다. 옛 코드가 새 칸을 모르고 지나치면 그 칸이 막던 것이 풀린다(#89 `owner_user_id`).
+- 1이 깨지면 받아들일 위험을 적는다. 보안·데이터 손상이면 받아들이지 않고 PR 을 나눈다.
+- 칸·테이블 삭제는 코드 먼저: `human-approved` → 머지 → 배포 READY 확인 → 적용. Drizzle 은 쿼리에 스키마의 칸 이름을 적어 `schema.ts` 에서 지운 코드는 칸이 남은 DB 에서도 돈다. 기본값 없는 NOT NULL 칸은 NOT NULL 을 푸는 마이그레이션부터 따로 넣는다.
+- 2가 보안·데이터 손상이면 그 배포 앞으로는 되돌리지 않고 앞으로 고친다. `docs/status.md` '알아 둘 것' 의 "롤백 금지선" 에 적는다.
 
 **위험 경로.** 아래를 바꾼 PR 은 `human-approved` 라벨이 있어야 `human-gate` 검사가 통과한다. 기준은 `.github/scripts/human-gate.mjs` 이다. 승인 뒤 위험 경로를 다시 바꾸면 게이트가 라벨을 떼므로, PR 에 무엇이 바뀌었는지 적고 사람에게 다시 확인을 요청한다.
 - `drizzle/**`, `src/db/schema.ts`, `src/db/index.ts`, `drizzle.config.ts`
