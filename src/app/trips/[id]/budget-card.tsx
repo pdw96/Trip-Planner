@@ -9,6 +9,7 @@ import {
 } from "@/app/ui/styles";
 import {
   type ActualMoney,
+  type BudgetStartValues,
   type CurrencySettings,
   formatMoney,
   type Money,
@@ -45,6 +46,8 @@ type Props = {
   budget: PanelBudget;
   // 여행 주인인지. 예산이 없을 때(budget null) 설정 양식의 방식 고르기에 쓴다. 있으면 budget.config.isOwner.
   isOwner: boolean;
+  // 예산을 처음 정할 때의 현지 통화·환율 처음 값(#100). budget 이 null 일 때만 쓴다.
+  startValues: BudgetStartValues | null;
   // "all" 또는 날짜.
   tab: string;
   days: TripDay[];
@@ -71,6 +74,7 @@ function CardsBody({
   tripId,
   budget,
   isOwner,
+  startValues,
   tab,
   days,
   onSelectTab,
@@ -89,6 +93,7 @@ function CardsBody({
           <BudgetSettingsForm
             tripId={tripId}
             config={null}
+            startValues={startValues}
             isOwner={isOwner}
             onClose={close}
           />

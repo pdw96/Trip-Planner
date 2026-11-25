@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   amountInputValue,
   budgetMeter,
+  budgetStartValues,
   CURRENCIES,
   currencyInfo,
   decideRate,
@@ -341,4 +342,32 @@ test("budgetMeter", () => {
   assert.deepEqual(budgetMeter(600000, 600000), { percent: 100, over: false });
   assert.deepEqual(budgetMeter(0, 0), { percent: 0, over: false });
   assert.deepEqual(budgetMeter(1000, 0), { percent: 100, over: true });
+});
+
+test("budgetStartValues: nothing for no currency, KRW or unsupported", () => {
+  assert.equal(budgetStartValues(null, null), null);
+  assert.equal(budgetStartValues("KRW", "1"), null);
+  assert.equal(budgetStartValues("XXX", "1"), null);
+});
+
+test("budgetStartValues: local currency with rate in the field's unit", () => {
+  assert.deepEqual(budgetStartValues("JPY", "8.4523"), {
+    localCurrency: "JPY",
+    plannedRate: "845.23",
+  });
+  assert.deepEqual(budgetStartValues("USD", "1450.5"), {
+    localCurrency: "USD",
+    plannedRate: "1450.5",
+  });
+});
+
+test("budgetStartValues: blank rate when missing or not an ECB currency", () => {
+  assert.deepEqual(budgetStartValues("JPY", null), {
+    localCurrency: "JPY",
+    plannedRate: "",
+  });
+  assert.deepEqual(budgetStartValues("VND", "0.055"), {
+    localCurrency: "VND",
+    plannedRate: "",
+  });
 });

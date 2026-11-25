@@ -17,6 +17,7 @@ import {
 } from "@/app/ui/styles";
 import {
   amountInputValue,
+  type BudgetStartValues,
   CURRENCIES,
   currencyInfo,
   type RateSource,
@@ -158,6 +159,7 @@ function settingsFields(config: BudgetConfig | null): BudgetSettingsFields {
 export function BudgetSettingsForm({
   tripId,
   config,
+  startValues = null,
   isOwner,
   sharedLeftover = false,
   focus = "total",
@@ -165,6 +167,8 @@ export function BudgetSettingsForm({
 }: {
   tripId: string;
   config: BudgetConfig | null;
+  // 처음 정할 때(config null) 여행 나라에 맞춘 현지 통화·환율(#100).
+  startValues?: BudgetStartValues | null;
   isOwner: boolean;
   sharedLeftover?: boolean;
   focus?: "total" | "mine";
@@ -174,7 +178,9 @@ export function BudgetSettingsForm({
     BudgetSettingsFormState,
     FormData
   >(closingOnSave(saveBudgetSettingsAction.bind(null, tripId), onClose), {
-    values: settingsFields(config),
+    values: config
+      ? settingsFields(config)
+      : { ...EMPTY_BUDGET_SETTINGS_FIELDS, ...startValues },
     errors: {},
     formError: null,
     savedAt: null,
@@ -423,13 +429,15 @@ function SettingsFields({
           <label htmlFor={`${id}-rate`} className="text-sm font-medium">
             예정 환율 {rateUnitLabel(local, currency)}
           </label>
-          {/* 현지 통화를 바꾸면 환율 단위가 달라지므로 칸을 비운다(예전 글자가 새 단위로 저장되지 않게). */}
+          {/* 현지·예산 통화를 바꾸면 환율 뜻이 달라지므로 칸을 비운다(예전 글자가 새 통화로 저장되지 않게, #100). */}
           <input
-            key={local}
+            key={`${local}|${currency}`}
             id={`${id}-rate`}
             name="plannedRate"
             defaultValue={
-              local === values.localCurrency ? values.plannedRate : ""
+              local === values.localCurrency && currency === values.currency
+                ? values.plannedRate
+                : ""
             }
             inputMode="decimal"
             autoComplete="off"

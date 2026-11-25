@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { buttonClass } from "@/app/ui/styles";
+import type { BudgetStartValues } from "@/lib/budget";
 import type { TripDay } from "@/lib/schedule";
 import {
   type DragSample,
@@ -35,6 +36,7 @@ export function BudgetSheet({
   tripId,
   budget,
   isOwner,
+  startValues,
   days,
   request,
   onClose,
@@ -43,6 +45,7 @@ export function BudgetSheet({
   budget: PanelBudget;
   // 여행 주인인지(예산이 없을 때 설정 양식의 방식 고르기).
   isOwner: boolean;
+  startValues: BudgetStartValues | null;
   days: TripDay[];
   // null 이면 닫힘. id 가 바뀔 때마다 새로 연다(안의 양식이 지난 입력 없이 시작).
   request: SheetRequest | null;
@@ -225,6 +228,7 @@ export function BudgetSheet({
             tripId={tripId}
             budget={budget}
             isOwner={isOwner}
+            startValues={startValues}
             tab={selected}
             days={days}
             onSelectTab={select}
