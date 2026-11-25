@@ -125,6 +125,7 @@ export async function createTrip(
 }
 
 // 바뀐 행이 없으면(없거나 남의 것이거나 id 형식이 틀림) false.
+// 기록 여행(#103)에서는 여행 정보가 사본이라 고치지 않는다(editableTrips, 0행 → false).
 export async function updateTrip(
   userId: string,
   tripId: string,
@@ -134,7 +135,7 @@ export async function updateTrip(
   const rows = await db
     .update(trips)
     .set(input)
-    .where(and(eq(trips.id, tripId), accessibleTrips(userId)))
+    .where(and(eq(trips.id, tripId), editableTrips(userId)))
     .returning({ id: trips.id });
   return rows.length > 0;
 }

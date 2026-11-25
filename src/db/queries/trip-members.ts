@@ -1,5 +1,14 @@
 import "server-only";
-import { and, asc, eq, inArray, isNotNull, type SQL, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import { cache } from "react";
 import { db } from "@/db";
 import { tripMembers, trips, user } from "@/db/schema";
@@ -85,6 +94,7 @@ export async function getInviteCreatedAt(
 }
 
 // 새 링크로 바꾼다(옛 링크는 죽는다). 주인이 아니면 false.
+// 기록 여행(#103)에서는 초대 링크를 만들지 않는다(detached_at IS NULL, 0행 → false).
 export async function setInviteTokenHash(
   userId: string,
   tripId: string,
@@ -94,11 +104,14 @@ export async function setInviteTokenHash(
   const rows = await db
     .update(trips)
     .set({ inviteTokenHash: hash, inviteTokenCreatedAt: sql`now()` })
-    .where(and(eq(trips.id, tripId), ownedTrips(userId)))
+    .where(
+      and(eq(trips.id, tripId), ownedTrips(userId), isNull(trips.detachedAt)),
+    )
     .returning({ id: trips.id });
   return rows.length > 0;
 }
 
+// 기록 여행(#103)에서는 초대 링크 끄기도 쓰기로 보고 막는다(설계 §5.5, 0행 → false). 기록의 링크는 joinTrip 이 거른다.
 export async function clearInviteToken(
   userId: string,
   tripId: string,
@@ -107,7 +120,9 @@ export async function clearInviteToken(
   const rows = await db
     .update(trips)
     .set({ inviteTokenHash: null, inviteTokenCreatedAt: null })
-    .where(and(eq(trips.id, tripId), ownedTrips(userId)))
+    .where(
+      and(eq(trips.id, tripId), ownedTrips(userId), isNull(trips.detachedAt)),
+    )
     .returning({ id: trips.id });
   return rows.length > 0;
 }
@@ -142,6 +157,7 @@ export async function findInvite(hash: string): Promise<InvitePreview | null> {
 
 // 링크 확인과 넣기를 한 문으로 한다. 주인·상한 초과·틀린 해시·이미 멤버면 null.
 // 동시에 참여하면 상한을 조금 넘을 수 있다(설계 §5.1).
+// 기록 여행(#103)에는 참여하지 않는다(t.detached_at IS NULL, 링크가 남아 있어도 null).
 export async function joinTrip(
   userId: string,
   hash: string,
@@ -150,6 +166,7 @@ export async function joinTrip(
     INSERT INTO ${tripMembers} (trip_id, user_id)
     SELECT t.id, ${userId}::text FROM ${trips} t
     WHERE t.invite_token_hash = ${hash}::text
+      AND t.detached_at IS NULL
       AND t.user_id <> ${userId}::text
       AND (SELECT count(*) FROM ${tripMembers} m WHERE m.trip_id = t.id) < ${MAX_MEMBERS_PER_TRIP}
     ON CONFLICT DO NOTHING
