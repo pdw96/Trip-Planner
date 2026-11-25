@@ -4,12 +4,20 @@ import {
   eq,
   exists,
   getTableColumns,
+  isNull,
   or,
   type SQL,
   sql,
 } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
-import { type Trip, tripMembers, trips, user } from "@/db/schema";
+import {
+  type Trip,
+  tripMembers,
+  tripRecordCompanions,
+  trips,
+  user,
+} from "@/db/schema";
 import { isUuid } from "@/lib/ids";
 import type { TripInput } from "@/lib/trip-input";
 
@@ -27,6 +35,17 @@ export function accessibleTrips(userId: string): SQL {
         ),
     ),
   ) as SQL;
+}
+
+// 보고 고칠 수 있는 여행: accessibleTrips 에서 떼어 낸 기록(detached_at)을 뺀다. 기록은 읽기 전용이다(#103).
+// accessibleTrips 와 같은 제약: trips 를 별칭 없이 FROM 에 둔 쿼리에서만 쓴다.
+export function editableTrips(userId: string): SQL {
+  return and(accessibleTrips(userId), isNull(trips.detachedAt)) as SQL;
+}
+
+// 이 id 가 떼어 낸 기록인지(하위 쿼리라 어느 쿼리에서나 쓴다). 일정·장소 등 쓰기 쿼리가 기록을 거르는 데 쓴다.
+export function isRecordTripSql(tripId: string): SQL {
+  return sql`EXISTS (SELECT 1 FROM trips r WHERE r.id = ${tripId}::uuid AND r.detached_at IS NOT NULL)`;
 }
 
 // 주인만 하는 일(여행 삭제, 초대 링크, 내보내기)의 조건.
@@ -47,18 +66,33 @@ function isOwnerColumn(userId: string) {
   return sql<boolean>`${trips.userId} = ${userId}`;
 }
 
-export type TripListItem = TripRow & { isOwner: boolean; ownerName: string };
+export type TripListItem = TripRow & {
+  isOwner: boolean;
+  ownerName: string;
+  // 기록이면 그 여행의 주인(was_owner)이었던 사람의 이름, 아니면 null.
+  recordOwnerName: string | null;
+};
 
 // 내 여행과 공유받은 여행. 공유받은 여행 카드에 주인 이름을 보인다(이메일은 고르지 않는다).
 export async function listTrips(userId: string): Promise<TripListItem[]> {
+  const recordOwner = alias(user, "record_owner");
   return db
     .select({
       ...tripColumns,
       isOwner: isOwnerColumn(userId),
       ownerName: user.name,
+      recordOwnerName: recordOwner.name,
     })
     .from(trips)
     .innerJoin(user, eq(user.id, trips.userId))
+    .leftJoin(
+      tripRecordCompanions,
+      and(
+        eq(tripRecordCompanions.tripId, trips.id),
+        eq(tripRecordCompanions.wasOwner, true),
+      ),
+    )
+    .leftJoin(recordOwner, eq(recordOwner.id, tripRecordCompanions.userId))
     .where(accessibleTrips(userId));
 }
 
