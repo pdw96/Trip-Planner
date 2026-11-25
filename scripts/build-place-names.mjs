@@ -54,7 +54,16 @@ const EXTRA = {
   인터라켄: "CH",
   퀸스타운: "NZ",
   오아후: "US",
+  // Intl 나라 이름과 다르게 흔히 쓰는 이름(빌드 리뷰).
+  호주: "AU",
+  터키: "TR",
+  한국: "KR",
+  남한: "KR",
+  화란: "NL",
 };
+
+// 지명이지만 흔한 낱말이라 여행지에서 엉뚱하게 걸리는 이름. 한 글자 이름("이", "와" 등)도 버린다.
+const STOP = new Set(["나라"]);
 
 const HANGUL_ONLY = /^[가-힣][가-힣 ]*$/;
 
@@ -67,6 +76,7 @@ if (!path) {
 // 이름 → { code, population }. 같은 이름은 인구가 많은 도시의 나라.
 const best = new Map();
 function offer(name, code, population) {
+  if ([...name].length < 2 || STOP.has(name)) return;
   const prev = best.get(name);
   if (!prev || prev.population < population)
     best.set(name, { code, population });

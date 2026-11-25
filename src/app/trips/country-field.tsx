@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { fieldClass } from "@/app/ui/styles";
 import { type CountryOption, countryNameIndex } from "@/lib/countries";
 import { matchCountry } from "@/lib/place-match";
@@ -66,7 +66,9 @@ export function CountrySelect({
   // 돌아가고 React 가 다시 맞추지 않아, 검증 오류 뒤 다시 저장하면 나라가 빠진다. reset 직후 고른 값을 되돌린다.
   const selectRef = useRef<HTMLSelectElement>(null);
   const selectedRef = useRef(selected);
-  selectedRef.current = selected;
+  useLayoutEffect(() => {
+    selectedRef.current = selected;
+  });
   useEffect(() => {
     const form = selectRef.current?.form;
     if (!form) return;

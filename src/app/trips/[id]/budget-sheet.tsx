@@ -45,7 +45,7 @@ export function BudgetSheet({
   budget: PanelBudget;
   // 여행 주인인지(예산이 없을 때 설정 양식의 방식 고르기).
   isOwner: boolean;
-  startValues: BudgetStartValues | null;
+  startValues: Promise<BudgetStartValues | null> | null;
   days: TripDay[];
   // null 이면 닫힘. id 가 바뀔 때마다 새로 연다(안의 양식이 지난 입력 없이 시작).
   request: SheetRequest | null;

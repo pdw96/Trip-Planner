@@ -36,3 +36,16 @@ test("known travel places map to their countries", () => {
     assert.equal(PLACE_NAMES[name], code, name);
   }
 });
+
+test("common words and one-letter names are not place names", () => {
+  for (const key of Object.keys(PLACE_NAMES)) {
+    assert.ok([...key].length >= 2, key);
+  }
+  assert.equal(PLACE_NAMES.나라, undefined);
+});
+
+test("common country aliases map to their countries", () => {
+  assert.equal(PLACE_NAMES.호주, "AU");
+  assert.equal(PLACE_NAMES.터키, "TR");
+  assert.equal(PLACE_NAMES.한국, "KR");
+});
