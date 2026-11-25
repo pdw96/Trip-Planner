@@ -16,7 +16,7 @@ import {
   sectionTitleClass,
 } from "@/app/ui/styles";
 import { formatDistance, sortByDistance } from "@/lib/geo";
-import { directionsUrl, legText } from "@/lib/leg-display";
+import { directionsUrl, legText, naverSearchUrl } from "@/lib/leg-display";
 import type { DayRouteResult } from "../day-route-loader";
 import { SAVE_FAILED } from "../messages";
 import { setTripBaseAction } from "../place-actions";
@@ -279,7 +279,7 @@ function PanelBody({
             {(day.stops.length > 0 || day.legs.length > 0) && (
               <DayLegs
                 dayNumber={day.dayNumber}
-                rows={legRows(day, placesById, routeResult)}
+                rows={legRows(day, placesById, routeResult, naverMap)}
                 notices={routeResult?.ok ? routeResult.notices : []}
               />
             )}
@@ -473,6 +473,7 @@ function legRows(
   day: PanelDay,
   placesById: Map<string, PanelPlace>,
   result: DayRouteResult | null,
+  naverMap: boolean,
 ): LegRow[] {
   if (day.legs.length === 0) return [];
   const points = [
@@ -507,6 +508,7 @@ function legRows(
       text,
       distanceText: leg.distanceText,
       directionsUrl: directionsUrl(from, to),
+      naverUrl: naverMap ? naverSearchUrl(to.label) : null,
     });
   });
   return rows;

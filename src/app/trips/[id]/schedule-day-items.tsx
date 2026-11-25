@@ -29,7 +29,7 @@ import {
   useTransition,
 } from "react";
 import { errorTextClass } from "@/app/ui/styles";
-import { legText, NOTICES } from "@/lib/leg-display";
+import { legText, NOTICES, naverSearchUrl } from "@/lib/leg-display";
 import { keepsTimeOrder } from "@/lib/schedule-order";
 import { type LineLeg, placeTravelLines } from "@/lib/travel-lines";
 import { ORDER_SAVE_FAILED, ORDER_TIME_RULE } from "../messages";
@@ -42,6 +42,7 @@ import {
   type RowItem,
   ScheduleItemRow,
   useMovedNotice,
+  useNaverMap,
 } from "./schedule-editor";
 import { useDwellVisible } from "./use-dwell-visible";
 
@@ -343,6 +344,10 @@ function TravelLine({
   onRetry: () => void;
   concealed: boolean;
 }) {
+  // 국내 여행은 Google 길찾기 옆에 네이버 지도 도착지 검색을 더한다(#36). 도착 이름표가 없으면 Google 만.
+  const naverMap = useNaverMap();
+  const naverUrl =
+    naverMap && line.toLabel ? naverSearchUrl(line.toLabel) : null;
   return (
     <li
       aria-hidden={concealed || undefined}
@@ -373,6 +378,19 @@ function TravelLine({
         >
           길찾기 ↗
         </a>
+        {naverUrl && (
+          <>
+            <span className="text-sub"> · </span>
+            <a
+              href={naverUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="whitespace-nowrap text-sub hover:underline"
+            >
+              네이버 지도 ↗
+            </a>
+          </>
+        )}
       </span>
     </li>
   );

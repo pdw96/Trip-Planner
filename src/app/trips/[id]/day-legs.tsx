@@ -14,6 +14,8 @@ export type LegRow = {
   text: string | null;
   distanceText: string;
   directionsUrl: string;
+  // 국내 여행만: 도착지 네이버 지도 검색(#36).
+  naverUrl: string | null;
 };
 
 export function DayLegs({
@@ -47,14 +49,26 @@ export function DayLegs({
             <span className="tabular-nums text-sub">
               직선 {row.distanceText}
             </span>
-            <a
-              href={row.directionsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="ml-auto shrink-0 text-sub hover:underline"
-            >
-              Google 지도 ↗
-            </a>
+            <span className="ml-auto flex shrink-0 gap-3">
+              <a
+                href={row.directionsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="whitespace-nowrap text-sub hover:underline"
+              >
+                Google 지도 ↗
+              </a>
+              {row.naverUrl && (
+                <a
+                  href={row.naverUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="whitespace-nowrap text-sub hover:underline"
+                >
+                  네이버 지도 ↗
+                </a>
+              )}
+            </span>
           </li>
         ))}
       </ul>
