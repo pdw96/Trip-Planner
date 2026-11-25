@@ -669,7 +669,7 @@ export function ScheduleItemRow({
             <span
               className={`size-5 rounded-full border-[3px] border-(--line) ${done ? "bg-(--line)" : "bg-background"}`}
             />
-            {done && <span className="sr-only">완료함</span>}
+            <span className="sr-only">{done ? "완료함" : "완료 안 함"}</span>
           </span>
         ) : (
           <label className="relative z-10 flex size-10 cursor-pointer items-center justify-center">

@@ -113,7 +113,7 @@ function TripRow({ trip, today }: { trip: TripListItem; today: string }) {
         className="-mx-2 flex flex-col gap-1.5 rounded-[10px] px-2 py-3.5 transition-colors hover:bg-surface"
       >
         <span
-          className={`text-[17px] font-bold break-words ${past ? "opacity-55" : ""}`}
+          className={`text-[17px] font-bold break-words ${past && !record ? "opacity-55" : ""}`}
         >
           {trip.title}
           {badge && (
