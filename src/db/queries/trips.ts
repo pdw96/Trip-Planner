@@ -20,6 +20,7 @@ import {
 } from "@/db/schema";
 import { isUuid } from "@/lib/ids";
 import type { TripInput } from "@/lib/trip-input";
+import { detachMembersCtes } from "./trip-records";
 
 // 이 사용자가 보고 고칠 수 있는 여행의 조건: 주인이거나 함께하는 사람(#15). 여행·일정·장소·기준점·예산의 모든 쿼리가 이것을 거친다.
 // trips 를 별칭 없이 FROM 에 둔 쿼리 안에서만 쓴다(하위 쿼리가 바깥 trips.id 를 가리킨다).
@@ -141,14 +142,32 @@ export async function updateTrip(
 }
 
 // 주인만 지운다. 함께하는 사람이 보내면 바뀐 행이 없어 false(찾을 수 없음).
+// 같은 문에서 그때의 멤버마다 떼어 낸 기록을 만든다(#103 §5.3, trip-records.ts 의 detachMembersCtes). 주인 몫은 떼지 않는다.
+// 멤버 떼기는 여행 삭제(gone)와 같은 자격(주인)을 조건으로 건다. 기록 여행에는 멤버가 없어 지우기만 일어난다.
+//
+// 한 문으로 묶어도 옮긴 행이 여행 삭제의 cascade 로 지워지지 않는 까닭(deleteScheduleItem 주석과 같은 이치):
+// - 옮기기(moved_mine·moved_money·moved_budget)는 행의 trip_id 를 R 로 바꾸고, gone 은 trips 행 하나만 지운다(같은 행을 두 번 쓰지 않음).
+// - ON DELETE CASCADE·SET NULL 은 RI 트리거(AFTER ROW)로, 모든 CTE 가 끝난 뒤 문 끝에서 돈다. 그 트리거의
+//   `DELETE FROM … WHERE trip_id = $1` 은 새 스냅숏으로 돌아 이미 trip_id 가 R 로 바뀐 행을 보지 않는다. 사본이 가리키는
+//   장소도 R 의 사본이라 T 장소 삭제의 SET NULL·cascade 에 걸리지 않는다.
+// - 기록의 detached_from_trip_id(= T)는 같은 cascade 단계의 SET NULL 로 null 이 된다(원래 여행이 없어졌으므로 다시 붙을 곳이 없다).
+//   새 기록 행의 FK 검사(AFTER INSERT)는 그 행이 SET NULL 로 이미 바뀌었으면 건너뛴다. 트리거는 행이 바뀐 차례로 돌므로
+//   T 삭제가 기록 넣기보다 먼저여야 한다. 바깥 SELECT 가 gone 만 읽어 gone 이 먼저 끝까지 돌고, 나머지 CTE 는 그 뒤에 돈다.
+//   Postgres 문서는 WITH 안 문들의 순서를 정하지 않으므로(구현이 이렇게 돈다) 바깥 SELECT 를 바꾸지 않는다.
+//   PGlite 로 확인: 바깥이 gone 을 읽으면 통과(시나리오 C), 기록 쪽을 먼저 읽게 하면 FK 오류로 문 전체가 실패한다.
+//   어긋나도 문 전체가 실패할 뿐 데이터가 반만 바뀌지는 않는다.
 export async function deleteTrip(
   userId: string,
   tripId: string,
 ): Promise<boolean> {
   if (!isUuid(tripId)) return false;
-  const rows = await db
-    .delete(trips)
-    .where(and(eq(trips.id, tripId), ownedTrips(userId)))
-    .returning({ id: trips.id });
-  return rows.length > 0;
+  const result = await db.execute<{ id: string }>(sql`
+    WITH ${detachMembersCtes(sql`trip_members.trip_id = ${tripId}::uuid
+        AND trip_members.trip_id IN (SELECT id FROM trips WHERE ${ownedTrips(userId)})`)},
+    gone AS (
+      DELETE FROM trips WHERE id = ${tripId}::uuid AND ${ownedTrips(userId)}
+      RETURNING id
+    )
+    SELECT id FROM gone`);
+  return result.rows.length > 0;
 }

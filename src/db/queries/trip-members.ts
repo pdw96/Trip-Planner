@@ -1,18 +1,10 @@
 import "server-only";
-import {
-  and,
-  asc,
-  eq,
-  inArray,
-  isNotNull,
-  isNull,
-  type SQL,
-  sql,
-} from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { cache } from "react";
 import { db } from "@/db";
 import { tripMembers, trips, user } from "@/db/schema";
 import { isUuid } from "@/lib/ids";
+import { detachMembersCtes } from "./trip-records";
 import { accessibleTrips, ownedTrips } from "./trips";
 
 // 함께하는 사람·초대 링크 쿼리(#15). 보기는 accessibleTrips, 링크·내보내기는 ownedTrips 를 같은 SQL 문 안에 넣는다.
@@ -185,33 +177,8 @@ export async function countTripMembers(tripId: string): Promise<number> {
   return row?.n ?? 0;
 }
 
-// #89 §5.4: 멤버 행을 지운 문 안에서 그 사람의 그 여행 내 돈 행(budget_items.owner_user_id)과 내 예산
-// (trip_personal_budgets)도 지운다. 멤버 행을 실제로 지웠을 때만(removed 가 비면 아무것도 지우지 않음).
-// 그 사람이 적은 모임 행(owner_user_id IS NULL)은 남는다. 돌려주는 값은 멤버 행을 지웠는지뿐.
-// 이 문과 동시에 그 사람이 내 돈 금액을 쓰면(쓰기 문의 접근 확인이 아직 멤버 행을 본 경우) 그 행이 남을 수 있다.
-// 남아도 본인만 볼 수 있는 행이고 본인은 이제 접근할 수 없으므로 아무에게도 보이지 않는다(다시 참여하면 다시 보임).
-function removeMemberAndPrivateRows(memberCondition: SQL) {
-  return sql`
-    WITH removed AS (
-      DELETE FROM trip_members
-      WHERE ${memberCondition}
-      RETURNING trip_id, user_id
-    ),
-    gone_items AS (
-      DELETE FROM budget_items
-      WHERE owner_user_id IS NOT NULL
-        AND (trip_id, owner_user_id) IN (SELECT trip_id, user_id FROM removed)
-      RETURNING id
-    ),
-    gone_budgets AS (
-      DELETE FROM trip_personal_budgets
-      WHERE (trip_id, user_id) IN (SELECT trip_id, user_id FROM removed)
-      RETURNING trip_id
-    )
-    SELECT trip_id FROM removed`;
-}
-
-// 주인만 내보낸다.
+// 주인만 내보낸다. 내보낸 사람의 몫은 그 사람의 떼어 낸 기록으로 남는다(#103, trip-records.ts 의 detachMembersCtes).
+// 돌려주는 값은 멤버 행을 지웠는지뿐. 자격(주인, 그 사람이 지금 멤버)이 맞지 않으면 아무것도 바뀌지 않고 false.
 export async function removeMember(
   ownerId: string,
   tripId: string,
@@ -223,23 +190,23 @@ export async function removeMember(
     .from(trips)
     .where(ownedTrips(ownerId))
     .getSQL();
-  const result = await db.execute<{ trip_id: string }>(
-    removeMemberAndPrivateRows(sql`trip_members.trip_id = ${tripId}::uuid
+  const result = await db.execute<{ trip_id: string }>(sql`
+    WITH ${detachMembersCtes(sql`trip_members.trip_id = ${tripId}::uuid
         AND trip_members.user_id = ${memberUserId}::text
-        AND trip_members.trip_id IN (${ownedTripIds})`),
-  );
+        AND trip_members.trip_id IN (${ownedTripIds})`)}
+    SELECT trip_id FROM removed`);
   return result.rows.length > 0;
 }
 
-// 본인 행만 지운다. 주인은 멤버 행이 없으므로 false.
+// 본인 행만 지운다. 주인은 멤버 행이 없으므로 false. 나간 사람의 몫은 떼어 낸 기록으로 남는다(#103).
 export async function leaveTrip(
   userId: string,
   tripId: string,
 ): Promise<boolean> {
   if (!isUuid(tripId)) return false;
-  const result = await db.execute<{ trip_id: string }>(
-    removeMemberAndPrivateRows(sql`trip_members.trip_id = ${tripId}::uuid
-        AND trip_members.user_id = ${userId}::text`),
-  );
+  const result = await db.execute<{ trip_id: string }>(sql`
+    WITH ${detachMembersCtes(sql`trip_members.trip_id = ${tripId}::uuid
+        AND trip_members.user_id = ${userId}::text`)}
+    SELECT trip_id FROM removed`);
   return result.rows.length > 0;
 }
