@@ -195,3 +195,13 @@ export function placeUrl(p: PlaceRef): string {
   });
   return `https://www.google.com/maps/search/?${params.toString()}`;
 }
+
+// 국내 여행(나라 코드 KR)은 장소·이동 링크를 네이버 지도로 연다(#36). 여행 나라 코드 하나로 정한다.
+export function usesNaverMap(countryCode: string | null): boolean {
+  return countryCode === "KR";
+}
+
+// 네이버 지도 이름 검색. 이름표만 넘긴다: Google 좌표·장소 id 는 Google 이 아닌 지도와 함께 쓰지 못한다(Google 약관).
+export function naverSearchUrl(label: string): string {
+  return `https://map.naver.com/p/search/${encodeURIComponent(label)}`;
+}

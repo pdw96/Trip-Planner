@@ -16,7 +16,7 @@ import {
   sectionTitleClass,
 } from "@/app/ui/styles";
 import { formatDistance, sortByDistance } from "@/lib/geo";
-import { directionsUrl, legText } from "@/lib/leg-display";
+import { directionsUrl, legText, naverSearchUrl } from "@/lib/leg-display";
 import type { DayRouteResult } from "../day-route-loader";
 import { SAVE_FAILED } from "../messages";
 import { setTripBaseAction } from "../place-actions";
@@ -49,6 +49,8 @@ type Props = {
   defaultOverviewBaseId: string | null;
   // 없으면 지도·장소 검색 대신 "지도를 쓸 수 없어요"(§3.3).
   maps: Maps | null;
+  // 국내 여행이면 장소·구간 링크를 네이버 지도로(#36).
+  naverMap: boolean;
 };
 
 const ERROR_VISIBLE_MS = 4000;
@@ -73,6 +75,7 @@ function PanelBody({
   overviewBaseIds,
   defaultOverviewBaseId,
   maps,
+  naverMap,
 }: Props) {
   const { selected, reselectCount } = useSelectedDay();
   const [overviewBaseId, setOverviewBaseId] = useState(defaultOverviewBaseId);
@@ -276,7 +279,7 @@ function PanelBody({
             {(day.stops.length > 0 || day.legs.length > 0) && (
               <DayLegs
                 dayNumber={day.dayNumber}
-                rows={legRows(day, placesById, routeResult)}
+                rows={legRows(day, placesById, routeResult, naverMap)}
                 notices={routeResult?.ok ? routeResult.notices : []}
               />
             )}
@@ -323,6 +326,7 @@ function PanelBody({
                   )
                 }
                 onShowOnMap={maps ? () => showOnMap(place.id) : null}
+                naverMap={naverMap}
               />
             ))}
           </ul>
@@ -469,6 +473,7 @@ function legRows(
   day: PanelDay,
   placesById: Map<string, PanelPlace>,
   result: DayRouteResult | null,
+  naverMap: boolean,
 ): LegRow[] {
   if (day.legs.length === 0) return [];
   const points = [
@@ -503,6 +508,7 @@ function legRows(
       text,
       distanceText: leg.distanceText,
       directionsUrl: directionsUrl(from, to),
+      naverUrl: naverMap ? naverSearchUrl(to.label) : null,
     });
   });
   return rows;

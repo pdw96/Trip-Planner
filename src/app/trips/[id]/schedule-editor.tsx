@@ -21,7 +21,7 @@ import {
   type Side,
   visibleSides,
 } from "@/lib/budget-wallets";
-import { placeUrl } from "@/lib/leg-display";
+import { naverSearchUrl, placeUrl } from "@/lib/leg-display";
 import { mapsSearchUrl } from "@/lib/schedule";
 import {
   EMPTY_SCHEDULE_FIELDS,
@@ -119,6 +119,8 @@ type OpenState = {
   // 보는 사람과 "누구" 선택지의 사람(#90).
   viewerId: string;
   people: WhoPerson[];
+  // 국내 여행이면 장소·이동 링크를 네이버 지도로(#36).
+  naverMap: boolean;
   // 고른 날을 보다가 일정의 날짜를 옮기면 그 날 목록 아래에 잠깐 보이는 안내(#53 §5.4.1).
   moved: { fromDate: string; text: string } | null;
   setMoved: (moved: { fromDate: string; text: string } | null) => void;
@@ -142,6 +144,7 @@ export function ScheduleEditorProvider({
   budget,
   viewerId,
   people,
+  naverMap,
   children,
 }: {
   places: PlaceOption[];
@@ -149,6 +152,7 @@ export function ScheduleEditorProvider({
   budget: EditorBudget | null;
   viewerId: string;
   people: WhoPerson[];
+  naverMap: boolean;
   children: React.ReactNode;
 }) {
   const [openKey, setOpenKey] = useState<string | null>(null);
@@ -164,6 +168,7 @@ export function ScheduleEditorProvider({
         budget,
         viewerId,
         people,
+        naverMap,
         moved,
         setMoved,
       }}
@@ -177,6 +182,11 @@ export function ScheduleEditorProvider({
       {body}
     </APIProvider>
   );
+}
+
+// 국내 여행이면 true: 장소·이동 링크를 네이버 지도로 연다(#36).
+export function useNaverMap(): boolean {
+  return useOpen().naverMap;
 }
 
 const MOVED_VISIBLE_MS = 4000;
@@ -303,6 +313,7 @@ export function ScheduleItemRow({
     budget,
     viewerId,
     people,
+    naverMap,
     setMoved,
   } = useOpen();
   const { selected } = useSelectedDay();
@@ -506,15 +517,19 @@ export function ScheduleItemRow({
     );
   }
 
-  // 이어진 장소가 목록에 있으면 그 장소의 Google 지도 링크(장소 id 포함), 아니면 글자로 검색.
+  // 이어진 장소가 목록에 있으면 그 장소의 Google 지도 링크(장소 id 포함), 아니면 글자로 검색. 국내 여행은 네이버 지도 검색(#36, 이름표만).
   const linkedPlace =
     item.placeId === null
       ? undefined
       : places.find((place) => place.id === item.placeId);
   const placeHref = linkedPlace
-    ? placeUrl(linkedPlace)
+    ? naverMap
+      ? naverSearchUrl(linkedPlace.label)
+      : placeUrl(linkedPlace)
     : item.place
-      ? mapsSearchUrl(item.place)
+      ? naverMap
+        ? naverSearchUrl(item.place)
+        : mapsSearchUrl(item.place)
       : null;
   // 제목이 없으면 장소 이름이 제목 자리에 온다(#35).
   const name = item.title ?? item.place ?? "";

@@ -6,9 +6,11 @@ import {
   fallbackRule,
   legText,
   NOTICES,
+  naverSearchUrl,
   placeUrl,
   summarizeTransit,
   summarizeWalk,
+  usesNaverMap,
   WALK_MAX_SECONDS,
 } from "./leg-display.ts";
 
@@ -218,4 +220,25 @@ test("URL", () => {
   assert.equal(p.origin + p.pathname, "https://www.google.com/maps/search/");
   assert.equal(p.searchParams.get("query"), "서울역");
   assert.equal(p.searchParams.get("query_place_id"), "ChIJ_a-1");
+});
+
+test("usesNaverMap: 한국 여행만", () => {
+  assert.equal(usesNaverMap("KR"), true);
+  assert.equal(usesNaverMap("JP"), false);
+  assert.equal(usesNaverMap(null), false);
+});
+
+test("naverSearchUrl: 이름표만 검색어로", () => {
+  assert.equal(
+    naverSearchUrl("해운대 해수욕장"),
+    "https://map.naver.com/p/search/%ED%95%B4%EC%9A%B4%EB%8C%80%20%ED%95%B4%EC%88%98%EC%9A%95%EC%9E%A5",
+  );
+  const u = new URL(naverSearchUrl("카페 A/B #2 ?&%"));
+  assert.equal(u.origin, "https://map.naver.com");
+  assert.equal(u.hash, "");
+  assert.equal(u.search, "");
+  assert.equal(
+    decodeURIComponent(u.pathname.slice("/p/search/".length)),
+    "카페 A/B #2 ?&%",
+  );
 });

@@ -14,6 +14,7 @@ import {
 } from "@/lib/day-route";
 import { distanceMeters, formatDistance } from "@/lib/geo";
 import { fetchPlaceCoords } from "@/lib/google-maps-server";
+import { usesNaverMap } from "@/lib/leg-display";
 import { tripDays } from "@/lib/schedule";
 import { type PanelDay, type PanelPlace, toCategory } from "./map-types";
 import { TripMapPanel } from "./trip-map-panel";
@@ -163,6 +164,7 @@ export async function MapSection({
           : null
       }
       maps={maps}
+      naverMap={usesNaverMap(trip.countryCode)}
     />
   );
 }

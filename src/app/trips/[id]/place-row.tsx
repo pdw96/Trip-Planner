@@ -14,7 +14,7 @@ import {
   primaryButtonClass,
   secondaryButtonClass,
 } from "@/app/ui/styles";
-import { placeUrl } from "@/lib/leg-display";
+import { naverSearchUrl, placeUrl } from "@/lib/leg-display";
 import type { PlaceFormState } from "@/lib/place-input";
 import { deletePlaceAction, updatePlaceAction } from "../place-actions";
 import {
@@ -36,6 +36,7 @@ export function PlaceRow({
   onEdit,
   onCloseEdit,
   onShowOnMap,
+  naverMap,
 }: {
   tripId: string;
   place: PanelPlace;
@@ -47,6 +48,8 @@ export function PlaceRow({
   onCloseEdit: () => void;
   // 지도가 있고 이 장소에 좌표가 있을 때만.
   onShowOnMap: (() => void) | null;
+  // 국내 여행이면 이름 링크를 네이버 지도 검색으로(#36).
+  naverMap: boolean;
 }) {
   const [deleting, startDelete] = useTransition();
 
@@ -77,7 +80,7 @@ export function PlaceRow({
       </span>
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <a
-          href={placeUrl(place)}
+          href={naverMap ? naverSearchUrl(place.label) : placeUrl(place)}
           target="_blank"
           rel="noopener noreferrer"
           className="self-start font-medium break-words hover:underline"
