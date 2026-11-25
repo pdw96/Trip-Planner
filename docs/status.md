@@ -141,7 +141,8 @@
 - **바텀 시트 쓸어내리기(#97)**: `touch-action` 은 가장 가까운 스크롤 영역까지만 조상과 합쳐진다. 가로 스크롤 줄(날짜 칩 fieldset) 안에서 시작한 세로 끌기는 바깥 머리의 `touch-pan-x` 가 듣지 않아 브라우저가 가져간다(pointercancel). 그래서 시트 칩 줄에 직접 `touch-pan-x`(`DayChips panXOnly`). 위 날짜 줄에 주면 페이지 세로 스크롤이 막힌다. `<dialog>` 가 스크롤 영역이면 자기 스크롤바 누르기도 `target === dialog` 라 바깥 판정은 좌표로도 본다(`sheet-dialog.ts`).
 - **DB 없이 화면 확인(#97)**: 테스트 계정 넣기를 auto 모드 권한 검사기가 막을 수 있다(#97 에서 막힘). 클라이언트 컴포넌트 동작은 커밋하지 않는 임시 라우트(`src/app/e2e-sheet/`)에 가짜 데이터로 그려 Playwright 로 본다. 실제 페이지처럼 `main w-full max-w-2xl` 로 감싸야 폭이 맞고, 지운 뒤에는 `.next/dev/types` 를 지워야 typecheck 가 옛 경로를 찾지 않는다. Next 개발 표시가 왼쪽 아래를 덮어 그 자리 tap 이 막히니 `position` 을 준다. CDP 터치로 끌기를 흉내 낼 수 있다.
 - **마이그레이션 SQL 을 적용 전에 확인(#89)**: Neon MCP 는 읽기 전용이라 브랜치를 못 만든다. scratchpad 에 `@electric-sql/pglite`(0.2.x, Postgres 16)를 깔고 `drizzle/*.sql` 을 journal 순서로(`--> statement-breakpoint` 로 나눠) 적용한 뒤, `@/db` 만 PGlite 로 바꾼 require 훅으로 앱의 실제 쿼리 함수를 돌린다(`server-only` 는 빈 모듈로). 데이터를 바꾸는 CTE·FK cascade·부분 색인 `ON CONFLICT` 동작을 적용 전에 볼 수 있다.
-- **마이그레이션과 배포 사이**: 색인·제약을 바꾸는 마이그레이션은 적용부터 새 배포까지 옛 코드가 실패할 수 있다(#89: `ON CONFLICT (schedule_item_id)` 가 부분 색인과 안 맞음). 적용 직후 바로 머지한다. 검사가 이미 다 통과했으면 자동 머지를 켤 수 없으니("clean status") squash 로 바로 머지한다.
+- **롤백 금지선**(`CLAUDE.md` '마이그레이션 PR'): 아래 배포보다 이전 배포로 Instant Rollback 하지 않고, 고친 코드를 새로 배포한다.
+  - 마이그레이션 0008(#89, 머지 커밋 `7ff21c0`): 옛 코드가 `budget_items.owner_user_id` 를 몰라 남의 내 돈 지출이 모두에게 보인다.
 - **머지된 작업 브랜치 다시 쓰기**: auto 모드에서 `--force-with-lease` push 가 막힐 수 있다(#97). 그때는 새 main 위 커밋에 옛 원격 브랜치를 merge 해 일반 push 한다(squash 로 이미 들어간 내용이라 PR diff 는 새 변경만).
 - **공휴일**: Vercel 환경 변수 `DATA_GO_KR_SERVICE_KEY`(Production·Preview). 이 세션에서는 `apis.data.go.kr` 접속이 막혀 있다. 실패하면 Vercel 로그에 `[holidays]` 한 줄(키는 가림)이 남는다.
 
