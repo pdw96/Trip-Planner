@@ -679,6 +679,71 @@ export async function updateScheduleItemAction(
   return { values, errors: {}, formError: null, savedAt: Date.now() };
 }
 
+// 일정 칸은 그대로 두고 내 돈 쪽 금액만 쓴다(떼어 낸 기록 #103 의 모두 일정 사본: 사본은 보기만 하고 내 돈만 적는다).
+// 내 돈 쪽(mine* 칸)만 읽고 쓴다. 양식이 보낸 sides 에서도 "mine" 만 받으므로 모임 쪽은 이 액션으로 쓸 수 없다
+// (기록에서는 쿼리의 sideWritable 도 모임 쪽을 막는다). 내 돈 행의 주인은 쿼리가 userId 로 정한다.
+// 순서는 updateScheduleItemAction 과 같다: 금액 검증에 그 여행의 통화가 필요해 일정·지금 금액(·예산 설정)을 userId 범위로
+// 먼저 읽고(읽기만), 필드를 검증한 뒤, 바뀐 금액만 userId 범위 쿼리로 쓰고 무효화한다.
+export async function setScheduleItemMineMoneyAction(
+  tripId: string,
+  itemId: string,
+  prev: ScheduleFormState,
+  formData: FormData,
+): Promise<ScheduleFormState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/");
+
+  const values = readScheduleFields(formData, null);
+  const [item, budgetRows] = await Promise.all([
+    getScheduleItem(user.id, tripId, itemId),
+    getScheduleBudgetRows(user.id, tripId, itemId),
+  ]);
+  if (!item) notFound();
+  const sides = readSides(formData).filter((side) => side === "mine");
+  const money = await parseMoney(user.id, tripId, values, sides, {
+    actualShown: {
+      shared: false,
+      mine: formData.get("mineActualShown") === "1",
+    },
+    defaultPaidOn: item.date,
+  });
+  if (!money.ok) {
+    return {
+      values,
+      errors: money.errors,
+      formError: null,
+      savedAt: prev.savedAt,
+    };
+  }
+  // 예산 설정이 없으면(그 사이 지워짐) 쓸 금액이 없다. 양식은 예산이 있을 때만 열린다.
+  if (money.plan === null) {
+    return {
+      values,
+      errors: {},
+      formError: SAVE_FAILED,
+      savedAt: prev.savedAt,
+    };
+  }
+
+  const saved = await writeMoney(
+    user.id,
+    tripId,
+    itemId,
+    money.plan,
+    budgetRows,
+  );
+  revalidatePath(tripPath(tripId));
+  if (!saved) {
+    return {
+      values,
+      errors: {},
+      formError: SAVE_FAILED,
+      savedAt: prev.savedAt,
+    };
+  }
+  return { values, errors: {}, formError: null, savedAt: Date.now() };
+}
+
 // 끌어 놓은 그날 순서를 저장한다(#41). 완료 체크처럼 대상 없음·검증 실패·저장 실패를 똑같이 { ok: false } 로
 // 돌려준다(남의 일정이 있는지 드러나지 않게). 보낸 목록이 그날 지금 일정과 다르면(그 사이 다른 창에서 넣거나
 // 지움) 저장하지 않는다.

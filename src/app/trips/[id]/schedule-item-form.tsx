@@ -435,6 +435,112 @@ function ScheduleItemFields({
   );
 }
 
+// 떼어 낸 기록(#103)의 모두 일정 사본에서 내 돈만 적는 양식. 일정 칸(날짜·시각·제목·장소·누구·메모)은 없고
+// 모임 금액은 글자로만 보인다(사본은 보기만). 내 돈 예상·실제를 넣고 고치고, 비워 저장하면 지운다.
+// ScheduleItemForm 의 내 돈 쪽과 같은 규칙: 고쳤을 때만 sides="mine" 을, 실제 칸을 고쳤을 때만 mineActualShown 을 보낸다.
+export function ScheduleMoneyForm({
+  action,
+  initialValues,
+  name,
+  sharedLines,
+  budget,
+  actual,
+  onClose,
+}: {
+  action: (
+    prev: ScheduleFormState,
+    formData: FormData,
+  ) => Promise<ScheduleFormState>;
+  initialValues: ScheduleFields;
+  // 일정 이름(제목, 없으면 장소).
+  name: string;
+  // 모임 금액 글자(예 "예상 ₩10,000"). 없으면 빈 배열.
+  sharedLines: string[];
+  budget: BudgetCurrencies;
+  actual: { open: boolean; rateSource: RateSource | null };
+  onClose: () => void;
+}) {
+  const [state, formAction, pending] = useActionState(action, {
+    values: initialValues,
+    errors: {},
+    formError: null,
+    savedAt: null,
+  });
+  const idPrefix = useId();
+  const [dirty, setDirty] = useState(false);
+  const [actualDirty, setActualDirty] = useState(false);
+  const [actualOpen, setActualOpen] = useState(actual.open);
+
+  // 열릴 때 내 돈 예상 칸에 초점.
+  useLayoutEffect(() => {
+    document.getElementById(`${idPrefix}-mine-estimate`)?.focus();
+  }, [idPrefix]);
+
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useEffect(() => {
+    if (state.savedAt !== null) onCloseRef.current();
+  }, [state.savedAt]);
+
+  return (
+    <form
+      action={formAction}
+      noValidate
+      className={`flex flex-col gap-4 ${cardClass}`}
+    >
+      <div className="flex flex-col gap-1">
+        <p className="font-medium break-words">{name}</p>
+        <p className="text-sm text-sub">
+          함께 쓰던 일정이라 내 돈만 적을 수 있어요.
+        </p>
+        {sharedLines.length > 0 && (
+          <p className="text-sm text-sub">모임 {sharedLines.join(" · ")}</p>
+        )}
+      </div>
+      {state.formError && (
+        <p
+          role="alert"
+          className="rounded-[10px] bg-danger/10 px-4 py-3 text-sm text-danger"
+        >
+          {state.formError}
+        </p>
+      )}
+      <input type="hidden" name="sides" value={dirty ? "mine" : ""} />
+      <div key={`money-${resultKey(state)}`} className="flex flex-col gap-3">
+        <SideMoneyFields
+          side="mine"
+          hidden={false}
+          idPrefix={`${idPrefix}-mine`}
+          budget={budget}
+          values={state.values}
+          errors={state.errors}
+          actual={actual}
+          actualOpen={actualOpen}
+          actualDirty={actualDirty}
+          onOpenActual={() => setActualOpen(true)}
+          onChange={(actualChanged) => {
+            setDirty(true);
+            if (actualChanged) setActualDirty(true);
+          }}
+        />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button type="submit" disabled={pending} className={primaryButtonClass}>
+          {pending ? "저장하는 중…" : "저장"}
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={pending}
+          className={secondaryButtonClass}
+        >
+          취소
+        </button>
+      </div>
+    </form>
+  );
+}
+
 // 한 쪽(모임 / 내 돈)의 예상·실제 칸. 보이지 않는 쪽도 hidden 으로 그려 두어 전환해도 적던 값이 남는다.
 // 실제 칸은 고치기 양식에만 있고, 실제가 없으면 접힌 "실제 지출 적기"를 누를 때 펼친다(미리 결제, §5.6).
 // 펼친 쪽 중 실제 칸을 고친 쪽만 actualShown 표시를 보낸다(서버는 표시가 있는 쪽의 실제만 읽는다).

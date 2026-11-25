@@ -14,7 +14,7 @@ import {
   useTransition,
 } from "react";
 import { buttonClass, errorTextClass, fieldClass } from "@/app/ui/styles";
-import type { ActualMoney, Money } from "@/lib/budget";
+import { type ActualMoney, formatMoney, type Money } from "@/lib/budget";
 import {
   type BudgetMode,
   defaultSideFor,
@@ -33,6 +33,7 @@ import {
   createScheduleItemAction,
   deleteScheduleItemAction,
   setScheduleItemDoneAction,
+  setScheduleItemMineMoneyAction,
   updateScheduleItemAction,
 } from "../schedule-actions";
 import { SideSwitch } from "./budget-forms";
@@ -46,6 +47,7 @@ import {
 import {
   type DateOption,
   ScheduleItemForm,
+  ScheduleMoneyForm,
   type WhoOption,
 } from "./schedule-item-form";
 import { useSelectedDay } from "./selected-day";
@@ -109,7 +111,8 @@ export const ROW_GRID =
 // 레일 토막. 색은 날 묶음이 물려준 --line(노선 색, 기간 밖은 회색).
 export const RAIL = "absolute left-1/2 w-1.5 -translate-x-1/2 bg-(--line)";
 
-// 입력칸은 화면 전체에서 하나만 열린다. 키: "add:<날짜>" 또는 "edit:<일정 id>".
+// 입력칸은 화면 전체에서 하나만 열린다. 키: "add:<날짜>", "edit:<일정 id>", "actual:<일정 id>"(실제 지출 칸),
+// "money:<일정 id>"(기록의 모두 일정 사본에서 여는 내 돈 양식, #103).
 // places: 이 여행의 장소(숙소 먼저). 양식의 장소 고르기와 이어진 장소의 링크에 쓴다.
 // searchEnabled: 장소 칸에서 Google 검색을 보일지(브라우저 키가 있을 때, #35).
 // budget: 예산 설정의 두 통화(#14). 없으면 null(금액 칸 대신 안내).
@@ -124,7 +127,7 @@ type OpenState = {
   people: WhoPerson[];
   // 국내 여행이면 장소·이동 링크를 네이버 지도로(#36).
   naverMap: boolean;
-  // 떼어 낸 기록(#103): 모두 일정은 보기만, 새 일정·고친 일정은 나만, 금액은 내 돈 쪽만, 장소는 Google 검색 없이
+  // 떼어 낸 기록(#103): 모두 일정은 보기만(내 돈만 적는다), 새 일정·고친 일정은 나만, 금액은 내 돈 쪽만, 장소는 Google 검색 없이
   // 이 기록의 장소 고르기와 직접 적기만(서버가 같은 규칙으로 막는다). 끌어 옮기기는 그대로.
   record: boolean;
   // 고른 날을 보다가 일정의 날짜를 옮기면 그 날 목록 아래에 잠깐 보이는 안내(#53 §5.4.1).
@@ -348,6 +351,8 @@ export function ScheduleItemRow({
   const offRoute = item.who.kind === "other";
   // 기록(#103)에서 내 나만 일정이 아닌 줄(모두 일정의 사본)은 고치기·지우기·끝냄 없이 보기만. 끌어 옮기기는 된다.
   const readOnly = record && item.who.kind !== "me";
+  // 기록의 모두 일정 사본에는 내 돈만 적을 수 있다(설계 §5.5). 예산이 있으면 제목을 눌러 내 돈 양식을 연다.
+  const moneyOnly = readOnly && item.who.kind === "all" && budget !== null;
   const [expanded, setExpanded] = useState(false);
   // 펼치기·접기 단추는 서로 다른 요소라, 누른 뒤 초점을 새 단추로 옮긴다.
   const focusToggle = useRef(false);
@@ -362,6 +367,9 @@ export function ScheduleItemRow({
   // 완료 체크칸을 켜면 열리는 실제 지출 칸(#14 §5.7.3).
   const actualKey = `actual:${item.id}`;
   const enteringActual = !readOnly && budget !== null && openKey === actualKey;
+  // 기록의 모두 일정 사본에서 여는 내 돈 양식.
+  const moneyKey = `money:${item.id}`;
+  const enteringMoney = moneyOnly && openKey === moneyKey;
   // 입력칸으로 열린 줄은 끌지 않는다. 다른 줄이 움직일 때 자리를 비켜 주도록 노드는 늘 등록한다.
   const {
     attributes,
@@ -373,7 +381,7 @@ export function ScheduleItemRow({
     isDragging,
   } = useSortable({
     id: item.id,
-    disabled: !sortable || editing,
+    disabled: !sortable || editing || enteringMoney,
     attributes: { roleDescription: "순서 바꾸기" },
   });
   const sortStyle = {
@@ -553,6 +561,51 @@ export function ScheduleItemRow({
     );
   }
 
+  if (enteringMoney && budget) {
+    const mine = {
+      estimate: amountFieldValues(item.money.mine?.estimate ?? null, budget),
+      actual: amountFieldValues(item.money.mine?.actual ?? null, budget),
+      detail: actualDetailValues(item.money.mine?.actual ?? null),
+    };
+    const shared = item.money.shared;
+    const sharedLines = [
+      shared?.estimate
+        ? `예상 ${formatMoney(shared.estimate.amount, shared.estimate.currency)}`
+        : null,
+      shared?.actual
+        ? `실제 ${formatMoney(shared.actual.amount, shared.actual.currency)}`
+        : null,
+    ].filter((line): line is string => line !== null);
+    return (
+      <li ref={setNodeRef} style={sortStyle}>
+        <ScheduleMoneyForm
+          action={setScheduleItemMineMoneyAction.bind(null, tripId, item.id)}
+          initialValues={{
+            ...EMPTY_SCHEDULE_FIELDS,
+            date: item.date,
+            mineEstimateAmount: mine.estimate.amount,
+            mineEstimateCurrency: mine.estimate.currency,
+            mineActualAmount: mine.actual.amount,
+            mineActualCurrency: mine.actual.currency,
+            mineActualPaidOn: mine.detail.paidOn,
+            mineActualRate: mine.detail.rate,
+          }}
+          name={item.title ?? item.place ?? ""}
+          sharedLines={sharedLines}
+          budget={budget}
+          actual={{
+            // 일정 고치기 양식과 같이 실제가 있거나 끝낸 일정이면 실제 칸을 펼쳐 연다.
+            open: item.money.mine?.actual != null || item.done,
+            rateSource: item.money.mine?.actual?.rateSource ?? null,
+          }}
+          onClose={() =>
+            setOpenKey((current) => (current === moneyKey ? null : current))
+          }
+        />
+      </li>
+    );
+  }
+
   // 이어진 장소가 목록에 있으면 그 장소의 Google 지도 링크(장소 id 포함), 아니면 글자로 검색. 국내 여행은 네이버 지도 검색(#36, 이름표만).
   const linkedPlace =
     item.placeId === null
@@ -688,7 +741,16 @@ export function ScheduleItemRow({
         {/* 완료된 일정은 보조 색. 완료 뒤에 여는 실제 지출 칸은 그대로 둔다(#14 리뷰). */}
         <div className={`flex flex-col gap-0.5 ${done ? "text-sub" : ""}`}>
           <div className="flex items-start gap-2">
-            {readOnly ? (
+            {moneyOnly ? (
+              <button
+                type="button"
+                onClick={() => setOpenKey(moneyKey)}
+                className="min-w-0 text-left font-medium break-words hover:underline"
+              >
+                {name}
+                <span className="sr-only">, 내 돈 적기</span>
+              </button>
+            ) : readOnly ? (
               <span className="min-w-0 font-medium break-words">{name}</span>
             ) : (
               <button
