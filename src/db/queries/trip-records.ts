@@ -255,6 +255,15 @@ export function currencyFitsSql(
   )`;
 }
 
+// 붙이기 후보 조건: 기록(별칭 recordAlias 의 trips 행)에 남은 멤버가 없다. 옛 배포로 되돌린 동안 기록에 초대해 들어온
+// 사람(§5.2)이 있으면 기록을 지울 때 그 사람의 멤버 행과 그 사람이 둔 행이 cascade 로 지워지므로 붙이지 않는다(기록으로 남음).
+export function recordWithoutMembersSql(recordAlias: string): SQL {
+  if (!/^[a-z_][a-z0-9_]*$/.test(recordAlias)) {
+    throw new Error("recordWithoutMembersSql: 별칭 형식이 틀렸어요.");
+  }
+  return sql`NOT EXISTS (SELECT 1 FROM trip_members rm WHERE rm.trip_id = ${sql.raw(recordAlias)}.id)`;
+}
+
 // 붙이기(설계 §5.4): P(userId)가 여행 T 에 참여하는 문에서, P 가 T 에서 떼어 낸 기록 R 하나를 T 로 되돌리고 R 을 지운다.
 // 앞에 joined(trip_id, user_id) CTE(참여 INSERT … RETURNING)가 있어야 한다. 참여가 0행이면 rec 이 비어 아무것도 바뀌지 않는다.
 // 기록 id·여행 id 를 입력으로 받지 않는다. T 는 초대 해시로 넣은 joined 행, R 은 "P 가 주인이고 detached_from_trip_id = T" 로 찾는다(§5.9).
@@ -262,7 +271,8 @@ export function currencyFitsSql(
 // budget_items 는 back_money 만, trip_personal_budgets 는 back_budget 만, trips 는 gone_record 만, trip_members 는 joined 만).
 //
 // CTE:
-//  rec          P 의 기록 가운데 detached_from_trip_id = T 이고 통화가 맞는(currencyFitsSql) 것 중 detached_at 가장 최근 하나.
+//  rec          P 의 기록 가운데 detached_from_trip_id = T 이고 남은 멤버가 없고(recordWithoutMembersSql) 통화가 맞는
+//               (currencyFitsSql) 것 중 detached_at 가장 최근 하나.
 //               여럿이어도 한 번에 하나만 붙인다. 나머지는 기록으로 남는다(다음에 나갔다 들어오면 그다음 것이 붙는다).
 //  item_src     R 의 P 나만 일정(떼어 낸 동안 만든 것 포함)과 옮길 장소: R 의 장소 사본과 google_place_id 가 같은 T 의 장소.
 //               T 에 없으면 장소 id 를 비우고, 글자 장소(place)가 비었으면 그 장소 이름표를 넣는다(§5.4-1). 옛 순서(old_position)는
@@ -292,6 +302,7 @@ export function reattachRecordCtes(userId: string): SQL {
         AND r.detached_from_trip_id = j.trip_id
         AND r.detached_at IS NOT NULL
       WHERE j.user_id = ${userId}::text
+        AND ${recordWithoutMembersSql("r")}
         AND ${currencyFitsSql("r", sql`j.trip_id`, userId)}
       ORDER BY r.detached_at DESC, r.id DESC
       LIMIT 1
@@ -316,6 +327,7 @@ export function reattachRecordCtes(userId: string): SQL {
         CASE
           WHEN b.schedule_item_id IS NULL THEN NULL
           WHEN ri.for_user_id = ${userId}::text THEN b.schedule_item_id
+          -- X 가 그 사이 다른 멤버의 나만 일정이 됐어도 잇는다(T 에서 남의 나만 일정에 내 돈을 붙이는 지금 동작과 같음).
           WHEN x.id IS NOT NULL AND NOT EXISTS (
             SELECT 1 FROM budget_items tb
             WHERE tb.schedule_item_id = x.id AND tb.owner_user_id = ${userId}::text
@@ -362,7 +374,8 @@ export function reattachRecordCtes(userId: string): SQL {
 }
 
 // 초대 화면(설계 §5.4)용: 이 사람이 tripId 에서 떼어 낸 기록 가운데 참여하면 붙을 것이 있는지(reattach), 통화 때문에 붙지 않을
-// 것이 있는지(blocked). 판정은 joinTrip 의 rec 과 같은 currencyFitsSql. 기록이 없거나 id 형식이 틀리면 둘 다 false.
+// 것이 있는지(blocked). 판정은 joinTrip 의 rec 과 같은 recordWithoutMembersSql·currencyFitsSql. 멤버가 남은 기록은 후보가 아니라
+// 어느 쪽에도 세지 않는다. 기록이 없거나 id 형식이 틀리면 둘 다 false.
 // 이 사람 자신의 기록만 본다(r.user_id = userId). 화면 판정과 참여 사이에 통화가 바뀌면 참여 때의 판정이 정한다.
 export async function getReattachPreview(
   userId: string,
@@ -380,6 +393,7 @@ export async function getReattachPreview(
       WHERE r.user_id = ${userId}::text
         AND r.detached_from_trip_id = ${tripId}::uuid
         AND r.detached_at IS NOT NULL
+        AND ${recordWithoutMembersSql("r")}
     ) f`);
   const row = result.rows[0];
   return { reattach: row?.reattach === true, blocked: row?.blocked === true };
