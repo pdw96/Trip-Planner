@@ -129,6 +129,7 @@ export type InvitePreview = {
 };
 
 // 초대 화면에 보일 것만. 링크를 가진 사람이면 누구나 보는 정보다.
+// 기록 여행(#103)은 찾지 않는다(옛 배포가 기록에 남긴 링크로 미리 보기가 뜨지 않게, joinTrip 과 같은 조건).
 // CLAUDE.md '첫 인자 userId' 규칙의 예외: 아직 멤버가 아닌 사람이 비밀값(해시)으로 찾는 쿼리라 userId 로 범위를 좁힐 수 없다.
 export async function findInvite(hash: string): Promise<InvitePreview | null> {
   const [row] = await db
@@ -142,7 +143,7 @@ export async function findInvite(hash: string): Promise<InvitePreview | null> {
     })
     .from(trips)
     .innerJoin(user, eq(user.id, trips.userId))
-    .where(eq(trips.inviteTokenHash, hash))
+    .where(and(eq(trips.inviteTokenHash, hash), isNull(trips.detachedAt)))
     .limit(1);
   return row ?? null;
 }
@@ -192,8 +193,8 @@ export async function removeMember(
     .getSQL();
   const result = await db.execute<{ trip_id: string }>(sql`
     WITH ${detachMembersCtes(
-      sql`trip_members.trip_id = ${tripId}::uuid
-        AND trip_members.user_id = ${memberUserId}::text
+      tripId,
+      sql`trip_members.user_id = ${memberUserId}::text
         AND trip_members.trip_id IN (${ownedTripIds})`,
       { sourceDeleted: false },
     )}
@@ -209,8 +210,8 @@ export async function leaveTrip(
   if (!isUuid(tripId)) return false;
   const result = await db.execute<{ trip_id: string }>(sql`
     WITH ${detachMembersCtes(
-      sql`trip_members.trip_id = ${tripId}::uuid
-        AND trip_members.user_id = ${userId}::text`,
+      tripId,
+      sql`trip_members.user_id = ${userId}::text`,
       { sourceDeleted: false },
     )}
     SELECT trip_id FROM removed`);

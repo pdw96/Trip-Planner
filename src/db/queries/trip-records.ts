@@ -12,8 +12,9 @@ import { isUuid } from "@/lib/ids";
 // 멤버 행 지우기와 함께 데이터를 바꾸는 CTE 한 문이라 원자적이다(neon-http 에는 트랜잭션이 없다, §6).
 // 모든 CTE 는 removed(실제로 지운 멤버 행) → records(그 행마다 새 R) 에 이어져, 자격 조건(memberCondition)이
 // 맞지 않아 removed 가 비면 아무것도 바뀌지 않는다. 여행 지우기에서는 records 가 여러 행이라 모든 결합을 R(rec.id) 단위로 한다.
-// memberCondition 은 여행 하나(trip_members.trip_id = T)로 좁혀야 한다. records 가 removed 와 user_id 로 다시 결합해
-// 원래 여행을 찾으므로, 지운 행 안에서 user_id 가 고유해야 한다(여행 하나 안에서는 기본 키라 고유).
+// 원래 여행 T 는 tripId 로 받고 removed 가 trip_members.trip_id = T 를 스스로 건다(memberCondition 은 그 위에 더하는 자격 조건).
+// records 가 removed 와 user_id 로 다시 결합해 원래 여행을 찾으므로, 지운 행 안에서 user_id 가 고유해야 한다
+// (여행 하나 안에서는 기본 키라 고유). tripId 는 isUuid 를 거친 값이다.
 //
 // CTE(설계 §5.3 번호):
 //  1 records        R 을 만든다(T 의 제목·목적지·날짜·메모·나라, 초대 칸은 비움). new_records 가 넣고, records 가
@@ -29,7 +30,7 @@ import { isUuid } from "@/lib/ids";
 //  5 new_budget     예산 설정 복사.
 //  6 new_items      모두 일정 복사(copied_from_id = 원래 id, 장소는 R 의 사본, position·done 도).
 //  7 kept_on_mine   P 의 나만 일정에 붙은 남의 금액(모임 행, 나가지 않는 사람의 내 돈)을 T 의 일정 밖 지출로 바꾼다
-//                   (deleteScheduleItem 의 moved 와 같은 제목·날짜 규칙). 반목표의 유일한 예외(§2).
+//                   (deleteScheduleItem 의 moved 와 같은 제목·날짜 규칙). 반목표의 유일한 예외(§2). T 의 행만 쓴다(b.trip_id = T).
 //    moved_mine     P 의 나만 일정을 R 로 옮긴다(원래 id 그대로, 장소는 R 의 사본).
 //  8 moved_money    P 의 내 돈을 한 UPDATE 로 R 로 옮긴다. 모두 일정에 붙은 것 → 그 사본(copied_from_id 로),
 //                   P 의 나만 일정에 붙은 것 → 그대로(일정과 함께 간다), 남의 나만 일정에 붙은 것 → 일정 밖(제목·날짜는 그 일정에서).
@@ -65,6 +66,7 @@ import { isUuid } from "@/lib/ids";
 // INSERT … SELECT 는 칸을 모두 이름으로 적는다(칸 순서에 기대지 않음).
 // sourceDeleted: 같은 문에서 원래 여행을 지우는가(deleteTrip 만 true).
 export function detachMembersCtes(
+  tripId: string,
   memberCondition: SQL,
   { sourceDeleted }: { sourceDeleted: boolean },
 ): SQL {
@@ -72,7 +74,7 @@ export function detachMembersCtes(
   return sql`
     removed AS (
       DELETE FROM trip_members
-      WHERE ${memberCondition}
+      WHERE trip_members.trip_id = ${tripId}::uuid AND (${memberCondition})
       RETURNING trip_id, user_id
     ),
     new_records AS (
@@ -144,6 +146,7 @@ export function detachMembersCtes(
       SET schedule_item_id = NULL, title = ii.title, date = ii.date, updated_at = now()
       FROM item_info ii
       WHERE b.schedule_item_id = ii.id
+        AND b.trip_id = ${tripId}::uuid
         AND ii.for_user_id = ii.leaver_id
         AND NOT EXISTS (
           SELECT 1 FROM records rec2

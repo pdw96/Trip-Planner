@@ -162,8 +162,8 @@ export async function deleteTrip(
   if (!isUuid(tripId)) return false;
   const result = await db.execute<{ id: string }>(sql`
     WITH ${detachMembersCtes(
-      sql`trip_members.trip_id = ${tripId}::uuid
-        AND trip_members.trip_id IN (SELECT id FROM trips WHERE ${ownedTrips(userId)})`,
+      tripId,
+      sql`trip_members.trip_id IN (SELECT id FROM trips WHERE ${ownedTrips(userId)})`,
       { sourceDeleted: true },
     )},
     gone AS (
