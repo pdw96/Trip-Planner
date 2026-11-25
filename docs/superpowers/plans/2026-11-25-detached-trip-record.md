@@ -183,14 +183,14 @@ CTE 순서(설계 §5.3 번호). 모두 `removed`/`records` 에 이어져, 지�
 6. `new_items`: 모두 일정(`for_user_id IS NULL`) 복사, `copied_from_id = s.id`, `place_id` 는 4번처럼, `position`·`done` 복사. `RETURNING id, trip_id, copied_from_id`.
 7. `kept_on_mine`: 나간 사람 나만 일정에 붙은 **남의** 금액(`owner_user_id IS NULL OR owner_user_id <> rec.user_id`)을 T 에 일정 밖 지출로(`deleteScheduleItem` 의 `moved` 와 같은 제목·날짜 규칙, `EXTRA_TITLE_MAX`). `moved_mine`: 그 나만 일정을 `trip_id = rec.id`, `place_id` = 사본 장소로 UPDATE.
 8. `moved_money`: `owner_user_id = rec.user_id` 인 행을 한 UPDATE 로 `trip_id = rec.id`. `schedule_item_id` 는 CASE — 모두 일정이면 `new_items.id`(copied_from_id 로), 나간 사람 나만 일정이면 그대로, 남의 나만 일정이면 NULL + 제목·날짜 채우기.
-9. `copied_shared_money`: 모임 지출(`owner_user_id IS NULL`) 복사. 모두 일정에 붙은 것은 사본 일정에, 나간 사람 나만 일정에 붙은 것은 그 일정(같은 id, 이제 기록에 있음)에, 남의 나만 일정에 붙은 것은 일정 밖 지출로. 일정 밖 지출은 그대로.
+9. `copied_shared_money`: 모임 지출(`owner_user_id IS NULL`) 복사. 모두 일정에 붙은 것은 사본 일정에, 나만 일정(나간 사람 것이든 남의 것이든)에 붙은 것은 일정 밖 지출로(제목·날짜는 그 일정에서). 일정 밖 지출은 그대로. 나간 사람 나만 일정에 붙은 원래 모임 행은 7번이 같은 문에서 일정 연결을 끊으므로, 사본을 같은 일정에 이으면 부분 고유 색인(`budget_items_schedule_shared_idx`)이 CTE 실행 순서에 따라 충돌할 수 있다 — 그래서 잇지 않는다.
 10. `moved_budget`: `trip_personal_budgets` 를 `trip_id = rec.id`.
 
 `deleteTrip`: `WITH ${detachMembersCtes(sql\`trip_members.trip_id = ${tripId}::uuid AND trip_members.trip_id IN (SELECT id FROM trips WHERE ${ownedTrips(userId)})\`)}, gone AS (DELETE FROM trips WHERE id = ${tripId}::uuid AND ${ownedTrips(userId)} RETURNING id) SELECT id FROM gone`. 옮긴 행이 문 끝 cascade 에 걸리지 않는 까닭을 `deleteScheduleItem` 주석처럼 적는다.
 
 - [ ] **Step 1: 하네스 시나리오 쓰기**
   - A(나가기): T(주인 B, 멤버 A·C)에 장소 2, 기준점 1, 예산 설정, 모두 일정 2(하나에 모임 지출과 A 내 돈), A 나만 일정 1(A 내 돈), C 나만 일정 1(A 내 돈 = "남의 나만 일정의 내 돈"), A 일정 밖 내 돈 1, A 내 예산. `leaveTrip(A, T)` 뒤: A 의 기록 R 1개(`detached_from_trip_id = T`), R 에 장소 2·기준점 1·예산 설정·모두 일정 사본 2(`copied_from_id` 맞음)·A 나만 일정(원래 id)·모임 지출 사본·A 내 돈 4행(모두 일정 사본에 1, 나만 일정에 1, 일정 밖 2 — 그중 하나는 C 일정에서 바뀐 것, 제목 = C 일정 제목)·A 내 예산, 함께한 사람 B(was_owner)·C. T 에는 A 나만 일정·A 내 돈·A 내 예산·A 멤버 행이 없고, 나머지는 행 수·값이 그대로.
-  - B: A 나만 일정에 모임 지출과 C 내 돈이 붙은 경우 → `leaveTrip` 뒤 T 에 그 둘이 일정 밖 지출(제목 = 그 일정 제목, 날짜 = 일정 날짜)로 남고 금액 그대로, R 에 모임 지출 사본이 A 나만 일정에 붙어 있음.
+  - B: A 나만 일정에 모임 지출과 C 내 돈이 붙은 경우 → `leaveTrip` 뒤 T 에 그 둘이 일정 밖 지출(제목 = 그 일정 제목, 날짜 = 일정 날짜)로 남고 금액 그대로, R 에 모임 지출 사본이 일정 밖 지출(제목 = 그 일정 제목)로 있음.
   - C: 멤버 A·C 가 있는 T 를 B 가 `deleteTrip` → A·C 각자 기록 1개, 각 기록의 함께한 사람 = B(was_owner)+상대, T 없음, 기록의 `detached_from_trip_id` null, 옮긴 행이 지워지지 않음.
   - 자격: C 가 `removeMember(C, T, A)` → false, 아무것도 안 바뀜. B 가 남의 여행 id 로 `removeMember` → false.
 - [ ] **Step 2: 하네스 실행 → 실패 확인.**
