@@ -1,9 +1,11 @@
 import "server-only";
-import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { unionAll } from "drizzle-orm/pg-core";
 import { cache } from "react";
 import { db } from "@/db";
-import { tripMembers, trips, user } from "@/db/schema";
+import { tripMembers, tripRecordCompanions, trips, user } from "@/db/schema";
 import { isUuid } from "@/lib/ids";
+import type { CompanionRow } from "@/lib/trip-people";
 import { detachMembersCtes, reattachRecordCtes } from "./trip-records";
 import { accessibleTrips, ownedTrips } from "./trips";
 
@@ -250,4 +252,67 @@ export async function leaveTrip(
     )}
     SELECT trip_id FROM removed`);
   return result.rows.length > 0;
+}
+
+// 접근할 수 있는 모든 여행의 "나를 뺀 함께한 사람"(#122 탭 화면). 세 출처를 한 문으로 모은다:
+//   1) 기록 아닌 여행의 주인(내가 주인이 아닐 때), 2) 여행의 멤버, 3) 내 기록 여행의 동행(trip_record_companions).
+// 여행 안 순서는 주인(기록이면 주인이었던 사람) → 참여 순 → 이름. 이메일은 고르지 않는다.
+// user id 는 서버의 집계(countCompanions)와 같은 사람 가르기에만 쓰고 화면으로 넘기지 않는다(#103).
+// 각 가지는 trips 를 별칭 없이 FROM 에 두고 접근 조건을 같은 문에 건다. 집합 연산의 정렬은 결과 칸 이름으로 한다
+// (테이블 이름이 붙은 칸은 UNION 결과에 없다).
+export async function listTripCompanions(
+  userId: string,
+): Promise<CompanionRow[]> {
+  const noJoinedAt = sql<string | null>`NULL::timestamptz`.as("joined_at");
+  const owners = db
+    .select({
+      tripId: sql<string>`${trips.id}`.as("trip_id"),
+      userId: sql<string>`${user.id}`.as("user_id"),
+      name: sql<string>`${user.name}`.as("name"),
+      ord: sql<number>`0`.as("ord"),
+      joinedAt: noJoinedAt,
+    })
+    .from(trips)
+    .innerJoin(user, eq(user.id, trips.userId))
+    .where(
+      and(
+        isNull(trips.detachedAt),
+        ne(trips.userId, userId),
+        accessibleTrips(userId),
+      ),
+    );
+  const members = db
+    .select({
+      tripId: sql<string>`${trips.id}`.as("trip_id"),
+      userId: sql<string>`${user.id}`.as("user_id"),
+      name: sql<string>`${user.name}`.as("name"),
+      ord: sql<number>`1`.as("ord"),
+      joinedAt: sql<string | null>`${tripMembers.joinedAt}`.as("joined_at"),
+    })
+    .from(trips)
+    .innerJoin(tripMembers, eq(tripMembers.tripId, trips.id))
+    .innerJoin(user, eq(user.id, tripMembers.userId))
+    .where(and(ne(tripMembers.userId, userId), accessibleTrips(userId)));
+  const recordCompanions = db
+    .select({
+      tripId: sql<string>`${trips.id}`.as("trip_id"),
+      userId: sql<string>`${user.id}`.as("user_id"),
+      name: sql<string>`${user.name}`.as("name"),
+      ord: sql<number>`CASE WHEN ${tripRecordCompanions.wasOwner} THEN 0 ELSE 1 END`.as(
+        "ord",
+      ),
+      joinedAt: noJoinedAt,
+    })
+    .from(trips)
+    .innerJoin(tripRecordCompanions, eq(tripRecordCompanions.tripId, trips.id))
+    .innerJoin(user, eq(user.id, tripRecordCompanions.userId))
+    .where(and(ownedTrips(userId), isNotNull(trips.detachedAt)));
+  const rows = await unionAll(owners, members, recordCompanions).orderBy(
+    sql`trip_id, ord, joined_at NULLS FIRST, name, user_id`,
+  );
+  return rows.map(({ tripId, userId: personId, name }) => ({
+    tripId,
+    userId: personId,
+    name,
+  }));
 }
