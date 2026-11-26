@@ -69,6 +69,8 @@ function isOwnerColumn(userId: string) {
 
 export type TripListItem = TripRow & {
   isOwner: boolean;
+  // 함께하는 사람(멤버)이 한 명이라도 있는 여행인지. 탭 화면(#122)이 함께 탭과 내 여행을 가른다.
+  hasMembers: boolean;
   ownerName: string;
   // 기록이면 그 여행의 주인(was_owner)이었던 사람의 이름, 아니면 null.
   recordOwnerName: string | null;
@@ -81,6 +83,7 @@ export async function listTrips(userId: string): Promise<TripListItem[]> {
     .select({
       ...tripColumns,
       isOwner: isOwnerColumn(userId),
+      hasMembers: sql<boolean>`EXISTS (SELECT 1 FROM trip_members m WHERE m.trip_id = ${trips.id})`,
       ownerName: user.name,
       recordOwnerName: recordOwner.name,
     })

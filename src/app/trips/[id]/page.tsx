@@ -9,6 +9,7 @@ import { getCurrentUser } from "@/lib/session";
 import { formatLongRange, stayLength, todayInSeoul } from "@/lib/trip-dates";
 import { companionsLine, recordNotice } from "@/lib/trip-records";
 import { DeleteTripButton } from "../delete-trip-button";
+import { BackLink } from "./back-link";
 import { BudgetSection } from "./budget-section";
 import { DayRouteProvider } from "./day-route-store";
 import { MapSection } from "./map-section";
@@ -48,9 +49,7 @@ async function TripDetail({
     <article className="flex flex-col gap-8">
       <header className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <Link href="/trips" className="text-sm text-sub hover:underline">
-            ← 내 여행
-          </Link>
+          <BackLink />
           <div className="flex gap-2">
             {!record && (
               <Link

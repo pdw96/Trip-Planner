@@ -16,7 +16,7 @@ import { SAVE_FAILED } from "./messages";
 // 쿼리의 uuid 검사와 주인 조건(ownedTrips)·본인 조건이 막는다. 바뀐 행이 없으면 찾을 수 없음.
 
 function revalidateTrip(tripId: string) {
-  revalidatePath("/trips");
+  revalidatePath("/", "layout");
   revalidatePath(`/trips/${tripId}`);
 }
 
@@ -100,5 +100,5 @@ export async function leaveTripAction(
   if (!left) notFound();
 
   revalidateTrip(tripId);
-  redirect("/trips");
+  redirect("/");
 }

@@ -95,6 +95,59 @@ export function tripCountdown(
   return days === 1 ? "내일 출발" : `${days}일 남음`;
 }
 
+// 탭 화면(#122)의 여행 나누기. 함께하는 여행(멤버가 있음)은 함께 탭, 혼자·기록은 내 여행의 "앞으로",
+// 끝난 여행은 모두 "추억"(시작 연도로 묶음). 모든 여행이 정확히 한 곳에 들어간다.
+// 다음 여행 = 끝나지 않은 여행 중 기록이 아닌 것의 첫째(기록은 내가 나온 여행이라 "갈 여행"이 아니다).
+type Groupable = Dated & {
+  hasMembers: boolean;
+  detachedAt: Date | string | null;
+};
+
+export function groupTrips<T extends Groupable>(
+  trips: T[],
+  today: string,
+): {
+  next: T | null;
+  together: T[];
+  ahead: T[];
+  memories: { year: string; trips: T[] }[];
+  memoryCount: number;
+  thisYearCount: number;
+} {
+  const { upcoming, past } = splitTrips(trips, today);
+  const together = upcoming.filter((t) => t.hasMembers);
+  const ahead = upcoming.filter((t) => !t.hasMembers);
+  const next = upcoming.find((t) => t.detachedAt === null) ?? null;
+  const byYear = new Map<string, T[]>();
+  for (const trip of past) {
+    const year = trip.startDate.slice(0, 4);
+    const list = byYear.get(year);
+    if (list) list.push(trip);
+    else byYear.set(year, [trip]);
+  }
+  const memories = [...byYear]
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([year, list]) => ({ year, trips: list }));
+  const thisYear = today.slice(0, 4);
+  return {
+    next,
+    together,
+    ahead,
+    memories,
+    memoryCount: past.length,
+    thisYearCount: byYear.get(thisYear)?.length ?? 0,
+  };
+}
+
+// 홈 "다음 여행" 카드의 남은 날(#122). 시작 전 "D-N", 여행 중 "여행 중 · N일째"(첫날 1일째). 끝난 여행에는 쓰지 않는다.
+export function nextTripBadge(startDate: string, today: string): string {
+  if (startDate > today) {
+    const days = Math.round((utcDay(startDate) - utcDay(today)) / DAY_MS);
+    return `D-${days}`;
+  }
+  return `여행 중 · ${tripDayCount(startDate, today)}일째`;
+}
+
 // 여행 날 수(시작·끝 포함). 날을 펼치지 않고 센다(여행 기간 상한이 없어 아주 긴 여행도 목록이 느려지지 않게, PR #57 Codex 지적).
 export function tripDayCount(startDate: string, endDate: string): number {
   return Math.round((utcDay(endDate) - utcDay(startDate)) / DAY_MS) + 1;

@@ -36,7 +36,7 @@ export async function joinTripAction(
   }
   if (joined) {
     await settleReattachedDays(user.id, joined);
-    revalidatePath("/trips");
+    revalidatePath("/", "layout");
     revalidatePath(`/trips/${joined.tripId}`);
     if (joined.reattachedRecordId) {
       revalidatePath(`/trips/${joined.reattachedRecordId}`);
