@@ -45,7 +45,8 @@ export async function NextTripSection({ userId }: { userId: string }) {
           </Link>
           {!none && (
             <Link href="/mine" className="text-sm text-sub hover:underline">
-              내 여행에서 추억 보기
+              {/* 끝나지 않은 것이 떼어 낸 기록뿐이면 추억이 아니라 "앞으로"에 있다. */}
+              {memories.length > 0 ? "내 여행에서 추억 보기" : "내 여행 보기"}
             </Link>
           )}
         </div>

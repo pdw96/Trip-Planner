@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans_KR } from "next/font/google";
+import { Suspense } from "react";
+import { NavigationTracker } from "@/app/ui/navigation-tracker";
 import "./globals.css";
 
 // 한글이 있는 글꼴(#53). 가변 글꼴이 아니라 굵기를 적는다.
@@ -21,7 +23,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="ko"
       className={`${plexKr.variable} h-full font-sans antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        {/* 여행 화면 "← 뒤로"가 쓰는 직전 주소(#122). 그리는 것은 없다. */}
+        <Suspense fallback={null}>
+          <NavigationTracker />
+        </Suspense>
+      </body>
     </html>
   );
 }
