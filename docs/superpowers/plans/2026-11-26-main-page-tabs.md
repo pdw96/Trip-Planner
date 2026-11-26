@@ -63,8 +63,9 @@
 결정(스펙에서 빌더에게 맡긴 것):
 - 순수 모듈은 서로 import 할 수 없어 나누기 함수는 새 파일이 아니라 `splitTrips` 가 있는 `trip-dates.ts` 에 둔다(스펙 §5.2 의 `trip-groups.ts` 대신).
 - 무효화는 `revalidatePath("/", "layout")` 한 번(세 탭과 여행 화면을 빠짐없이).
-- "← 뒤로"는 `router.back()` 대신 "이 브라우저 탭에서 마지막으로 본 탭 화면"으로 가는 링크(`sessionStorage`). 기록이 없으면 `/`. 양식을 거친 기록 문제(스펙 §5.9 끝)가 생기지 않는다.
-- 탭 막대 아래쪽은 `fixed` 가 아니라 `sticky bottom-0`(레이아웃 맨 끝, `body` 가 `min-h-full flex flex-col`). 본문을 가리지 않아 여백 계산이 필요 없다.
+- "← 뒤로" 판별(스펙 §5.9): 탭 화면(`/`, `/together`, `/mine`)에서 여행 링크(`a[href^="/trips/"]`)를 누르면 `sessionStorage["tp:fromTab"] = "1"` 을 남긴다(탭 레이아웃의 클라이언트 컴포넌트가 document 클릭을 듣고, 누른 때의 `location.pathname` 이 탭 주소일 때만). 여행 화면의 "← 뒤로"는 마운트 때 이 표시를 읽고 바로 지운다. 표시가 있었으면 누를 때 `router.back()`(스크롤 자리 유지), 없었으면(링크로 바로 열기, 새 여행·고치기·초대를 거침) `<Link href="/">`. 양식을 거친 뒤에는 새로 마운트되며 표시가 없으므로 양식으로 돌아가지 않는다.
+- 탭 막대 아래쪽은 `fixed` 가 아니라 `sticky bottom-0`(레이아웃 맨 끝, `body` 가 `min-h-full flex flex-col`). 본문을 가리지 않아 여백 계산이 필요 없다. 그러려면 `(tabs)/layout.tsx` 는 감싸는 요소 없이 fragment 로 `{top}{children}{bottom}` 을 돌려줘 `main`(flex-1)과 막대가 `body` 의 바로 아래 자식이 되게 한다.
+- 내 여행 탭의 "아직 여행이 없어요"는 함께·앞으로·추억이 모두 빌 때만. 함께 여행만 있으면 추억 빈 안내 + "함께 가는 여행은 함께 탭에 있어요."(스펙 §5.5 의 빈틈, 계획 검토에서 찾음).
 
 ---
 
@@ -85,7 +86,7 @@
     - `thisYearCount`: 추억 중 `startDate` 연도 = `today` 연도.
   - `nextTripBadge(startDate: string, endDate: string, today: string): string` — 시작 전 `"D-N"`, 여행 중 `"여행 중 · N일째"`(첫날 1). 끝난 여행에는 부르지 않는다.
 
-- [ ] **Step 1: 실패하는 시험 쓰기** (`trip-dates.test.mjs` 의 `trip()` 도우미를 `hasMembers`, `detachedAt` 을 받게 넓힌다)
+- [ ] **Step 1: 실패하는 시험 쓰기** (기존 `trip()` 도우미는 넷째 인자가 `createdAt` 이라 그대로 두고, 새 도우미 `t(id, startDate, endDate, { hasMembers = false, detachedAt = null } = {})` 를 따로 둔다. `createdAt` 은 고정값. `detachedAt` 기본값을 꼭 `null` 로: `undefined` 면 `next` 가 늘 null 이 된다)
 
 ```js
 test("groupTrips: 표의 네 줄", () => {
@@ -103,7 +104,7 @@ test("groupTrips: 표의 네 줄", () => {
   assert.equal(g.thisYearCount, 1);
 });
 
-test("groupTrips: 모든 여행이 정확히 한 곳", () => { /* 위 네 개 + 여행 중 하나: together+ahead+memories 의 id 를 모으면 입력 id 와 같고 겹침이 없다 */ });
+test("groupTrips: 모든 여행이 정확히 한 곳", () => { /* 위 네 개 + 여행 중 하나 + 지난 기록 하나: together+ahead+memories 의 id 를 모으면 입력 id 와 같고 겹침이 없다, 지난 기록은 memories 에 */ });
 
 test("groupTrips: 오늘 끝나는 여행은 아직 추억이 아니다", () => {
   const g = groupTrips([t("a", "2026-11-24", "2026-11-26")], "2026-11-26");
@@ -231,7 +232,8 @@ test("withNames: 3명 넘으면 외 N명과", () => {
     `Promise.all([listTrips, listTripCompanions])` → `namesByTrip` 로 `people` 붙이기 → `groupTrips` → 추억 여행 id 로 `countCompanions`. `CompanionRow` 는 이 함수 밖으로 나가지 않는다.
 
 - [ ] **Step 1: `listTrips` 에 `hasMembers` 추가**, 지금 `/trips` 화면이 그대로 컴파일되는지 — Run: `npm run typecheck` / Expected: 오류 없음
-- [ ] **Step 2: `listTripCompanions` 구현** — 주석에 세 출처와 "user id 는 서버 집계에만, 화면으로 넘기지 않음(#103)" 을 적는다
+- [ ] **Step 2: `listTripCompanions` 구현** — 주석에 세 출처와 "user id 는 서버 집계에만, 화면으로 넘기지 않음(#103)" 을 적는다. 세 가지의 칸은 이름·타입을 맞추고 별칭을 단다(`trip_id`, `user_id`, `name`, `ord`, `joined_at` — 첫 가지·셋째 가지의 `joined_at` 은 `sql<Date | null>\`NULL::timestamptz\``). set operation 의 정렬은 결과 칸 이름으로(`orderBy(sql\`trip_id, ord, joined_at NULLS FIRST, name\`)` 처럼) 한다. 테이블 이름이 붙은 칸으로 정렬하면 실행 때 "column does not exist" 가 날 수 있다.
+- [ ] **Step 2b: PGlite 로 SQL 확인** — scratchpad 에 하네스(커밋 안 함): `@electric-sql/pglite` 를 scratchpad 에 설치, `drizzle/*.sql` 을 차례로 적용, 시드(나 = A; A 주인·B 멤버 여행, C 주인·A 멤버 여행, A 의 기록(동행 B was_owner, D), A 와 상관없는 E 의 여행(F 멤버)). `listTripCompanions` 가 만드는 SQL(`.toSQL()` 또는 같은 쿼리를 `drizzle-orm/pglite` 로)을 실행해 확인: A 는 결과에 없음, E·F 여행은 없음, C 여행에서는 C 만, 기록에서는 B(먼저)·D, 여행 안 순서가 주인 → 참여 순.
 - [ ] **Step 3: `loadTripLists` 구현**
 - [ ] **Step 4: 확인** — Run: `npm run typecheck && npm run lint` / Expected: 오류 없음. 쿼리 결과 확인은 Task 6 브라우저 확인(테스트 계정 두 개, 함께 여행·기록 하나씩)에서 한다.
 - [ ] **Step 5: 커밋** — `git commit -m "함께한 사람 쿼리와 탭 화면 데이터 (#122)"`
@@ -251,11 +253,11 @@ test("withNames: 3명 넘으면 외 N명과", () => {
   - `TabBar({ placement }: { placement: "top" | "bottom" })` — client, `usePathname()` 로 현재 칸(`/` 는 정확히 `/` 일 때만, 나머지는 `startsWith`). 칸 `[{ href: "/", label: "홈" }, { href: "/together", label: "함께" }, { href: "/mine", label: "내 여행" }]`, 시안의 인라인 선 SVG(`aria-hidden`), `aria-current="page"`, `<nav aria-label="주 메뉴">`.
     - `bottom`: `sm:hidden sticky bottom-0 z-30 grid grid-cols-3 border-t border-rule bg-background pb-[env(safe-area-inset-bottom)]`, 칸 `min-h-14`.
     - `top`: `hidden sm:block`, 머리 한 줄(앱 이름 + 세 칸 + "+ 새 여행" + `SignOutButton`), `max-w-2xl` 가운데.
-    - 탭 칸 `Link` 를 누르면 `sessionStorage["tp:lastTab"]` 에 그 주소를 남긴다(Task 5 의 "← 뒤로"가 읽음). 현재 화면도 마운트 때 남긴다. `try/catch` 로 감싼다(저장 막힘).
+  - `TripLinkMarker()` — client, `(tabs)/trip-link-marker.tsx`, 아무것도 그리지 않는다. 마운트 때 document 에 click 리스너(언마운트 때 제거): 누른 곳의 가장 가까운 `a[href^="/trips/"]` 가 있고 `location.pathname` 이 `/`·`/together`·`/mine` 중 하나면 `sessionStorage.setItem("tp:fromTab", "1")`. `try/catch`(저장 막힘). 레이아웃의 `bottom` TabNav 와 같은 Suspense 안(로그인일 때만)에 둔다.
   - `(tabs)/layout.tsx`: `children` 위에 `<Suspense fallback={null}><TabNav placement="top" /></Suspense>`, 아래에 `placement="bottom"`. `TabNav` 는 서버 컴포넌트로 `getCurrentUser()` 가 null 이면 null.
   - `NextTripSection({ userId }: { userId: string })` — 서버 컴포넌트, 스펙 §5.3 카드와 두 빈 상태.
 - 홈(`(tabs)/page.tsx`, 로그인): 휴대폰 머리(앱 이름 + "+ 새 여행" + 로그아웃, `sm:hidden`) 아래 칸들을 차례로: 지금은 `<Suspense><NextTripSection userId=… /></Suspense>` 하나. 파일 주석에 "홈은 칸을 쌓는다. 홈만의 기능은 칸 하나로 더한다(#122)".
-- 비로그인 `/`: 지금 로그인 화면 그대로. 지금의 `redirect("/trips")` 와 그 주석은 지운다.
+- `(tabs)/page.tsx` 구조: 지금은 가운데 정렬 `main`·큰 노선·h1 이 Suspense 밖에 있다. 이를 바꿔 `main` 전체를 Suspense 안 서버 컴포넌트가 로그인 여부로 고른다 — 비로그인이면 지금 로그인 `main` 그대로, 로그인이면 홈 `main`(`mx-auto w-full max-w-2xl flex-1 …`). fallback 은 중립 문구("불러오는 중…"). 지금의 `redirect("/trips")` 와 그 주석은 지운다.
 
 - [ ] **Step 1: `git mv` 로 홈 옮기기, `(tabs)/layout.tsx`·`tab-bar.tsx` 만들기**
 - [ ] **Step 2: `NextTripSection` 과 홈 화면**
@@ -275,7 +277,7 @@ test("withNames: 3명 넘으면 외 N명과", () => {
 - Consumes: Task 3 `loadTripLists`/`ListedTrip`, Task 2 `peopleLine`, `withNames`, Task 1 결과 모양.
 - Produces:
   - `TripRow({ trip, today, line, dim }: { trip: ListedTrip; today: string; line?: string | null; dim?: boolean })` — 지금 모양(제목 + 이름표, "목적지, 기간 · 남은 날", 노선). `line` 은 셋째 줄(함께 탭의 `peopleLine`), 추억 줄은 둘째 줄 끝에 `· withNames(...)`.
-  - `BackLink()` — client. `<Link href={target}>← 뒤로</Link>`, `target` 은 첫 렌더 `/`, 마운트 뒤 `sessionStorage["tp:lastTab"]`(`/`, `/together`, `/mine` 중 하나일 때만) 로 바꾼다.
+  - `BackLink()` — client. 늘 `<Link href="/">← 뒤로</Link>` 로 그린다(JS 없이도 동작). 마운트 때 `sessionStorage["tp:fromTab"]` 을 읽어 state 에 두고 바로 지운다. state 가 참이면 onClick 에서 `preventDefault()` 후 `router.back()`.
 - 함께 탭·내 여행 탭은 스펙 §5.4·§5.5 그대로(문구는 Global Constraints). 각 페이지: 비로그인 `redirect("/")`, 머리(h1 + 설명 + 휴대폰에서만 "+ 새 여행").
 - 칩은 12명까지, 13명 이상이면 12명 + "외 N명" 칩. 함께 간 사람이 0명이면 칩 줄 감춤(숫자 칸 "0명").
 
@@ -297,12 +299,13 @@ test("withNames: 3명 넘으면 외 N명과", () => {
 
 **Files:** 없음(고칠 것이 나오면 해당 파일)
 
-- [ ] **Step 1: 테스트 계정** — `docs/status.md` '로그인한 화면의 브라우저 확인'·'소유권 브라우저 확인' 방법으로 `e2e-test-` 계정 두 개(A, B)와 여행을 넣는다(넣기 전 SQL 전문을 사용자에게 보이고 확인): A 혼자 앞으로 1, A 주인·B 멤버 앞으로 1, A·B 함께 지난 여행 1, A 의 기록(동행 B) 지난 1.
+- [ ] **Step 1: 테스트 계정** — `docs/status.md` '로그인한 화면의 브라우저 확인'·'소유권 브라우저 확인' 방법으로 `e2e-test-` 계정 두 개(A, B)와 여행을 넣는다(넣기 전 SQL 전문을 사용자에게 보이고 확인). 날짜는 오늘 기준으로 정한다: A 주인·B 멤버 앞으로(오늘+3 ~ +5, 혼자 여행보다 먼저 시작해야 다음 여행 카드가 이것), A 혼자 앞으로(+60 ~ +63), A·B 함께 지난 여행(올해 시작, 끝이 오늘 전), A 의 기록(동행 B, 올해 시작, 끝이 오늘 전).
 - [ ] **Step 2: `run` 스킬로 dev 서버, Playwright 확인** (휴대폰 390×844, 넓은 1280×800, 다크 모드 하나)
   - 홈: 다음 여행 카드(D-N, "B님과 함께"), 로그아웃 버튼
   - 함께 탭: 함께 여행 1개, 이름 줄 "B"; 내 여행 탭: 앞으로 1, 추억 2(기록 이름표), 숫자 "올해 2번"/"모두 2번"/"함께 간 사람 1명", 칩 "B 2번 함께"
   - 탭 이동과 `aria-current`, 휴대폰 아래 막대가 마지막 줄을 가리지 않음(끝까지 내려 마지막 줄 `getBoundingClientRect().bottom` ≤ 막대 top), 넓은 화면은 위쪽 머리
-  - 여행 화면: 탭 없음, 예산 줄 그대로, "← 뒤로" → 들어온 탭; 새 탭에서 여행 주소 바로 열고 "← 뒤로" → `/`
+  - 여행 화면: 탭 없음, 예산 줄 그대로, 내 여행 탭을 내려 여행을 열고 "← 뒤로" → `/mine` 의 같은 스크롤 자리; 새 탭에서 여행 주소 바로 열고 "← 뒤로" → `/`; 여행 → 고치기 → 저장 → "← 뒤로" → `/`(양식으로 가지 않음)
+  - `cacheComponents` 는 지나온 화면을 `display:none` 으로 DOM 에 남긴다. 탭 없음·`aria-current`·크기 확인은 `getByRole`(숨은 요소 제외)이나 `:visible` 로만 한다(`node_modules/next/dist/docs/01-app/02-guides/preserving-ui-state.md` 'Testing'). user id 검색은 숨은 DOM 까지 보는 `page.content()` 그대로.
   - 비로그인(쿠키 없음): `/` 로그인 화면·탭 없음, `/together`·`/mine`·`/trips` → `/`
   - B 로 로그인: 홈 카드에 A 의 여행이 "A님의 여행" 이름표로, 함께 탭 이름 줄 "A"
   - 빈 상태: 여행 없는 계정 C → 홈 "아직 여행이 없어요", 함께 탭·내 여행 탭 빈 안내; C 에 지난 여행 하나를 넣고 → 홈 "다가오는 여행이 없어요" + "내 여행에서 추억 보기", 칩 줄 감춤·"0명"
