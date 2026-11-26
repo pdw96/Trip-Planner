@@ -1,6 +1,6 @@
 # 지금 상태
 
-2026-11-25 기준. 새 세션은 이 파일부터 읽는다. 무엇을 적고 무엇을 적지 않는지는 `CLAUDE.md` '작업 흐름'(끝난 기록은 PR·git 이 맡는다, #108).
+2026-11-26 기준. 새 세션은 이 파일부터 읽는다. 무엇을 적고 무엇을 적지 않는지는 `CLAUDE.md` '작업 흐름'(끝난 기록은 PR·git 이 맡는다, #108).
 
 ## 다음 할 일
 
@@ -8,7 +8,8 @@
 
 - #23·#24 는 노선도 틀(#53)에 맞춰 넣는다.
 - #104 함께하는 사람 권한 나누기(보기만 / 고치기). 권한 칸을 더하면 옛 배포로 되돌릴 때 "보기만" 이 풀리므로 롤백 금지선 후보(#107 규칙으로 판정). #103 이 만든 `editableTrips`(모두의 것 쓰기)·기록의 "내 것만" 조건과 같은 자리에 권한 조건을 건다. 보기만인 사람도 "내 것"(나만 일정, 내 돈)은 쓸 수 있어야 하는지 정한다
-- #103 다음 방향: #122 메인 페이지 "내 여행(추억) / 함께 가는 여행"(사용자가 원하는 큰 그림), #121 따로 만든 여행을 함께 가는 여행에 합치기
+- #122 다음(사용자와 정한 순서): #126 추억의 다녀온 곳 지도 → #127 추억의 내가 쓴 돈. #128 홈만의 기능(피드·자랑하기 등)은 무엇을 누구에게 보일지부터 정한다. 홈은 칸을 쌓는 구조(`src/app/(tabs)/page.tsx` 의 `HomeScreen`)라 칸 하나로 더한다
+- #121 따로 만든 여행을 함께 가는 여행에 합치기
 - 기능: #109 네이버 길찾기 바로 열기 — #36 을 부산 여행에서 써 본 뒤 한 번 더 누르는 게 불편하면 한다
 - 개선: #23 달력 키보드 이동, #24 자잘한 개선 모음, #120 남은 지적 모음(PR 리뷰에서 고치지 않은 것)
 - 사용자 결정 대기: #118 밤 숙소 장소를 지우면 앞 숙소가 이어지는 것을 그대로 둘지, #119 여행 기간 상한
@@ -26,6 +27,7 @@
 - **쿼리 구조**:
   - 여행 접근 조건은 `src/db/queries/trips.ts` 의 `accessibleTrips(userId)`(주인 또는 함께하는 사람) 하나, 주인만 하는 일은 `ownedTrips(userId)`. 하위 데이터 쿼리는 `schedule-items.ts`·`places.ts`·`budget.ts` 처럼 이 조건을 같은 SQL 문 안에 넣는다(하위 id 와 여행 id 를 함께 묶어 섞어 보내기를 막는다). `accessibleTrips` 는 `trips` 를 별칭 없이 FROM 에 둔 쿼리에서만 쓴다(안의 EXISTS 가 바깥 `trips.id` 를 가리킨다). 여러 테이블을 함께 쓰려면 neon-http 에 트랜잭션이 없으므로 데이터를 바꾸는 CTE 한 문으로 한다(`updatePlace`, `createScheduleItemWithNewPlace`).
   - 지출 행(`budget_items`)은 여행 접근 조건에 더해 `budget.ts` 의 `visibleToUser`/`visibleToUserSql`(모임 행 또는 본인 행, #89)을 같은 문에 건다. 보이는 행 = 쓸 수 있는 행이고 주인도 예외가 없다. 예외는 통화 잠금 검사(모든 행)와 `deleteScheduleItem`·`removeMember`·`leaveTrip` 의 시스템 동작뿐이다. `owner_user_id` 는 입력으로 받지 않고 `side`(모임/내 돈)로 서버가 정한다. 화면 데이터(`budget-data.ts`)는 `splitByOwner` 로 한 번 더 거른다.
+  - 탭 화면(#122)의 목록은 `src/app/(tabs)/trip-lists.ts` 의 `loadTripLists`(= `listTrips` + `listTripCompanions` + `groupTrips`) 하나. 함께한 사람의 user id 는 그 안의 집계(`countCompanions`)에서만 쓰고 화면에는 이름·횟수만 보낸다. `listTripCompanions` 는 `unionAll` 세 가지(주인·멤버·기록 동행)이고, 집합 연산의 `orderBy` 는 테이블 이름 없는 결과 칸 이름으로 써야 한다(PGlite 로 확인).
   - 떼어 낸 기록(#103): 기록 여행 = `trips.detached_at IS NOT NULL`(주인 = 나간 사람). 떼기(나가기·내보내기·여행 지우기)와 붙이기(다시 참여)는 `src/db/queries/trip-records.ts` 의 CTE 한 문(`detachMembersCtes`·`reattachRecordCtes`). 모두의 것을 쓰는 쿼리는 `editableTrips(userId)`(= 접근 가능 + 기록 아님), 내 몫을 쓰는 쿼리는 기록이면 "그 행이 내 것"(`isRecordTripSql`, `forUserAllowed`·`writableItemCondition`·`sideWritable`)을 같은 문에 건다. 새 쓰기 쿼리를 더할 때 이 둘 중 하나를 꼭 건다. SQL 검증은 PGlite 하네스로 했다(scratchpad, 커밋 안 함 — '마이그레이션 SQL 을 적용 전에 확인').
 
 - **Dependabot(#65)**:
@@ -97,7 +99,7 @@
   - production 빌드(`next build` + `next start`, 로컬 전용 `BETTER_AUTH_SECRET` 지정): 이름 앞에 `__Secure-`, 그 시크릿으로 서명
   - 테스트 서버를 다시 띄울 때는 이전 `next-server` 가 포트를 쥐고 있지 않은지 먼저 확인한다(#21 에서 고치기 전 빌드를 다시 시험할 뻔했다)
 - **Playwright 로 양식 다루기(#90)**: `sr-only` 라디오는 `check({force})` 가 안 먹으니 감싼 `label` 을 누른다. 입력값을 DOM 에서 바꿔도 React 가 되돌리므로, 재전송 시험은 `page.route` 로 Server Action 요청 본문(`next-action` 헤더)을 바꾼다. 일정 줄의 장소 글자는 링크라 고치기를 열려면 제목을 누른다. 임시 스크립트를 지우는 `rm` 은 변수 없이 경로를 그대로 쓴다(안전 검사가 막음).
-- **Next 16 Activity**: 지나온 화면을 `display:none` 으로 보관한다. Playwright 는 보이는 `main` 만 읽고(`main:visible`), 양식은 화면을 떠날 때 초기화한다(`trip-form.tsx`).
+- **Next 16 Activity**: 지나온 화면을 `display:none` 으로 보관한다. Playwright 는 보이는 `main` 만 읽고(`main:visible`), 양식은 화면을 떠날 때 초기화한다(`trip-form.tsx`). 숨긴 화면은 컴포넌트 state 를 가진 채 다시 보이므로 "어디서 왔는지" 같은 이동 상태를 state 에 두면 안 된다(#122: 고치기 뒤 "← 뒤로"가 양식으로 감). `history.state` 에 붙인 값도 Next 가 새로 고침(revalidate·`router.refresh`) 때 덮어쓴다. 직전 주소는 루트 레이아웃의 `NavigationTracker`(`src/app/ui/navigation-tracker.tsx`)가 기억한다.
 - **단위 시험**: `npm test`(`src/**/*.test.mjs`, `.ts` 를 바로 읽어 나는 `MODULE_TYPELESS_PACKAGE_JSON` 경고는 옵션으로 끔). CI `check` 에서 돈다(#22). CI·`human-gate.yml` Node 는 Vercel 과 같은 26(#65 에서 게이트도 올림). 순수 모듈(`src/lib/*.ts` 중 시험 대상)은 다른 모듈을 import 하지 않는다.
 - **소유권 브라우저 확인(#12)**: Playwright `page.route` 로 A 화면에서 나가는 Server Action 요청(헤더 `next-action`)의 본문 속 id 를 B 의 것으로 바꿔 보내고, 실패 반응과 DB 에서 B 의 행이 그대로인지 본다. Neon MCP 는 읽기 전용이라 테스트 행 넣기·지우기는 `DATABASE_URL` 로 `@neondatabase/serverless` 를 쓰는 node 스크립트로 한다.
 - **Playwright 와 Suspense**: 페이지 이동 직후에는 스트리밍이 덜 끝났을 수 있다. 읽기 전에 마지막 요소(예: 마지막 날 칸)를 `waitFor` 한다.
@@ -119,7 +121,9 @@
 - **Codex 리뷰**: PR 을 draft 에서 바꾸면 자동으로 돌고, 다시 받으려면 PR 에 `@codex review` 댓글. 막는 지적을 고친 뒤에는 마지막 커밋 기준으로 다시 받는다.
 - **바텀 시트 쓸어내리기(#97)**: `touch-action` 은 가장 가까운 스크롤 영역까지만 조상과 합쳐진다. 가로 스크롤 줄(날짜 칩 fieldset) 안에서 시작한 세로 끌기는 바깥 머리의 `touch-pan-x` 가 듣지 않아 브라우저가 가져간다(pointercancel). 그래서 시트 칩 줄에 직접 `touch-pan-x`(`DayChips panXOnly`). 위 날짜 줄에 주면 페이지 세로 스크롤이 막힌다. `<dialog>` 가 스크롤 영역이면 자기 스크롤바 누르기도 `target === dialog` 라 바깥 판정은 좌표로도 본다(`sheet-dialog.ts`).
 - **DB 없이 화면 확인(#97)**: 테스트 계정 넣기를 auto 모드 권한 검사기가 막을 수 있다(#97 에서 막힘). 클라이언트 컴포넌트 동작은 커밋하지 않는 임시 라우트(`src/app/e2e-sheet/`)에 가짜 데이터로 그려 Playwright 로 본다. 실제 페이지처럼 `main w-full max-w-2xl` 로 감싸야 폭이 맞고, 지운 뒤에는 `.next/dev/types` 를 지워야 typecheck 가 옛 경로를 찾지 않는다. Next 개발 표시가 왼쪽 아래를 덮어 그 자리 tap 이 막히니 `position` 을 준다. CDP 터치로 끌기를 흉내 낼 수 있다.
-- **마이그레이션 SQL 을 적용 전에 확인(#89)**: Neon MCP 는 읽기 전용이라 브랜치를 못 만든다. scratchpad 에 `@electric-sql/pglite`(0.2.x, Postgres 16)를 깔고 `drizzle/*.sql` 을 journal 순서로(`--> statement-breakpoint` 로 나눠) 적용한 뒤, `@/db` 만 PGlite 로 바꾼 require 훅으로 앱의 실제 쿼리 함수를 돌린다(`server-only` 는 빈 모듈로). 데이터를 바꾸는 CTE·FK cascade·부분 색인 `ON CONFLICT` 동작을 적용 전에 볼 수 있다.
+- **탭 화면(#122)**: 홈 `/`·함께 `/together`·내 여행 `/mine` 은 route group `src/app/(tabs)/` 의 레이아웃만 탭 막대를 그린다(여행·새 여행·초대 화면에는 없음). 레이아웃은 감싸는 요소 없이 돌려줘야 아래 막대의 `sticky bottom-0` 이 body(flex-col) 기준으로 붙는다. 옛 `/trips` 는 `/` 로 보낸다. 여행·멤버를 바꾸는 동작의 목록 무효화는 `revalidatePath("/", "layout")`.
+- **배포 주소 접속**: 이 세션의 네트워크 정책은 `*.vercel.app` 을 막는다(#122). 배포 확인은 Vercel MCP 의 배포 상태(READY)와 `get_runtime_errors` 로 한다.
+- **마이그레이션 SQL 을 적용 전에 확인(#89)**: Neon MCP 는 읽기 전용이라 브랜치를 못 만든다. scratchpad 에 `@electric-sql/pglite`(0.2.x, Postgres 16)를 깔고 `drizzle/*.sql` 을 journal 순서로(`--> statement-breakpoint` 로 나눠) 적용한 뒤, `@/db` 만 PGlite 로 바꾼 require 훅으로 앱의 실제 쿼리 함수를 돌린다(`server-only` 는 빈 모듈로). #122 에서 쓴 더 짧은 방법: `npm install --no-save @electric-sql/pglite` 후 scratchpad 의 tsconfig `paths` 로 `@/db` → PGlite db 파일, `@/*` → `src/*` 를 잇고 `TSX_TSCONFIG_PATH=<그 tsconfig> node --conditions=react-server --import tsx run.mts`(`react-server` 조건이면 `server-only` 가 빈 모듈). 하네스 파일은 `.mts`(top-level await), PGlite 인스턴스는 `globalThis` 로 하나만 만든다(경로 별칭으로 모듈이 두 번 불릴 수 있음). 데이터를 바꾸는 CTE·FK cascade·부분 색인 `ON CONFLICT` 동작을 적용 전에 볼 수 있다.
 - **롤백 금지선**(`CLAUDE.md` '마이그레이션 PR'): 아래 배포보다 이전 배포로 Instant Rollback 하지 않고, 고친 코드를 새로 배포한다.
   - 마이그레이션 0008(#89, 머지 커밋 `7ff21c0`): 옛 코드가 `budget_items.owner_user_id` 를 몰라 남의 내 돈 지출이 모두에게 보인다.
 - **머지된 작업 브랜치 다시 쓰기**: auto 모드에서 `--force-with-lease` push 가 막힐 수 있다(#97). 그때는 새 main 위 커밋에 옛 원격 브랜치를 merge 해 일반 push 한다(squash 로 이미 들어간 내용이라 PR diff 는 새 변경만).
