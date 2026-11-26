@@ -52,7 +52,7 @@ async function MineContent() {
 
   return (
     <div className="flex flex-col gap-10">
-      {ahead.length > 0 && (
+      {ahead.length > 0 ? (
         <section className="flex flex-col gap-2">
           <h2 className={subTitleClass}>앞으로</h2>
           <ul className="flex flex-col border-b border-rule">
@@ -60,15 +60,19 @@ async function MineContent() {
               <TripRow key={trip.id} trip={trip} today={today} />
             ))}
           </ul>
+          {together.length > 0 && <TogetherNote />}
         </section>
-      )}
-      {together.length > 0 && (
-        <p className="-mt-6 text-[12.5px] text-sub">
-          함께 가는 여행은 함께 탭에 있어요.
-        </p>
+      ) : (
+        together.length > 0 && <TogetherNote />
       )}
       <Memories lists={lists} today={today} />
     </div>
+  );
+}
+
+function TogetherNote() {
+  return (
+    <p className="text-[12.5px] text-sub">함께 가는 여행은 함께 탭에 있어요.</p>
   );
 }
 
