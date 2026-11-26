@@ -46,7 +46,7 @@ export async function createTripAction(
     return { values, errors: {}, formError: SAVE_FAILED };
   }
 
-  revalidatePath("/trips");
+  revalidatePath("/", "layout");
   redirect(`/trips/${id}`);
 }
 
@@ -71,7 +71,7 @@ export async function updateTripAction(
   }
   if (!updated) notFound();
 
-  revalidatePath("/trips");
+  revalidatePath("/", "layout");
   revalidatePath(`/trips/${tripId}`);
   redirect(`/trips/${tripId}`);
 }
@@ -90,6 +90,6 @@ export async function deleteTripAction(
   }
   if (!deleted) notFound();
 
-  revalidatePath("/trips");
-  redirect("/trips");
+  revalidatePath("/", "layout");
+  redirect("/");
 }

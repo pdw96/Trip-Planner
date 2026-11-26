@@ -92,8 +92,8 @@ function InvalidInvite({ signedIn }: { signedIn: boolean }) {
   return (
     <>
       <p className="max-w-md text-sub">{INVITE_INVALID}</p>
-      <Link href={signedIn ? "/trips" : "/"} className={secondaryButtonClass}>
-        {signedIn ? "내 여행으로" : "처음으로"}
+      <Link href="/" className={secondaryButtonClass}>
+        {signedIn ? "홈으로" : "처음으로"}
       </Link>
     </>
   );

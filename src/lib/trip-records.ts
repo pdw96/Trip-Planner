@@ -1,26 +1,4 @@
-// 떼어 낸 기록(#103)의 목록 나누기·이름표·동행 줄. node --test 로 시험하므로 다른 모듈을 import 하지 않는다.
-
-function toMillis(value: Date | string): number {
-  return new Date(value).getTime();
-}
-
-// 떼어 내지 않은 여행(active)과 떼어 낸 기록(records, 최근 떼어 낸 것 먼저)으로 나눈다.
-export function splitRecords<T extends { detachedAt: Date | string | null }>(
-  trips: T[],
-): { active: T[]; records: T[] } {
-  const active: T[] = [];
-  const records: T[] = [];
-  for (const trip of trips) {
-    if (trip.detachedAt === null) active.push(trip);
-    else records.push(trip);
-  }
-  records.sort(
-    (a, b) =>
-      toMillis(b.detachedAt as Date | string) -
-      toMillis(a.detachedAt as Date | string),
-  );
-  return { active, records };
-}
+// 떼어 낸 기록(#103)의 이름표·안내 띠·동행 줄. node --test 로 시험하므로 다른 모듈을 import 하지 않는다.
 
 // 떼어 낸 때의 서울 기준 월·일.
 function seoulMonthDay(value: Date | string): { month: string; day: string } {

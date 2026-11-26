@@ -36,7 +36,7 @@ async function NewTripForm() {
       action={createTripAction}
       initialValues={EMPTY_TRIP_FIELDS}
       submitLabel="만들기"
-      cancelHref="/trips"
+      cancelHref="/"
     />
   );
 }

@@ -1,21 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  companionsLine,
-  recordBadge,
-  recordNotice,
-  splitRecords,
-} from "./trip-records.ts";
-
-test("splitRecords: 기록은 따로, 최근 먼저", () => {
-  const a = { id: "a", detachedAt: null };
-  const r1 = { id: "r1", detachedAt: "2026-11-20T03:00:00Z" };
-  const r2 = { id: "r2", detachedAt: "2026-11-22T03:00:00Z" };
-  assert.deepEqual(splitRecords([r1, a, r2]), {
-    active: [a],
-    records: [r2, r1],
-  });
-});
+import { companionsLine, recordBadge, recordNotice } from "./trip-records.ts";
 
 test("recordBadge", () => {
   assert.equal(
